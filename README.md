@@ -32,7 +32,16 @@ docs/       especificação do produto
       nunca legível de volta pelo painel
 - [x] Catálogo de serviços por empresa (dados fiscais só visíveis à SOMA)
 - [x] Cadastro de tomadores (visão cliente)
-- [ ] Fase C: DPS, XML, XSD, assinatura, API Sefin, resposta
+**Fase C — NFS-e (motor portado, ainda não conectado ao frontend)**
+- [x] `backend/`: `dps_builder.py`, `xml_signer.py`, `sefin_nacional_client.py`,
+      `certificado.py`, `validadores.py`, `emissor.py` — portados do
+      `nfse-engine` legado (repo irmão), lógica fiscal validada contra
+      notas reais aceitas, quase sem alteração (ver `backend/README.md`)
+      — build+assinatura testados de ponta a ponta, assinatura verificada
+      criptograficamente contra a chave pública de um certificado de teste
+- [ ] Tabelas `dps`/`nfse`/`nfse_events`/`nfse_errors` no Supabase
+- [ ] Frontend chamando o `backend` (tela "Emitir Nota")
+- [ ] Validar em `producao_restrita` com certificado real
 
 ## Setup do zero
 

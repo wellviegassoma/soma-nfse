@@ -80,6 +80,22 @@ cTribMun, ISS, IBS/CBS); o cliente só vê o nome do serviço.
   `MASTER_ENCRYPTION_KEY` (variável secreta no Railway), descriptografado só em memória no
   momento da assinatura, depois descartado.
 
+## Fase C — decisão: portar o motor fiscal, não reescrever
+
+O repo irmão `nfse-engine` (fora deste monorepo, mesmo diretório pai) já
+tinha `dps_builder.py`/`xml_signer.py`/`sefin_nacional_client.py`
+validados contra notas reais aceitas pelo Sefin Nacional — incluindo bugs
+reais já caçados e corrigidos (canonicalização C14N do lxml gerando
+`xmlns=""` espúrio e divergindo entre plataformas, por isso reescrita à
+mão em Python puro; erro `E0714` rastreado a caracteres de controle na
+descrição do serviço e a inclusão indevida da cadeia de certificados na
+assinatura; formato do `totTrib` confirmado contra uma nota real aceita
+da própria SOMA). Mesmo tendo decidido reconstruir a plataforma do zero,
+recriar essa camada específica do zero seria redescobrir os mesmos bugs
+com dinheiro e credibilidade fiscal real em jogo. Decisão: portar quase
+sem alterar lógica (só ajustes de import), documentado em
+`backend/README.md`.
+
 ## Roadmap
 
 - **Fase A — Fundação**: Banco PostgreSQL → Usuários → Login → Multiempresa → Empresas
