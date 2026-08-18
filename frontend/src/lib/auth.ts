@@ -13,12 +13,19 @@ export async function requireUser() {
 }
 
 export async function getUserCompanies(): Promise<CompanyAccess[]> {
+  const user = await requireUser();
   const supabase = await createClient();
+  // RLS por si só não basta aqui: ela deixa SOMA staff ler QUALQUER linha de
+  // user_companies (necessário para as telas de admin), então sem esse filtro
+  // explícito por user_id essa função devolveria os vínculos de outras
+  // pessoas também. O mesmo vale para shares_company_with — um colega da
+  // mesma empresa também passaria pela RLS sem esse filtro.
   const { data, error } = await supabase
     .from("user_companies")
     .select(
       "company_id, role, company:companies(id, organization_id, cnpj, legal_name, trade_name, created_at)",
     )
+    .eq("user_id", user.id)
     .order("created_at", { referencedTable: "companies", ascending: true });
 
   if (error) throw error;

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSomaStaff } from "@/lib/auth";
+import { uuidLike } from "@/lib/zod-helpers";
 import type { ActionState } from "@/lib/actions/auth";
 
 const createCompanySchema = z.object({
@@ -73,7 +74,7 @@ const inviteSchema = z.object({
   email: z.string().trim().toLowerCase().email("E-mail inválido."),
   fullName: z.string().trim().min(2, "Informe o nome."),
   role: z.enum(["SUPER_ADMIN", "ADMIN_SOMA", "ADMIN_CLIENTE", "EMISSOR"]),
-  companyId: z.string().uuid(),
+  companyId: uuidLike,
 });
 
 export async function inviteUserToCompany(
@@ -136,5 +137,57 @@ export async function inviteUserToCompany(
   }
 
   revalidatePath(`/admin/empresas/${companyId}`);
+  return { success: true };
+}
+
+const updateFiscalSchema = z.object({
+  companyId: uuidLike,
+  municipalRegistration: z.string().trim().optional(),
+  taxRegime: z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL"]).optional(),
+  cnae: z.string().trim().optional(),
+  municipalityIbgeCode: z.string().trim().optional(),
+  nfseAmbiente: z.enum(["HOMOLOGACAO", "PRODUCAO"]),
+  dpsSeries: z.string().trim().min(1, "Informe a série."),
+  dpsNextNumber: z.coerce.number().int().min(1, "Precisa ser maior que zero."),
+});
+
+export async function updateCompanyFiscal(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireSomaStaff();
+
+  const parsed = updateFiscalSchema.safeParse({
+    companyId: formData.get("companyId"),
+    municipalRegistration: formData.get("municipalRegistration") || undefined,
+    taxRegime: formData.get("taxRegime") || undefined,
+    cnae: formData.get("cnae") || undefined,
+    municipalityIbgeCode: formData.get("municipalityIbgeCode") || undefined,
+    nfseAmbiente: formData.get("nfseAmbiente"),
+    dpsSeries: formData.get("dpsSeries"),
+    dpsNextNumber: formData.get("dpsNextNumber"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const { companyId, ...rest } = parsed.data;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("companies")
+    .update({
+      municipal_registration: rest.municipalRegistration || null,
+      tax_regime: rest.taxRegime || null,
+      cnae: rest.cnae || null,
+      municipality_ibge_code: rest.municipalityIbgeCode || null,
+      nfse_ambiente: rest.nfseAmbiente,
+      dps_series: rest.dpsSeries,
+      dps_next_number: rest.dpsNextNumber,
+    })
+    .eq("id", companyId);
+
+  if (error) return { error: "Não foi possível salvar os dados fiscais." };
+
+  revalidatePath(`/admin/empresas/${companyId}/dados-fiscais`);
   return { success: true };
 }

@@ -16,14 +16,23 @@ supabase/   migrations + seeds (Postgres + Auth + Storage + RLS)
 docs/       especificação do produto
 ```
 
-## Status: Fase A concluída
+## Status
 
+**Fase A — Fundação (concluída)**
 - [x] Banco: `organizations`, `companies`, `profiles`, `user_companies` + RLS
       (ver [`supabase/migrations/20260818120000_fase_a_fundacao.sql`](supabase/migrations/20260818120000_fase_a_fundacao.sql))
 - [x] Login (Supabase Auth) + "esqueci minha senha" + redefinição
 - [x] Multiempresa: seletor de empresa, isolamento por RLS
 - [x] Cadastro de empresas + convite de usuário (visão Admin SOMA)
-- [ ] Fase B: cadastro fiscal, certificado, serviços, tomadores
+
+**Fase B — Fiscal (concluída)**
+- [x] Dados fiscais da empresa + configuração de ambiente/série da NFS-e
+      (ver [`supabase/migrations/20260818130000_fase_b_fiscal.sql`](supabase/migrations/20260818130000_fase_b_fiscal.sql))
+- [x] Certificado digital A1 — cifrado com AES-256-GCM (`MASTER_ENCRYPTION_KEY`),
+      nunca legível de volta pelo painel
+- [x] Catálogo de serviços por empresa (dados fiscais só visíveis à SOMA)
+- [x] Cadastro de tomadores (visão cliente)
+- [ ] Fase C: DPS, XML, XSD, assinatura, API Sefin, resposta
 
 ## Setup do zero
 
@@ -31,14 +40,12 @@ docs/       especificação do produto
    Project Settings → API.
 2. **Aplicar o schema**:
    ```bash
-   cd supabase
-   npx supabase login
    npx supabase link --project-ref <seu-project-ref>
    npx supabase db push
+   npx supabase db query --linked -f supabase/seeds/seed.sql
    ```
-   Isso aplica a migration da Fase A. Depois rode o `seeds/seed.sql` (SQL
-   Editor do Supabase Studio, ou `npx supabase db reset` em ambiente local)
-   para criar a organization/company da própria SOMA.
+   `db push` aplica as migrations (Fase A + Fase B). O seed cria a
+   organization/company da própria SOMA.
 3. **Configurar o e-mail de convite/redefinição de senha**: no Supabase
    Studio → Authentication → Email Templates, ajuste os templates "Invite
    user" e "Reset Password" para apontar para
@@ -48,6 +55,8 @@ docs/       especificação do produto
    ```bash
    cd frontend
    cp .env.local.example .env.local   # preencha com as chaves do Supabase
+   # gere o MASTER_ENCRYPTION_KEY (necessário para o upload de certificado):
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
    npm install
    npm run dev
    ```

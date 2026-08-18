@@ -5,6 +5,7 @@ import {
   getCurrentProfileName,
 } from "@/lib/auth";
 import { AppHeader } from "@/components/AppHeader";
+import { CompanyTabs } from "@/components/CompanyTabs";
 
 export default async function CompanyLayout(
   props: LayoutProps<"/empresas/[companyId]">,
@@ -33,7 +34,10 @@ export default async function CompanyLayout(
         isSomaStaff={isSomaStaff}
         userName={userName}
       />
-      <div className="mx-auto max-w-5xl px-4 py-8">{props.children}</div>
+      <div className="mx-auto max-w-5xl px-4 py-8">
+        <CompanyTabs companyId={companyId} />
+        {props.children}
+      </div>
     </div>
   );
 }
