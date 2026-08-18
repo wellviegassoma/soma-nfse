@@ -86,6 +86,21 @@ export type ServicePublic = {
   active: boolean;
 };
 
+export type DpsStatus = "ACCEPTED" | "REJECTED";
+
+export type DpsListItem = {
+  id: string;
+  numero_dps: number;
+  serie: string;
+  valor: number;
+  data_competencia: string;
+  status: DpsStatus;
+  created_at: string;
+  customer: { name: string } | null;
+  service: { name: string } | null;
+  nfse: { access_key: string | null }[] | null;
+};
+
 export type Customer = {
   id: string;
   company_id: string;

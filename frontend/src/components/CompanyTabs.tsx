@@ -9,6 +9,7 @@ export function CompanyTabs({ companyId }: { companyId: string }) {
   const base = `/empresas/${companyId}`;
   const tabs = [
     { href: base, label: "Visão geral" },
+    { href: `${base}/notas`, label: "Notas" },
     { href: `${base}/tomadores`, label: "Tomadores" },
   ];
 

@@ -32,16 +32,24 @@ docs/       especificação do produto
       nunca legível de volta pelo painel
 - [x] Catálogo de serviços por empresa (dados fiscais só visíveis à SOMA)
 - [x] Cadastro de tomadores (visão cliente)
-**Fase C — NFS-e (motor portado, ainda não conectado ao frontend)**
+**Fase C — NFS-e (concluída, exceto validação com certificado real)**
 - [x] `backend/`: `dps_builder.py`, `xml_signer.py`, `sefin_nacional_client.py`,
       `certificado.py`, `validadores.py`, `emissor.py` — portados do
       `nfse-engine` legado (repo irmão), lógica fiscal validada contra
       notas reais aceitas, quase sem alteração (ver `backend/README.md`)
       — build+assinatura testados de ponta a ponta, assinatura verificada
       criptograficamente contra a chave pública de um certificado de teste
-- [ ] Tabelas `dps`/`nfse`/`nfse_events`/`nfse_errors` no Supabase
-- [ ] Frontend chamando o `backend` (tela "Emitir Nota")
-- [ ] Validar em `producao_restrita` com certificado real
+- [x] Tabelas `dps`/`nfse`/`nfse_events`/`nfse_errors` + numeração atômica
+      da DPS (`claim_next_dps_number`, nunca reaproveitada)
+- [x] Tela "Emitir Nota" (tomador → serviço → valor → confirmação →
+      sucesso/erro) + histórico de notas — testado de ponta a ponta contra
+      o Sefin Nacional real (`producao_restrita`): com um certificado de
+      teste autoassinado, a chamada mTLS chegou ao servidor do governo e
+      voltou `403 Forbidden` (esperado — não é ICP-Brasil real), erro
+      registrado em `nfse_errors` com o detalhe técnico completo, e só a
+      mensagem amigável foi mostrada ao usuário
+- [ ] Validar em `producao_restrita` com um certificado ICP-Brasil real
+      antes de confiar em produção
 
 ## Setup do zero
 

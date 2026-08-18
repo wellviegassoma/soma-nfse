@@ -22,6 +22,11 @@ from __future__ import annotations
 
 import base64
 
+from dotenv import load_dotenv
+
+load_dotenv()  # só facilita rodar localmente com backend/.env — em produção
+# (Railway) as variáveis já vêm injetadas no processo, load_dotenv() não faz nada.
+
 from fastapi import Depends, FastAPI, HTTPException
 
 import emissor

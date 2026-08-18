@@ -4,3 +4,4 @@ pydantic>=2.9
 requests>=2.31
 cryptography>=42.0
 lxml>=5.0
+python-dotenv>=1.0

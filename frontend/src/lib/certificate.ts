@@ -72,3 +72,21 @@ export function encryptSecret(data: Buffer): Buffer {
 export function toBytea(buffer: Buffer): string {
   return `\\x${buffer.toString("hex")}`;
 }
+
+/** Inverso de toBytea — como o PostgREST devolve uma coluna bytea ao ler. */
+export function fromBytea(hexWithPrefix: string): Buffer {
+  const hex = hexWithPrefix.startsWith("\\x") ? hexWithPrefix.slice(2) : hexWithPrefix;
+  return Buffer.from(hex, "hex");
+}
+
+/** Inverso de encryptSecret. Levanta erro se a MASTER_ENCRYPTION_KEY mudou
+ * ou o blob foi corrompido (a tag de autenticação do GCM não bate). */
+export function decryptSecret(blob: Buffer): Buffer {
+  const key = getMasterKey();
+  const iv = blob.subarray(0, 12);
+  const authTag = blob.subarray(12, 28);
+  const ciphertext = blob.subarray(28);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
