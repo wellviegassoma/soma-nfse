@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireSomaStaff, getCurrentProfileName } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
 import { LogoutButton } from "@/components/LogoutButton";
+import { AdminNav } from "@/components/AdminNav";
 
 export default async function AdminLayout({
   children,
@@ -36,7 +37,10 @@ export default async function AdminLayout({
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-5xl px-4 py-8">{children}</div>
+      <div className="mx-auto max-w-5xl px-4 py-8">
+        <AdminNav />
+        <div className="pt-6">{children}</div>
+      </div>
     </div>
   );
 }

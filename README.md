@@ -51,6 +51,30 @@ docs/       especificação do produto
 - [ ] Validar em `producao_restrita` com um certificado ICP-Brasil real
       antes de confiar em produção
 
+**Fase D — Operação (parcial)**
+- [x] `backend/danfse.py` — portado do `nfse-engine` legado, gera o PDF do
+      DANFSe a partir do XML da NFS-e. Testado com um XML sintético
+      (ainda não temos nenhuma NFS-e real aceita) — PDF válido, layout
+      conferido visualmente, todas as seções renderizando corretamente
+- [x] Botão "Baixar PDF" na página da nota (além do "Baixar XML" já
+      existente)
+- [x] Painel SOMA → **Erros**: lista `nfse_errors` entre empresas
+- [x] Painel SOMA → **Logs**: tabela `audit_logs` + instrumentação de
+      criar/editar empresa, convidar usuário, upload/remoção de
+      certificado, criar/editar serviço, emitir nota — **ainda não
+      testado ao vivo no navegador** (bloqueado por uma falha de DNS pro
+      `supabase.co` no ambiente local durante o desenvolvimento; a
+      migration já foi aplicada com sucesso antes disso acontecer)
+- [ ] **Cancelamento — deliberadamente fora do escopo.** O `nfse-engine`
+      legado também não tem essa lógica implementada/validada contra o
+      Sefin Nacional ("fica de fora até existir uma referência real para
+      portar") — mesmo princípio de não inventar regra fiscal nova sem
+      validação real se aplica aqui. `nfse_events` já existe no schema,
+      pronta para quando essa lógica for confirmada.
+- [ ] Busca de notas por NSU, relatório de faturamento em PDF, lookups
+      auxiliares (`municipios_ibge.py`, `codigos_atividade.py`) — ainda
+      no `nfse-engine` legado, não portados
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

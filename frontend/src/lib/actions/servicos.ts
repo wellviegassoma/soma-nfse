@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import type { ActionState } from "@/lib/actions/auth";
 
@@ -60,11 +61,19 @@ export async function saveService(
     active: rest.active,
   };
 
-  const { error } = serviceId
-    ? await supabase.from("services").update(payload).eq("id", serviceId)
-    : await supabase.from("services").insert(payload);
+  const { data: saved, error } = serviceId
+    ? await supabase.from("services").update(payload).eq("id", serviceId).select("id").single()
+    : await supabase.from("services").insert(payload).select("id").single();
 
   if (error) return { error: "Não foi possível salvar o serviço." };
+
+  await logAudit({
+    companyId,
+    action: serviceId ? "UPDATE" : "CREATE",
+    entity: "service",
+    entityId: saved?.id ?? serviceId,
+    newValue: payload,
+  });
 
   revalidatePath(`/admin/empresas/${companyId}/servicos`);
   redirect(`/admin/empresas/${companyId}/servicos`);

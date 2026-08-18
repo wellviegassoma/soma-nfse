@@ -13,14 +13,16 @@ certificado, validadores) foi portada quase sem alteração do nfse-engine
 original (mesmo código já validado contra notas reais aceitas) — ver
 docs/spec.md na raiz do monorepo para o histórico dessa decisão.
 
-Rotas ainda não portadas (dependem de módulos que ficam pra Fase D —
-histórico/PDF/logs): /notas/buscar, /notas/danfse, /relatorios/faturamento,
-/municipios, /cep, /cnpj, /codigos-tributacao-nacional, /codigos-nbs.
+Rotas ainda não portadas (não são bloqueio pra emitir/consultar):
+/notas/buscar, /relatorios/faturamento, /municipios, /cep, /cnpj,
+/codigos-tributacao-nacional, /codigos-nbs.
 """
 
 from __future__ import annotations
 
 import base64
+import tempfile
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -28,12 +30,19 @@ load_dotenv()  # só facilita rodar localmente com backend/.env — em produçã
 # (Railway) as variáveis já vêm injetadas no processo, load_dotenv() não faz nada.
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import Response
 
+import danfse
 import emissor
 from auth import exigir_token_interno
 from certificado import carregar_certificado_pfx, limpar_certificado_temporario
 from certificado_temp import certificado_temporario
-from schemas import EmitirNotaRequest, EmitirNotaResponse, ParametrosServicoRequest
+from schemas import (
+    DanfseRequest,
+    EmitirNotaRequest,
+    EmitirNotaResponse,
+    ParametrosServicoRequest,
+)
 from sefin_nacional_client import ClienteSefinNacional, ErroSefinNacional
 
 app = FastAPI(title="nfse-engine", docs_url=None, redoc_url=None)
@@ -110,6 +119,18 @@ def emitir_nota(req: EmitirNotaRequest):
         xml_nfse=resultado.xml_nfse,
         erros=resultado.erros,
     )
+
+
+@app.post("/notas/danfse", dependencies=[Depends(exigir_token_interno)])
+def gerar_danfse(req: DanfseRequest):
+    with tempfile.TemporaryDirectory(prefix="nfse_engine_danfse_") as pasta:
+        caminho_pdf = str(Path(pasta) / "danfse.pdf")
+        try:
+            danfse.gerar_danfse_pdf(req.xml_nfse, caminho_pdf)
+        except danfse.ErroDanfse as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        pdf_bytes = Path(caminho_pdf).read_bytes()
+    return Response(content=pdf_bytes, media_type="application/pdf")
 
 
 @app.post("/parametros-municipio", dependencies=[Depends(exigir_token_interno)])

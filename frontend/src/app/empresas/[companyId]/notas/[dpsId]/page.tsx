@@ -96,7 +96,10 @@ export default async function NotaDetailPage(
         </dl>
 
         {nfse?.xml_nfse && (
-          <div className="mt-6">
+          <div className="mt-6 flex gap-3">
+            <a href={`/empresas/${companyId}/notas/${dpsId}/pdf`}>
+              <Button>Baixar PDF</Button>
+            </a>
             <a href={`/empresas/${companyId}/notas/${dpsId}/xml`} download>
               <Button variant="secondary">Baixar XML</Button>
             </a>

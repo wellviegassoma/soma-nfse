@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSomaStaff } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import type { ActionState } from "@/lib/actions/auth";
 
@@ -65,6 +66,14 @@ export async function createCompany(
           : "Não foi possível criar a empresa.",
     };
   }
+
+  await logAudit({
+    companyId: company.id,
+    action: "CREATE",
+    entity: "company",
+    entityId: company.id,
+    newValue: { legal_name: parsed.data.legalName, cnpj: parsed.data.cnpj ?? null },
+  });
 
   revalidatePath("/admin/empresas");
   redirect(`/admin/empresas/${company.id}`);
@@ -136,6 +145,14 @@ export async function inviteUserToCompany(
     };
   }
 
+  await logAudit({
+    companyId,
+    action: "INVITE",
+    entity: "user_companies",
+    entityId: userId,
+    newValue: { email, role },
+  });
+
   revalidatePath(`/admin/empresas/${companyId}`);
   return { success: true };
 }
@@ -173,20 +190,37 @@ export async function updateCompanyFiscal(
   const { companyId, ...rest } = parsed.data;
 
   const supabase = await createClient();
-  const { error } = await supabase
+
+  const { data: before } = await supabase
     .from("companies")
-    .update({
-      municipal_registration: rest.municipalRegistration || null,
-      tax_regime: rest.taxRegime || null,
-      cnae: rest.cnae || null,
-      municipality_ibge_code: rest.municipalityIbgeCode || null,
-      nfse_ambiente: rest.nfseAmbiente,
-      dps_series: rest.dpsSeries,
-      dps_next_number: rest.dpsNextNumber,
-    })
-    .eq("id", companyId);
+    .select(
+      "municipal_registration, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number",
+    )
+    .eq("id", companyId)
+    .single();
+
+  const newValue = {
+    municipal_registration: rest.municipalRegistration || null,
+    tax_regime: rest.taxRegime || null,
+    cnae: rest.cnae || null,
+    municipality_ibge_code: rest.municipalityIbgeCode || null,
+    nfse_ambiente: rest.nfseAmbiente,
+    dps_series: rest.dpsSeries,
+    dps_next_number: rest.dpsNextNumber,
+  };
+
+  const { error } = await supabase.from("companies").update(newValue).eq("id", companyId);
 
   if (error) return { error: "Não foi possível salvar os dados fiscais." };
+
+  await logAudit({
+    companyId,
+    action: "UPDATE",
+    entity: "company_fiscal",
+    entityId: companyId,
+    oldValue: before,
+    newValue,
+  });
 
   revalidatePath(`/admin/empresas/${companyId}/dados-fiscais`);
   return { success: true };

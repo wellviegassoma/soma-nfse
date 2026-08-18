@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff, requireUser } from "@/lib/auth";
 import { parseCertificate, encryptSecret, toBytea } from "@/lib/certificate";
+import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import type { ActionState } from "@/lib/actions/auth";
 
@@ -74,6 +75,14 @@ export async function uploadCertificate(
 
   if (error) return { error: "Não foi possível salvar o certificado." };
 
+  // Nunca logar o arquivo/senha — só metadados não sensíveis.
+  await logAudit({
+    companyId: parsed.data.companyId,
+    action: "UPLOAD",
+    entity: "certificate",
+    newValue: { fingerprint: info.fingerprint, expires_at: info.expiresAt.toISOString() },
+  });
+
   revalidatePath(`/admin/empresas/${parsed.data.companyId}/certificado`);
   return { success: true };
 }
@@ -82,5 +91,6 @@ export async function deleteCertificate(companyId: string) {
   await requireSomaStaff();
   const supabase = await createClient();
   await supabase.from("certificates").delete().eq("company_id", companyId);
+  await logAudit({ companyId, action: "DELETE", entity: "certificate" });
   revalidatePath(`/admin/empresas/${companyId}/certificado`);
 }

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCompanyAccess } from "@/lib/auth";
 import { decryptSecret, fromBytea } from "@/lib/certificate";
+import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import type { NfseAmbiente } from "@/lib/types";
 
@@ -264,6 +265,14 @@ export async function issueNfse(
     company_id: companyId,
     access_key: resultado.chave_acesso,
     xml_nfse: resultado.xml_nfse,
+  });
+
+  await logAudit({
+    companyId,
+    action: "ISSUE",
+    entity: "nfse",
+    entityId: dpsRow.id,
+    newValue: { numero_dps: numeroDps, valor: amount, access_key: resultado.chave_acesso },
   });
 
   revalidatePath(`/empresas/${companyId}`);
