@@ -61,10 +61,9 @@ docs/       especificação do produto
 - [x] Painel SOMA → **Erros**: lista `nfse_errors` entre empresas
 - [x] Painel SOMA → **Logs**: tabela `audit_logs` + instrumentação de
       criar/editar empresa, convidar usuário, upload/remoção de
-      certificado, criar/editar serviço, emitir nota — **ainda não
-      testado ao vivo no navegador** (bloqueado por uma falha de DNS pro
-      `supabase.co` no ambiente local durante o desenvolvimento; a
-      migration já foi aplicada com sucesso antes disso acontecer)
+      certificado, criar/editar serviço, emitir nota — testado ao vivo
+      (atualizei dados fiscais de verdade e conferi o evento aparecendo
+      em `/admin/logs` com usuário, ação e empresa corretos)
 - [ ] **Cancelamento — deliberadamente fora do escopo.** O `nfse-engine`
       legado também não tem essa lógica implementada/validada contra o
       Sefin Nacional ("fica de fora até existir uma referência real para
