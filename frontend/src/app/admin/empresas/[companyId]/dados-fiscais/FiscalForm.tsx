@@ -7,7 +7,12 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Field } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Alert";
-import { TAX_REGIME_LABELS, AMBIENTE_LABELS, type Company } from "@/lib/types";
+import {
+  TAX_REGIME_LABELS,
+  AMBIENTE_LABELS,
+  REGIME_ESPECIAL_LABELS,
+  type Company,
+} from "@/lib/types";
 
 export function FiscalForm({ company }: { company: Company }) {
   const [state, formAction, pending] = useActionState(
@@ -56,6 +61,19 @@ export function FiscalForm({ company }: { company: Company }) {
               defaultValue={company.municipality_ibge_code ?? ""}
             />
           </Field>
+          <Field label="Regime especial de tributação" htmlFor="regimeEspecialTributacao">
+            <Select
+              id="regimeEspecialTributacao"
+              name="regimeEspecialTributacao"
+              defaultValue={String(company.regime_especial_tributacao ?? 0)}
+            >
+              {Object.entries(REGIME_ESPECIAL_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {value} - {label}
+                </option>
+              ))}
+            </Select>
+          </Field>
         </div>
       </div>
 
@@ -96,6 +114,26 @@ export function FiscalForm({ company }: { company: Company }) {
             Ambiente de produção — notas emitidas aqui valem fiscalmente.
           </Alert>
         )}
+      </div>
+
+      <div className="flex flex-col gap-3 border-t border-border pt-6">
+        <h2 className="text-sm font-semibold text-foreground/70">Regras de emissão</h2>
+        <label className="flex items-start gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            name="allowRetroactiveEmission"
+            defaultChecked={company.allow_retroactive_emission}
+            className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+          />
+          <span>
+            Permitir emissão retroativa
+            <span className="block text-xs text-foreground/50">
+              Por padrão, só é possível emitir nota com competência no mês corrente (evita
+              problema de apuração de imposto no mês errado). Marque para liberar exceção
+              nesta empresa.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div>

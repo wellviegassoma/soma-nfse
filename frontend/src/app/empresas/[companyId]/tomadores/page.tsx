@@ -26,9 +26,14 @@ export default async function TomadoresPage(
             {customers?.length ?? 0} cadastrado(s)
           </p>
         </div>
-        <Link href={`/empresas/${companyId}/tomadores/novo`}>
-          <Button>+ Novo tomador</Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href={`/empresas/${companyId}/tomadores/importar`}>
+            <Button variant="secondary">Importar de XML</Button>
+          </Link>
+          <Link href={`/empresas/${companyId}/tomadores/novo`}>
+            <Button>+ Novo tomador</Button>
+          </Link>
+        </div>
       </div>
 
       {!customers || customers.length === 0 ? (

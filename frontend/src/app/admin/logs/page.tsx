@@ -20,6 +20,7 @@ const ACTION_LABEL: Record<string, string> = {
   UPLOAD: "enviou",
   INVITE: "convidou usuário para",
   ISSUE: "emitiu",
+  CANCEL: "cancelou",
 };
 
 export default async function AdminLogsPage() {

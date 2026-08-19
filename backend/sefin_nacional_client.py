@@ -146,6 +146,25 @@ class ClienteSefinNacional:
         raise ultimo_erro or ErroSefinNacional("Falha ao enviar DPS: nenhum campo candidato foi aceito.")
 
     # ------------------------------------------------------------------
+    # Eventos (cancelamento) — POST /nfse/{chaveAcesso}/eventos
+    # ------------------------------------------------------------------
+
+    def enviar_evento(self, chave_nfse: str, xml_evento_assinado: str) -> dict:
+        """
+        Envia um Pedido de Registro de Evento (ex.: cancelamento e101101,
+        ver evento_builder.py) já assinado. Ao contrário do POST /nfse
+        (nome do campo JSON incerto até validarmos em homologação), o
+        nome do campo aqui está confirmado contra a documentação oficial
+        (Manual dos Contribuintes — API Sistema Nacional NFS-e v1.2) e
+        contra uma implementação de terceiros em produção: sempre
+        "pedidoRegistroEventoXmlGZipB64".
+        """
+        comprimido = gzip.compress(xml_evento_assinado.encode("utf-8"))
+        xml_gzip_b64 = base64.b64encode(comprimido).decode("ascii")
+        payload = {"pedidoRegistroEventoXmlGZipB64": xml_gzip_b64}
+        return self._post_com_retry(f"/nfse/{chave_nfse}/eventos", payload, tag_debug="evento_cancelamento")
+
+    # ------------------------------------------------------------------
     # Consultas
     # ------------------------------------------------------------------
 

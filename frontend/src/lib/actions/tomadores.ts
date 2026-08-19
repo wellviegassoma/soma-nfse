@@ -6,6 +6,8 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser, getCompanyAccess } from "@/lib/auth";
 import { uuidLike } from "@/lib/zod-helpers";
+import { extrairTomadorDeXml } from "@/lib/xml-tomador";
+import { logAudit } from "@/lib/audit";
 import type { ActionState } from "@/lib/actions/auth";
 
 async function requireCompanyMember(companyId: string) {
@@ -93,4 +95,95 @@ export async function saveCustomer(
 
   revalidatePath(`/empresas/${rest.companyId}/tomadores`);
   redirect(`/empresas/${rest.companyId}/tomadores`);
+}
+
+export type ImportTomadoresState =
+  | {
+      error?: string;
+      resultado?: {
+        importados: number;
+        ignorados: number;
+        erros: { arquivo: string; motivo: string }[];
+      };
+    }
+  | undefined;
+
+export async function importarTomadoresXml(
+  _prevState: ImportTomadoresState,
+  formData: FormData,
+): Promise<ImportTomadoresState> {
+  const companyId = formData.get("companyId");
+  if (typeof companyId !== "string") return { error: "Empresa inválida." };
+  await requireCompanyMember(companyId);
+
+  const arquivos = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+  if (arquivos.length === 0) {
+    return { error: "Selecione um ou mais arquivos XML." };
+  }
+
+  const supabase = await createClient();
+  const erros: { arquivo: string; motivo: string }[] = [];
+  const vistosNesseLote = new Set<string>();
+  let importados = 0;
+  let ignorados = 0;
+
+  for (const arquivo of arquivos) {
+    let texto: string;
+    try {
+      texto = await arquivo.text();
+    } catch {
+      erros.push({ arquivo: arquivo.name, motivo: "Não foi possível ler o arquivo." });
+      continue;
+    }
+
+    const tomador = extrairTomadorDeXml(texto);
+    if (!tomador) {
+      erros.push({
+        arquivo: arquivo.name,
+        motivo: "Não achei os dados do tomador (CPF/CNPJ e nome) nesse XML.",
+      });
+      continue;
+    }
+
+    if (vistosNesseLote.has(tomador.cpfCnpj)) {
+      ignorados += 1;
+      continue;
+    }
+    vistosNesseLote.add(tomador.cpfCnpj);
+
+    const { error } = await supabase.from("customers").insert({
+      company_id: companyId,
+      type: tomador.tipo,
+      cpf_cnpj: tomador.cpfCnpj,
+      name: tomador.nome,
+      email: tomador.email || null,
+      zip_code: tomador.zipCode || null,
+      address: tomador.address || null,
+      number: tomador.number || null,
+      complement: tomador.complement || null,
+      district: tomador.district || null,
+    });
+
+    if (error) {
+      if (error.code === "23505") {
+        ignorados += 1;
+      } else {
+        erros.push({ arquivo: arquivo.name, motivo: "Não foi possível salvar esse tomador." });
+      }
+      continue;
+    }
+    importados += 1;
+  }
+
+  if (importados > 0) {
+    await logAudit({
+      companyId,
+      action: "CREATE",
+      entity: "customer_import",
+      newValue: { importados, ignorados, arquivos: arquivos.length },
+    });
+  }
+
+  revalidatePath(`/empresas/${companyId}/tomadores`);
+  return { resultado: { importados, ignorados, erros } };
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
+import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { EmitirNotaForm } from "./EmitirNotaForm";
 
 export const metadata = { title: "Emitir nota — SOMA NFS-e" };
@@ -11,7 +12,7 @@ export default async function EmitirNotaPage(
   const { companyId } = await props.params;
   const supabase = await createClient();
 
-  const [{ data: customers }, { data: services }] = await Promise.all([
+  const [{ data: customers }, { data: services }, { data: company }] = await Promise.all([
     supabase
       .from("customers")
       .select("id, name, cpf_cnpj")
@@ -23,6 +24,11 @@ export default async function EmitirNotaPage(
       .eq("company_id", companyId)
       .eq("active", true)
       .order("name"),
+    supabase
+      .from("companies")
+      .select("allow_retroactive_emission")
+      .eq("id", companyId)
+      .single(),
   ]);
 
   if (!services || services.length === 0) {
@@ -55,6 +61,8 @@ export default async function EmitirNotaPage(
           companyId={companyId}
           customers={customers ?? []}
           services={services}
+          allowRetroactiveEmission={company?.allow_retroactive_emission ?? false}
+          mesCorrente={mesCorrenteBrasilia()}
         />
       </Card>
     </div>

@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/Select";
 import { Field } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Alert";
 import { Card } from "@/components/ui/Card";
+import { hojeBrasilia } from "@/lib/competencia";
 
 type Customer = { id: string; name: string; cpf_cnpj: string | null };
 type Service = { id: string; name: string; description: string | null };
@@ -21,19 +22,21 @@ export function EmitirNotaForm({
   companyId,
   customers,
   services,
+  allowRetroactiveEmission,
+  mesCorrente,
 }: {
   companyId: string;
   customers: Customer[];
   services: Service[];
+  allowRetroactiveEmission: boolean;
+  mesCorrente: string;
 }) {
   const [step, setStep] = useState<"form" | "review">("form");
   const [customerId, setCustomerId] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [competenceDate, setCompetenceDate] = useState(
-    () => new Date().toISOString().slice(0, 10),
-  );
+  const [competenceDate, setCompetenceDate] = useState(hojeBrasilia);
 
   const [state, formAction, pending] = useActionState(issueNfse, undefined);
 
@@ -45,6 +48,9 @@ export function EmitirNotaForm({
     () => services.find((s) => s.id === serviceId),
     [services, serviceId],
   );
+
+  const competenciaForaDoMes =
+    !allowRetroactiveEmission && competenceDate.slice(0, 7) !== mesCorrente;
 
   function handleServiceChange(id: string) {
     setServiceId(id);
@@ -190,6 +196,12 @@ export function EmitirNotaForm({
           onChange={(e) => setCompetenceDate(e.target.value)}
         />
       </Field>
+      {competenciaForaDoMes && (
+        <Alert tone="warning">
+          Essa data está fora do mês corrente. Emissão retroativa está desabilitada para essa
+          empresa — peça pra SOMA habilitar em Dados fiscais se for necessário.
+        </Alert>
+      )}
 
       <Field label="Descrição" htmlFor="description">
         <Input
@@ -203,7 +215,14 @@ export function EmitirNotaForm({
         type="button"
         size="lg"
         className="mt-2"
-        disabled={!customerId || !serviceId || !amount || !description || !competenceDate}
+        disabled={
+          !customerId ||
+          !serviceId ||
+          !amount ||
+          !description ||
+          !competenceDate ||
+          competenciaForaDoMes
+        }
         onClick={() => setStep("review")}
       >
         Continuar

@@ -26,6 +26,7 @@ from datetime import date, datetime
 from typing import Optional
 
 import dps_builder as db
+import evento_builder as eb
 import xml_signer as xs
 from certificado import carregar_certificado_pfx, limpar_certificado_temporario, ErroCertificado
 from sefin_nacional_client import ClienteSefinNacional, ErroSefinNacional
@@ -244,5 +245,88 @@ def emitir_nota(
         xml_dps_assinado=xml_assinado,
         chave_acesso=chave_acesso,
         xml_nfse=xml_nfse,
+        resposta_bruta=resposta,
+    )
+
+
+@dataclass
+class ResultadoCancelamento:
+    sucesso: bool
+    chave_nfse: str
+    xml_evento_assinado: str
+    resposta_bruta: Optional[dict] = None
+    erros: Optional[list] = None
+
+
+def cancelar_nota(
+    ambiente: str,
+    caminho_pfx_local: str,
+    senha_certificado: str,
+    chave_nfse: str,
+    autor_documento: str,
+    motivo_codigo: str,
+    motivo_descricao: str,
+) -> ResultadoCancelamento:
+    """
+    Solicita o cancelamento (evento e101101) de uma NFS-e já emitida.
+
+    ATENÇÃO: ao contrário de emitir_nota, essa função NUNCA foi validada
+    contra um cancelamento real aceito pelo Sefin Nacional (ver
+    evento_builder.py) — a estrutura vem de fontes externas confiáveis
+    (XSD oficial + implementação de terceiros em produção), não de um
+    exemplo real da SOMA. Trate o primeiro uso com cautela redobrada.
+    """
+    try:
+        xml_evento, id_pedido = eb.gerar_xml_evento_cancelamento(
+            eb.DadosCancelamento(
+                chave_nfse=chave_nfse,
+                autor_documento=autor_documento,
+                motivo_codigo=motivo_codigo,
+                motivo_descricao=motivo_descricao,
+                data_evento=datetime.now(),
+                ambiente_producao=(ambiente == "producao"),
+            )
+        )
+    except eb.ErroDadosEvento as e:
+        raise ErroEmissao(f"Dados inválidos para o cancelamento: {e}")
+
+    try:
+        chave_privada, cert_der, cadeia_der = xs.carregar_chave_e_certificado_de_pfx(
+            caminho_pfx_local, senha_certificado
+        )
+    except xs.ErroAssinatura as e:
+        raise ErroEmissao(f"Erro ao abrir o certificado para assinar: {e}")
+
+    try:
+        xml_assinado = xs.assinar_elemento(xml_evento, id_pedido, chave_privada, cert_der, cadeia_der)
+    except Exception as e:
+        raise ErroEmissao(f"Erro ao assinar o evento de cancelamento: {e}")
+
+    cert_path, key_path = None, None
+    try:
+        cert_path, key_path = carregar_certificado_pfx(caminho_pfx_local, senha_certificado)
+    except ErroCertificado as e:
+        raise ErroEmissao(f"Erro ao preparar o certificado para conexão: {e}")
+
+    try:
+        with ClienteSefinNacional(cert_path, key_path, ambiente=ambiente) as sefin:
+            try:
+                resposta = sefin.enviar_evento(chave_nfse, xml_assinado)
+            except ErroSefinNacional as e:
+                return ResultadoCancelamento(
+                    sucesso=False,
+                    chave_nfse=chave_nfse,
+                    xml_evento_assinado=xml_assinado,
+                    erros=e.detalhes or [str(e)],
+                    resposta_bruta=None,
+                )
+    finally:
+        if cert_path and key_path:
+            limpar_certificado_temporario(cert_path, key_path)
+
+    return ResultadoCancelamento(
+        sucesso=True,
+        chave_nfse=chave_nfse,
+        xml_evento_assinado=xml_assinado,
         resposta_bruta=resposta,
     )

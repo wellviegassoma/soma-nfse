@@ -38,6 +38,8 @@ from auth import exigir_token_interno
 from certificado import carregar_certificado_pfx, limpar_certificado_temporario
 from certificado_temp import certificado_temporario
 from schemas import (
+    CancelarNotaRequest,
+    CancelarNotaResponse,
     DanfseRequest,
     EmitirNotaRequest,
     EmitirNotaResponse,
@@ -121,12 +123,37 @@ def emitir_nota(req: EmitirNotaRequest):
     )
 
 
+@app.post("/notas/cancelar", response_model=CancelarNotaResponse, dependencies=[Depends(exigir_token_interno)])
+def cancelar_nota(req: CancelarNotaRequest):
+    pfx_bytes = base64.b64decode(req.certificado.pfx_base64)
+    try:
+        with certificado_temporario(pfx_bytes) as caminho_pfx:
+            resultado = emissor.cancelar_nota(
+                ambiente=req.ambiente,
+                caminho_pfx_local=caminho_pfx,
+                senha_certificado=req.certificado.senha,
+                chave_nfse=req.chave_nfse,
+                autor_documento=req.autor_documento,
+                motivo_codigo=req.motivo_codigo,
+                motivo_descricao=req.motivo_descricao,
+            )
+    except emissor.ErroEmissao as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return CancelarNotaResponse(
+        sucesso=resultado.sucesso,
+        chave_nfse=resultado.chave_nfse,
+        xml_evento_assinado=resultado.xml_evento_assinado,
+        erros=resultado.erros,
+    )
+
+
 @app.post("/notas/danfse", dependencies=[Depends(exigir_token_interno)])
 def gerar_danfse(req: DanfseRequest):
     with tempfile.TemporaryDirectory(prefix="nfse_engine_danfse_") as pasta:
         caminho_pdf = str(Path(pasta) / "danfse.pdf")
         try:
-            danfse.gerar_danfse_pdf(req.xml_nfse, caminho_pdf)
+            danfse.gerar_danfse_pdf(req.xml_nfse, caminho_pdf, cancelada=req.cancelada)
         except danfse.ErroDanfse as e:
             raise HTTPException(status_code=422, detail=str(e))
         pdf_bytes = Path(caminho_pdf).read_bytes()

@@ -21,6 +21,7 @@ function formatDateOnly(iso: string) {
 const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   ACCEPTED: { label: "Emitida", className: "bg-success-soft text-success" },
   REJECTED: { label: "Rejeitada", className: "bg-danger-soft text-danger" },
+  CANCELADA: { label: "Cancelada", className: "bg-foreground/10 text-foreground/60" },
 };
 
 export default async function NotasPage(
@@ -32,7 +33,7 @@ export default async function NotasPage(
   const { data: notas } = await supabase
     .from("dps")
     .select(
-      "id, numero_dps, serie, valor, data_competencia, status, created_at, customer:customers(name), service:services(name), nfse(access_key)",
+      "id, numero_dps, serie, valor, data_competencia, status, created_at, customer:customers(name), service:services(name), nfse(access_key, status)",
     )
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
@@ -58,7 +59,10 @@ export default async function NotasPage(
       ) : (
         <Card className="divide-y divide-border overflow-hidden">
           {lista.map((nota) => {
-            const status = STATUS_LABEL[nota.status] ?? STATUS_LABEL.REJECTED;
+            const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
+            const nfseCancelada = nfseArr.some((n) => n.status === "CANCELADA");
+            const statusKey = nfseCancelada ? "CANCELADA" : nota.status;
+            const status = STATUS_LABEL[statusKey] ?? STATUS_LABEL.REJECTED;
             return (
               <Link
                 key={nota.id}

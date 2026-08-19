@@ -64,15 +64,83 @@ docs/       especificação do produto
       certificado, criar/editar serviço, emitir nota — testado ao vivo
       (atualizei dados fiscais de verdade e conferi o evento aparecendo
       em `/admin/logs` com usuário, ação e empresa corretos)
-- [ ] **Cancelamento — deliberadamente fora do escopo.** O `nfse-engine`
-      legado também não tem essa lógica implementada/validada contra o
-      Sefin Nacional ("fica de fora até existir uma referência real para
-      portar") — mesmo princípio de não inventar regra fiscal nova sem
-      validação real se aplica aqui. `nfse_events` já existe no schema,
-      pronta para quando essa lógica for confirmada.
+- [x] **Cancelamento de NFS-e (evento e101101).** O `nfse-engine` legado
+      não tinha essa lógica implementada/validada. Implementado do zero
+      nesta fase, com a estrutura confirmada contra o XSD oficial
+      (`tiposEventos_v1.01.xsd`/`pedRegEvento_v1.01.xsd`, mesmo namespace
+      da DPS) e contra uma implementação de terceiros já em produção
+      (nfse-php) — não inventado às cegas, mas também **nunca testado
+      contra um cancelamento real aceito pelo Sefin Nacional** (ao
+      contrário do resto do motor, que foi validado byte a byte). Ver
+      `backend/evento_builder.py` (monta o XML), `emissor.cancelar_nota`
+      (assina + envia, reaproveitando `xml_signer.assinar_elemento` — a
+      mesma função já validada para a DPS), `sefin_nacional_client.
+      enviar_evento` (`POST /nfse/{chaveAcesso}/eventos`, campo
+      `pedidoRegistroEventoXmlGZipB64` confirmado no manual oficial), e
+      o botão "Cancelar nota" na tela da NFS-e (`empresas/[id]/notas/
+      [dpsId]`). Teste com cautela redobrada antes de confiar em nota de
+      valor alto.
 - [ ] Busca de notas por NSU, relatório de faturamento em PDF, lookups
       auxiliares (`municipios_ibge.py`, `codigos_atividade.py`) — ainda
       no `nfse-engine` legado, não portados
+
+**Fase E — Primeira emissão real + tributação federal (concluída)**
+- [x] **Primeira NFS-e real emitida com sucesso em `producao`** (18/08/2026,
+      empresa SOMA Contabilidade Integrada, serviço "Contabilidade")
+- [x] Corrigido bug de schema Pydantic (`erros` do Sefin vinha como lista de
+      dict, campo tipado como `list[str]`) que causava 500 e escondia o erro
+      real
+- [x] Corrigido `cTribMun`: campo é opcional e varia por município — não é
+      cópia do código tributário nacional (causou rejeição real E1235
+      "Pattern constraint failed" na primeira tentativa)
+- [x] Alíquotas próprias de PIS/COFINS (`aliquota_pis`/`aliquota_cofins` em
+      `services`) e retenção na fonte pelo tomador (IN RFB 1.234/2012):
+      `retencao_irrf_aliquota` e `retencao_pis_cofins_csll_aliquota`.
+      Domínio de `tpRetPisCofins` confirmado direto na Nota Técnica
+      SE/CGNFS-e nº 007/2026 (gov.br/nfse): `0` = nada retido (já validado
+      em nota real), `3` = PIS/COFINS/CSLL retidos — usado quando
+      `retencao_pis_cofins_csll_aliquota` está preenchido.
+      ⚠️ Retenção (`vRetIRRF`/`vRetCSLL`) ainda não foi validada contra
+      nenhuma nota real aceita — teste com valor pequeno antes de confiar.
+- [x] Corrigido bug: "Regime especial de tributação" existia no cadastro do
+      SERVIÇO mas nunca era enviado ao Sefin. Campo é do PRESTADOR
+      (empresa), movido para `companies.regime_especial_tributacao` (aba
+      Dados fiscais), com dropdown do domínio real (0–6) e agora
+      efetivamente enviado (`regEspTrib`)
+- [x] Corrigido bug: `opcao_simples_nacional` estava sempre fixo em `3`
+      (Optante ME/EPP), inconsistente com empresas Lucro Presumido/Real
+      usando CST 01-07. Agora derivado de `companies.tax_regime`
+- [x] Autocomplete (HTML `datalist`) para "Código tributário nacional" e
+      "NBS" no cadastro de serviço, sugerindo códigos já usados em outros
+      serviços — não temos a tabela oficial do governo carregada no
+      sistema, então cresce organicamente em vez de uma lista fixa
+
+**Fase G — Trava de emissão retroativa + Dashboard SOMA (concluída)**
+- [x] `companies.allow_retroactive_emission` (default `false`) — `issueNfse()`
+      bloqueia emissão com competência fora do mês corrente, a menos que a
+      SOMA habilite a exceção em Dados fiscais. Comparação de mês feita no
+      fuso de Brasília (não `Date`/UTC puro, mesma pegadinha já documentada
+      em `notas/page.tsx`)
+- [x] Aba **Visão geral** (`/admin`, nova aba padrão do painel SOMA):
+      filtro de competência (`<input type="month">`, padrão mês corrente),
+      cards de empresas cadastradas / notas emitidas / faturamento /
+      rejeitadas e canceladas na competência selecionada, Top 5 empresas
+      por faturamento e por quantidade de notas, tabela de faturamento por
+      empresa, e seletor pra abrir o detalhe (notas e faturamento da
+      competência + total histórico) de uma empresa específica
+
+**Fase H — Importar tomadores de XML (concluída)**
+- [x] `empresas/[id]/tomadores/importar`: upload de um ou vários XMLs de
+      DPS/NFS-e (emitidas pelo soma-nfse ou por qualquer outro sistema —
+      o parser só depende do layout nacional público) e extrai o tomador
+      (`<toma>`: CPF/CNPJ, nome, e-mail, endereço) por regex sobre o texto
+      cru, mesma técnica do motor legado (`lib/xml-tomador.ts`)
+- [x] Deduplica contra tomadores já cadastrados (por CPF/CNPJ) e dentro do
+      próprio lote — nunca sobrescreve um cadastro existente, só ignora e
+      reporta quantos já existiam
+- [x] Testado ao vivo (usuário de teste descartável): lote com um XML de
+      tomador já cadastrado + um novo — resultado correto (1 importado, 1
+      ignorado), tomador novo apareceu na lista
 
 ## Setup do zero
 

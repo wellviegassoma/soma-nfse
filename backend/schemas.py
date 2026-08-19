@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -80,7 +80,23 @@ class EmitirNotaResponse(BaseModel):
     xml_dps_assinado: str
     chave_acesso: Optional[str] = None
     xml_nfse: Optional[str] = None
-    erros: Optional[list[str]] = None
+    erros: Optional[list[dict[str, Any]] | list[str]] = None
+
+
+class CancelarNotaRequest(BaseModel):
+    certificado: CertificadoIn
+    ambiente: Literal["producao", "producao_restrita"] = "producao_restrita"
+    chave_nfse: str
+    autor_documento: str  # CNPJ ou CPF de quem está pedindo o cancelamento
+    motivo_codigo: Literal["1", "2", "9"]
+    motivo_descricao: str
+
+
+class CancelarNotaResponse(BaseModel):
+    sucesso: bool
+    chave_nfse: str
+    xml_evento_assinado: str
+    erros: Optional[list[dict[str, Any]] | list[str]] = None
 
 
 class BuscarNotasRequest(BaseModel):
@@ -136,6 +152,7 @@ class BuscarNotasResponse(BaseModel):
 
 class DanfseRequest(BaseModel):
     xml_nfse: str
+    cancelada: bool = False
 
 
 class RelatorioFaturamentoRequest(BaseModel):

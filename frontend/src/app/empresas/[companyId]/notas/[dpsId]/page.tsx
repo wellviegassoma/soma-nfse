@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { CancelNotaForm } from "./CancelNotaForm";
 
 export const metadata = { title: "Nota fiscal — SOMA NFS-e" };
 
@@ -25,7 +26,7 @@ export default async function NotaDetailPage(
   const { data: nota } = await supabase
     .from("dps")
     .select(
-      "id, numero_dps, serie, valor, descricao, data_competencia, status, created_at, customer:customers(name, cpf_cnpj), service:services(name), nfse(access_key, xml_nfse)",
+      "id, numero_dps, serie, valor, descricao, data_competencia, status, created_at, customer:customers(name, cpf_cnpj), service:services(name), nfse(access_key, xml_nfse, status)",
     )
     .eq("id", dpsId)
     .single();
@@ -33,7 +34,9 @@ export default async function NotaDetailPage(
   if (!nota) notFound();
 
   const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
-  const nfse = nfseArr[0] as { access_key: string | null; xml_nfse: string | null } | undefined;
+  const nfse = nfseArr[0] as
+    | { access_key: string | null; xml_nfse: string | null; status: string }
+    | undefined;
   const customer = Array.isArray(nota.customer) ? nota.customer[0] : nota.customer;
   const service = Array.isArray(nota.service) ? nota.service[0] : nota.service;
 
@@ -53,6 +56,10 @@ export default async function NotaDetailPage(
           Essa nota não foi aceita pelo Sefin Nacional. Consulte o suporte da
           SOMA se precisar entender o motivo.
         </Alert>
+      )}
+
+      {nfse?.status === "CANCELADA" && (
+        <Alert tone="warning">Esta NFS-e foi cancelada.</Alert>
       )}
 
       <Card className="p-6">
@@ -103,6 +110,12 @@ export default async function NotaDetailPage(
             <a href={`/empresas/${companyId}/notas/${dpsId}/xml`} download>
               <Button variant="secondary">Baixar XML</Button>
             </a>
+          </div>
+        )}
+
+        {nfse?.access_key && nfse.status !== "CANCELADA" && (
+          <div className="mt-6">
+            <CancelNotaForm companyId={companyId} dpsId={dpsId} />
           </div>
         )}
       </Card>

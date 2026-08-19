@@ -22,6 +22,17 @@ export const AMBIENTE_LABELS: Record<NfseAmbiente, string> = {
   PRODUCAO: "Produção",
 };
 
+// regEspTrib — domínio do layout NFS-e Nacional.
+export const REGIME_ESPECIAL_LABELS: Record<number, string> = {
+  0: "Nenhum",
+  1: "Ato Cooperado (Cooperativa)",
+  2: "Estimativa",
+  3: "Microempresa Municipal",
+  4: "Notário ou Registrador",
+  5: "Profissional Autônomo",
+  6: "Sociedade de Profissionais",
+};
+
 export type CustomerType = "PF" | "PJ";
 
 export type Company = {
@@ -38,6 +49,8 @@ export type Company = {
   nfse_ambiente: NfseAmbiente;
   dps_series: string;
   dps_next_number: number;
+  regime_especial_tributacao: number;
+  allow_retroactive_emission: boolean;
 };
 
 export type Organization = {
@@ -75,7 +88,14 @@ export type Service = {
   municipal_tax_code: string | null;
   nbs: string | null;
   iss_rate: number | null;
-  taxation_type: string | null;
+  percentual_total_tributos_federal: number | null;
+  percentual_total_tributos_estadual: number | null;
+  percentual_total_tributos_municipal: number | null;
+  cst_pis_cofins: string | null;
+  aliquota_pis: number | null;
+  aliquota_cofins: number | null;
+  retencao_pis_cofins_csll_aliquota: number | null;
+  retencao_irrf_aliquota: number | null;
   active: boolean;
 };
 
@@ -98,7 +118,10 @@ export type DpsListItem = {
   created_at: string;
   customer: { name: string } | null;
   service: { name: string } | null;
-  nfse: { access_key: string | null }[] | null;
+  nfse:
+    | { access_key: string | null; status: string }
+    | { access_key: string | null; status: string }[]
+    | null;
 };
 
 export type Customer = {

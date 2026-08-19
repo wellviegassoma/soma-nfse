@@ -21,7 +21,35 @@ const serviceSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
-  taxationType: z.string().trim().optional(),
+  percFederal: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
+  percEstadual: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
+  percMunicipal: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
+  cstPisCofins: z.string().trim().optional(),
+  aliquotaPis: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
+  aliquotaCofins: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
+  retencaoIrrfAliquota: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
+  retencaoPisCofinsCsllAliquota: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
   active: z.coerce.boolean(),
 });
 
@@ -40,7 +68,14 @@ export async function saveService(
     municipalTaxCode: formData.get("municipalTaxCode") || undefined,
     nbs: formData.get("nbs") || undefined,
     issRate: formData.get("issRate") || undefined,
-    taxationType: formData.get("taxationType") || undefined,
+    percFederal: formData.get("percFederal") || undefined,
+    percEstadual: formData.get("percEstadual") || undefined,
+    percMunicipal: formData.get("percMunicipal") || undefined,
+    cstPisCofins: formData.get("cstPisCofins") || undefined,
+    aliquotaPis: formData.get("aliquotaPis") || undefined,
+    aliquotaCofins: formData.get("aliquotaCofins") || undefined,
+    retencaoIrrfAliquota: formData.get("retencaoIrrfAliquota") || undefined,
+    retencaoPisCofinsCsllAliquota: formData.get("retencaoPisCofinsCsllAliquota") || undefined,
     active: formData.get("active") === "on",
   });
   if (!parsed.success) {
@@ -57,7 +92,14 @@ export async function saveService(
     municipal_tax_code: rest.municipalTaxCode || null,
     nbs: rest.nbs || null,
     iss_rate: rest.issRate ?? null,
-    taxation_type: rest.taxationType || null,
+    percentual_total_tributos_federal: rest.percFederal ?? null,
+    percentual_total_tributos_estadual: rest.percEstadual ?? null,
+    percentual_total_tributos_municipal: rest.percMunicipal ?? null,
+    cst_pis_cofins: rest.cstPisCofins || null,
+    aliquota_pis: rest.aliquotaPis ?? null,
+    aliquota_cofins: rest.aliquotaCofins ?? null,
+    retencao_irrf_aliquota: rest.retencaoIrrfAliquota ?? null,
+    retencao_pis_cofins_csll_aliquota: rest.retencaoPisCofinsCsllAliquota ?? null,
     active: rest.active,
   };
 

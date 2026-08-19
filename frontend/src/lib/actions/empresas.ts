@@ -166,6 +166,8 @@ const updateFiscalSchema = z.object({
   nfseAmbiente: z.enum(["HOMOLOGACAO", "PRODUCAO"]),
   dpsSeries: z.string().trim().min(1, "Informe a série."),
   dpsNextNumber: z.coerce.number().int().min(1, "Precisa ser maior que zero."),
+  regimeEspecialTributacao: z.coerce.number().int().min(0).max(6),
+  allowRetroactiveEmission: z.boolean(),
 });
 
 export async function updateCompanyFiscal(
@@ -183,6 +185,8 @@ export async function updateCompanyFiscal(
     nfseAmbiente: formData.get("nfseAmbiente"),
     dpsSeries: formData.get("dpsSeries"),
     dpsNextNumber: formData.get("dpsNextNumber"),
+    regimeEspecialTributacao: formData.get("regimeEspecialTributacao"),
+    allowRetroactiveEmission: formData.get("allowRetroactiveEmission") === "on",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -194,7 +198,7 @@ export async function updateCompanyFiscal(
   const { data: before } = await supabase
     .from("companies")
     .select(
-      "municipal_registration, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number",
+      "municipal_registration, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission",
     )
     .eq("id", companyId)
     .single();
@@ -207,6 +211,8 @@ export async function updateCompanyFiscal(
     nfse_ambiente: rest.nfseAmbiente,
     dps_series: rest.dpsSeries,
     dps_next_number: rest.dpsNextNumber,
+    regime_especial_tributacao: rest.regimeEspecialTributacao,
+    allow_retroactive_emission: rest.allowRetroactiveEmission,
   };
 
   const { error } = await supabase.from("companies").update(newValue).eq("id", companyId);

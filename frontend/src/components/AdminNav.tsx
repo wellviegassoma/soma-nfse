@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 
 const TABS = [
+  { href: "/admin", label: "Visão geral", exact: true },
   { href: "/admin/empresas", label: "Empresas" },
   { href: "/admin/erros", label: "Erros" },
   { href: "/admin/logs", label: "Logs" },
@@ -16,7 +17,7 @@ export function AdminNav() {
   return (
     <nav className="flex gap-1 border-b border-border">
       {TABS.map((tab) => {
-        const active = pathname.startsWith(tab.href);
+        const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
         return (
           <Link
             key={tab.href}

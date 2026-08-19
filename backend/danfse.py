@@ -136,9 +136,22 @@ def _v(texto) -> str:
     return texto if texto not in (None, "") else "-"
 
 
-def gerar_danfse_pdf(xml_nfse: str, caminho_saida: str) -> str:
+def _desenhar_marca_dagua_cancelada(canvas, doc):
+    largura, altura = A4
+    canvas.saveState()
+    canvas.setFont("Helvetica-Bold", 90)
+    canvas.setFillColor(colors.Color(0.75, 0, 0, alpha=0.28))
+    canvas.translate(largura / 2, altura / 2)
+    canvas.rotate(45)
+    canvas.drawCentredString(0, 0, "CANCELADA")
+    canvas.restoreState()
+
+
+def gerar_danfse_pdf(xml_nfse: str, caminho_saida: str, cancelada: bool = False) -> str:
     """Gera o PDF do DANFSe a partir do XML da NFS-e (string). Retorna o
-    caminho do arquivo gerado."""
+    caminho do arquivo gerado. `cancelada=True` desenha uma marca d'água
+    diagonal "CANCELADA" em todas as páginas — o XML em si nunca muda
+    (é o documento autorizado original), só a apresentação do PDF."""
     try:
         raiz = etree.fromstring(xml_nfse.encode("utf-8") if isinstance(xml_nfse, str) else xml_nfse)
     except Exception as e:
@@ -264,7 +277,7 @@ def gerar_danfse_pdf(xml_nfse: str, caminho_saida: str) -> str:
 
     # ------------------------------------------------------------------
     styles = getSampleStyleSheet()
-    estilo_normal = ParagraphStyle("Normal8", parent=styles["Normal"], fontSize=7, leading=8.6)
+    estilo_normal = ParagraphStyle("Normal8", parent=styles["Normal"], fontSize=7, leading=8.1)
 
     def celula(rotulo: str, valor: str) -> Paragraph:
         return Paragraph(f"<b>{rotulo}</b><br/>{valor if valor else '-'}", estilo_normal)
@@ -276,8 +289,8 @@ def gerar_danfse_pdf(xml_nfse: str, caminho_saida: str) -> str:
             ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 8),
             ("LEFTPADDING", (0, 0), (-1, -1), 5),
-            ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("TOPPADDING", (0, 0), (-1, -1), 1.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
             ("BOX", (0, 0), (-1, -1), 0.6, COR_BORDA),
         ]))
         return t
@@ -291,8 +304,8 @@ def gerar_danfse_pdf(xml_nfse: str, caminho_saida: str) -> str:
             ("INNERGRID", (0, 0), (-1, -1), 0.4, COR_BORDA),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("LEFTPADDING", (0, 0), (-1, -1), 5),
-            ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("TOPPADDING", (0, 0), (-1, -1), 1.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
         ]))
         return t
 
@@ -333,9 +346,9 @@ def gerar_danfse_pdf(xml_nfse: str, caminho_saida: str) -> str:
     )
     cabecalho.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (2, 0), (2, 0), "RIGHT")]))
     elementos.append(cabecalho)
-    elementos.append(Spacer(1, 0.15 * cm))
+    elementos.append(Spacer(1, 0.08 * cm))
     elementos.append(Paragraph(f"<b>CHAVE DE ACESSO DA NFS-e</b><br/>{chave_acesso}", estilo_normal))
-    elementos.append(Spacer(1, 0.2 * cm))
+    elementos.append(Spacer(1, 0.1 * cm))
 
     elementos.append(linha_campos([
         ("NÚMERO DA NFS-e", _v(numero_nfse)), ("COMPETÊNCIA DA NFS-e", _fmt_data(competencia, so_data=True)),
@@ -345,9 +358,14 @@ def gerar_danfse_pdf(xml_nfse: str, caminho_saida: str) -> str:
         ("NÚMERO DA DPS", _v(numero_dps)), ("SÉRIE DA DPS", _v(serie_dps)),
         ("DATA E HORA DA EMISSÃO DA DPS", _fmt_data(dh_emissao_dps)),
     ]))
+    situacao_nfse = (
+        '<font color="#dc2626"><b>CANCELADA</b></font>'
+        if cancelada
+        else DESCRICAO_CSTAT.get(cstat, "NFS-e Gerada")
+    )
     elementos.append(linha_campos([
         ("EMITENTE DA NFS-e", "Prestador"),
-        ("SITUAÇÃO DA NFS-e", DESCRICAO_CSTAT.get(cstat, "NFS-e Gerada")),
+        ("SITUAÇÃO DA NFS-e", situacao_nfse),
         ("FINALIDADE", "NFS-e"),
     ]))
 
@@ -486,24 +504,31 @@ def gerar_danfse_pdf(xml_nfse: str, caminho_saida: str) -> str:
     )
     elementos.append(linha_campos([("", "<br/>".join(linhas_info))], [19 * cm]))
 
-    elementos.append(Spacer(1, 0.3 * cm))
+    elementos.append(Spacer(1, 0.15 * cm))
     elementos.append(linha_campos([
         ("DATA CIENTIFICAÇÃO", ""), ("IDENTIFICAÇÃO E ASSINATURA", ""),
         ("Nº NFS-e / CHAVE NFS-e", f"{numero_nfse} / {chave_acesso}"),
     ], [5 * cm, 8 * cm, 6 * cm]))
 
-    elementos.append(Spacer(1, 0.2 * cm))
+    elementos.append(Spacer(1, 0.05 * cm))
     elementos.append(Paragraph(
         "Documento gerado localmente a partir do XML autorizado da NFS-e — a chave de acesso "
         "acima permite conferir a autenticidade diretamente no portal nacional (nfse.gov.br). "
         "Logo NFS-e: gov.br/nfse (CC BY-ND 3.0).",
-        ParagraphStyle("Rodape", parent=estilo_normal, fontSize=6, textColor=colors.grey),
+        ParagraphStyle("Rodape", parent=estilo_normal, fontSize=6, leading=7, textColor=colors.grey),
     ))
 
     Path(caminho_saida).parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
         caminho_saida, pagesize=A4,
-        leftMargin=1 * cm, rightMargin=1 * cm, topMargin=1 * cm, bottomMargin=1 * cm,
+        leftMargin=1 * cm, rightMargin=1 * cm, topMargin=0.5 * cm, bottomMargin=0.5 * cm,
     )
-    doc.build(elementos)
+    if cancelada:
+        doc.build(
+            elementos,
+            onFirstPage=_desenhar_marca_dagua_cancelada,
+            onLaterPages=_desenhar_marca_dagua_cancelada,
+        )
+    else:
+        doc.build(elementos)
     return caminho_saida

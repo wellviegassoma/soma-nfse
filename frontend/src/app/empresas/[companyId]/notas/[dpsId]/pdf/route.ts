@@ -10,7 +10,7 @@ export async function GET(
 
   const { data: nfse } = await supabase
     .from("nfse")
-    .select("xml_nfse")
+    .select("xml_nfse, status")
     .eq("dps_id", dpsId)
     .maybeSingle();
 
@@ -26,7 +26,10 @@ export async function GET(
         "Content-Type": "application/json",
         "X-Internal-Token": process.env.NFSE_ENGINE_INTERNAL_TOKEN ?? "",
       },
-      body: JSON.stringify({ xml_nfse: nfse.xml_nfse }),
+      body: JSON.stringify({
+        xml_nfse: nfse.xml_nfse,
+        cancelada: nfse.status === "CANCELADA",
+      }),
       cache: "no-store",
     });
   } catch {
