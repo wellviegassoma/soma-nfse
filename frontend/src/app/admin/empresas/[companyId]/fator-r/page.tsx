@@ -87,6 +87,7 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
 
   const mesesComDadosReceita = new Set(notas.filter((n) => !n.cancelada).map((n) => n.competencia));
   const folhaPorMes = new Map(folhaMensal.map((f) => [f.competencia, f.valor]));
+  const fgtsPorMes = new Map(folhaMensal.map((f) => [f.competencia, f.fgts]));
 
   const competencia = mesCorrenteBrasilia();
   const meses = ultimosMeses(competencia, MESES_EXIBIDOS);
@@ -109,6 +110,7 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
     return {
       competencia: mes,
       folhaDoMes: folhaPorMes.get(mes) ?? null,
+      fgtsDoMes: fgtsPorMes.get(mes) ?? null,
       fp12,
       fp12Estimado: estimado,
       rbt12,
@@ -136,7 +138,7 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
             <thead className="bg-surface-muted text-xs text-foreground/50">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Competência</th>
-                <th className="px-4 py-3 text-left font-medium">Folha do mês</th>
+                <th className="px-4 py-3 text-left font-medium">Folha / FGTS do mês</th>
                 <th className="px-4 py-3 text-left font-medium">Folha acumulada (12m)</th>
                 <th className="px-4 py-3 text-left font-medium">RBT12</th>
                 <th className="px-4 py-3 text-left font-medium">Fator R</th>
@@ -154,6 +156,7 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
                       companyId={companyId}
                       competencia={linha.competencia}
                       valorAtual={linha.folhaDoMes}
+                      fgtsAtual={linha.fgtsDoMes}
                     />
                   </td>
                   <td className="px-4 py-3 text-foreground/70">

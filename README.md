@@ -538,6 +538,48 @@ empresas via CNPJ/planilha) (concluída)**
       com a divisão manual; a folha analítica reconheceu o total certo
       (R$14.152,61) e a competência (07/2026) direto do PDF
 
+**Bugs reais corrigidos — leitura de PDF quebrava só em produção (concluído)**
+- [x] Funcionava local, dava "server error" genérico assim que ia pro ar
+      na Vercel — dois problemas distintos, mesma causa raiz: o
+      rastreador de arquivos do build (baseado em análise estática) não
+      segue `require()`/`import()` cujo caminho só é montado em tempo de
+      execução, então dois arquivos que o `pdf-parse` precisa em runtime
+      somem do deploy sem avisar
+- [x] 1º: o worker do pdf.js (`pdf.worker.mjs`) — corrigido antes de
+      qualquer teste em produção funcionar
+- [x] 2º (só apareceu depois, já em produção — `ReferenceError: DOMMatrix
+      is not defined`): pdf.js precisa de um polyfill de `DOMMatrix` /
+      `ImageData` / `Path2D` mesmo só pra extrair texto, carregado via
+      `@napi-rs/canvas` — o binário nativo (`@napi-rs/canvas-linux-x64-gnu`
+      no runtime da Vercel) é escolhido com `require()` condicional em
+      `process.platform`/`process.arch`, mesmo padrão do problema do
+      worker
+- [x] Os dois resolvidos com `outputFileTracingIncludes` no
+      `next.config.ts`, forçando a inclusão explícita dos arquivos que o
+      rastreador não enxerga sozinho
+- [x] O 2º bug não deu pra reproduzir localmente pra testar antes de
+      subir — máquina de desenvolvimento é Windows, o binário problemático
+      só existe na build Linux da Vercel. Validado o que dava (build de
+      produção local sem regressão, mecanismo de inclusão confirmado via
+      `.nft.json`) e a confirmação final veio do log de runtime real que
+      o usuário colou do painel da Vercel
+
+**Ajuste — FGTS como campo próprio na importação da folha (concluído)**
+- [x] A importação da folha de pagamento (folha analítica) só trazia o
+      "Total Geral da Folha" — o usuário pediu pra trazer também o FGTS
+      do mês (seção "Informações adicionais" do relatório) num campo
+      separado, sem misturar com a folha
+- [x] Nova coluna `fgts` em `folha_mensal` (nullable, não entra na conta
+      do Fator R — é só informativo por competência); extraído pela mesma
+      decodificação posicional já usada pro total da folha (posição 16
+      dos 22 números, contra a posição 20 do Total Geral da Folha)
+- [x] Tela de revisão da importação e a tabela principal do Fator R agora
+      mostram os dois campos (Folha e FGTS) lado a lado, cada um editável
+      e salvo independente — editar só a folha na tabela mensal não
+      apaga o FGTS já salvo daquele mês (e vice-versa)
+- [x] Testado ao vivo com o arquivo real: FGTS extraído (R$652,20) bateu
+      exato com o "Total FGTS" do PDF, e persistiu certo na tabela
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

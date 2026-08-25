@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import { importarFolhaAnalitica, salvarFolhaMensal } from "@/lib/actions/folha";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -14,23 +14,29 @@ function formatCompetencia(competencia: string) {
 
 export function ImportarFolhaAnaliticaForm({ companyId }: { companyId: string }) {
   const [importState, importAction, importPending] = useActionState(importarFolhaAnalitica, undefined);
-  const [revisao, setRevisao] = useState<{ competencia: string; valor: string } | null>(null);
+  const [revisao, setRevisao] = useState<{ competencia: string; valor: string; fgts: string } | null>(
+    null,
+  );
   const [saveState, saveAction, savePending] = useActionState(salvarFolhaMensal, undefined);
 
-  useEffect(() => {
+  // Ajusta o estado local (revisão) em resposta a um novo resultado de
+  // action, direto durante o render — evita o useEffect+setState.
+  const [importStateVisto, setImportStateVisto] = useState(importState);
+  if (importState !== importStateVisto) {
+    setImportStateVisto(importState);
     if (importState?.resultado) {
       setRevisao({
         competencia: importState.resultado.competencia,
         valor: importState.resultado.valor != null ? String(importState.resultado.valor) : "",
+        fgts: importState.resultado.fgts != null ? String(importState.resultado.fgts) : "",
       });
     }
-  }, [importState]);
-
-  useEffect(() => {
-    if (saveState?.success) {
-      setRevisao(null);
-    }
-  }, [saveState]);
+  }
+  const [saveStateVisto, setSaveStateVisto] = useState(saveState);
+  if (saveState !== saveStateVisto) {
+    setSaveStateVisto(saveState);
+    if (saveState?.success) setRevisao(null);
+  }
 
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
@@ -72,6 +78,19 @@ export function ImportarFolhaAnaliticaForm({ companyId }: { companyId: string })
                 value={revisao.valor}
                 onChange={(e) => setRevisao((r) => ({ ...r!, valor: e.target.value }))}
                 required
+              />
+            </Field>
+          </div>
+          <div className="w-[200px]">
+            <Field label="FGTS do mês (R$)" htmlFor="fgts">
+              <Input
+                id="fgts"
+                name="fgts"
+                type="number"
+                step="0.01"
+                min={0}
+                value={revisao.fgts}
+                onChange={(e) => setRevisao((r) => ({ ...r!, fgts: e.target.value }))}
               />
             </Field>
           </div>

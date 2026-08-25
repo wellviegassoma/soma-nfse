@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import { importarPgdasd, salvarFolhaMensalLote } from "@/lib/actions/folha";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
@@ -20,17 +20,19 @@ export function ImportarPgdasdForm({ companyId }: { companyId: string }) {
   const [atualizarRbt12, setAtualizarRbt12] = useState(true);
   const [saveState, saveAction, savePending] = useActionState(salvarFolhaMensalLote, undefined);
 
-  useEffect(() => {
-    if (importState?.resultado) {
-      setLinhas(importState.resultado.folhaMensal);
-    }
-  }, [importState]);
-
-  useEffect(() => {
-    if (saveState?.success) {
-      setLinhas(null);
-    }
-  }, [saveState]);
+  // Ajusta o estado local (tabela de revisão) em resposta a um novo
+  // resultado de action, direto durante o render — evita o
+  // useEffect+setState (renderização em cascata desnecessária).
+  const [importStateVisto, setImportStateVisto] = useState(importState);
+  if (importState !== importStateVisto) {
+    setImportStateVisto(importState);
+    if (importState?.resultado) setLinhas(importState.resultado.folhaMensal);
+  }
+  const [saveStateVisto, setSaveStateVisto] = useState(saveState);
+  if (saveState !== saveStateVisto) {
+    setSaveStateVisto(saveState);
+    if (saveState?.success) setLinhas(null);
+  }
 
   const resultado = importState?.resultado;
 

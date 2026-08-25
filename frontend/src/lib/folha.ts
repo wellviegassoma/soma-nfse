@@ -2,18 +2,22 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { competenciasRbt12 } from "@/lib/faturamento";
 
-export type FolhaMensal = { competencia: string; valor: number };
+export type FolhaMensal = { competencia: string; valor: number; fgts: number | null };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function buscarFolhaMensal(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any, any, any>,
   companyId: string,
 ): Promise<FolhaMensal[]> {
   const { data } = await supabase
     .from("folha_mensal")
-    .select("competencia, valor")
+    .select("competencia, valor, fgts")
     .eq("company_id", companyId);
-  return (data ?? []).map((r) => ({ competencia: r.competencia, valor: Number(r.valor) }));
+  return (data ?? []).map((r) => ({
+    competencia: r.competencia,
+    valor: Number(r.valor),
+    fgts: r.fgts != null ? Number(r.fgts) : null,
+  }));
 }
 
 export type Fp12Resolvido = {

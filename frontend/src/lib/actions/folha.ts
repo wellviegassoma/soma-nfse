@@ -24,6 +24,11 @@ const salvarFolhaSchema = z.object({
     .min(1, "Informe o valor da folha.")
     .transform((v) => Number(v.replace(",", ".")))
     .refine((v) => !Number.isNaN(v) && v >= 0, "Valor inválido."),
+  fgts: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v.replace(",", ".")) : undefined))
+    .refine((v) => v === undefined || (!Number.isNaN(v) && v >= 0), "FGTS inválido."),
 });
 
 export type SalvarFolhaState = { error?: string; success?: boolean } | undefined;
@@ -38,16 +43,27 @@ export async function salvarFolhaMensal(
     companyId: formData.get("companyId"),
     competencia: formData.get("competencia"),
     valor: formData.get("valor"),
+    fgts: formData.get("fgts") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
-  const { companyId, competencia, valor } = parsed.data;
+  const { companyId, competencia, valor, fgts } = parsed.data;
+
+  // fgts só entra no upsert quando informado no formulário — omitido
+  // (form da tabela mensal, que não tem esse campo), não mexe no que já
+  // estava salvo; o form de revisão da importação sempre manda os dois.
+  const linha: { company_id: string; competencia: string; valor: number; fgts?: number } = {
+    company_id: companyId,
+    competencia,
+    valor,
+  };
+  if (fgts !== undefined) linha.fgts = fgts;
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("folha_mensal")
-    .upsert({ company_id: companyId, competencia, valor }, { onConflict: "company_id,competencia" });
+    .upsert(linha, { onConflict: "company_id,competencia" });
 
   if (error) return { error: "Não foi possível salvar a folha do mês." };
 

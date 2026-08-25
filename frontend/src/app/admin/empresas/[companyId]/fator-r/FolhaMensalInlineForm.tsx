@@ -8,10 +8,12 @@ export function FolhaMensalInlineForm({
   companyId,
   competencia,
   valorAtual,
+  fgtsAtual,
 }: {
   companyId: string;
   competencia: string;
   valorAtual: number | null;
+  fgtsAtual: number | null;
 }) {
   const [state, formAction, pending] = useActionState(salvarFolhaMensal, undefined);
 
@@ -25,9 +27,18 @@ export function FolhaMensalInlineForm({
         step="0.01"
         min={0}
         defaultValue={valorAtual ?? ""}
-        placeholder="0,00"
+        placeholder="Folha"
         required
-        className="w-28 rounded border border-border bg-surface px-2 py-1 text-sm"
+        className="w-24 rounded border border-border bg-surface px-2 py-1 text-sm"
+      />
+      <input
+        name="fgts"
+        type="number"
+        step="0.01"
+        min={0}
+        defaultValue={fgtsAtual ?? ""}
+        placeholder="FGTS"
+        className="w-24 rounded border border-border bg-surface px-2 py-1 text-sm"
       />
       <Button type="submit" variant="secondary" size="md" className="h-8 px-2 text-xs" loading={pending}>
         Salvar
