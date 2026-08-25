@@ -10,40 +10,25 @@ const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
   PRODUCAO: "producao",
 };
 
-// A distribuição por NSU filtra localmente por (ano, mês) e um
-// documento fora do filtro não fica "guardado" pra próxima vez, então
-// resumir cegamente do último checkpoint arriscava nunca pegar uma nota
-// que apareceu fora de ordem na distribuição.
+// A causa real de uma nota real ter ficado de fora mesmo depois de
+// "buscar agora" de novo era um bug de paginação em
+// backend/nfse_client.py (avançava o NSU com +1 a mais do que devia,
+// pulando sempre o documento bem na fronteira de cada página de ~50 —
+// ver o comentário lá pra o diagnóstico completo). Já corrigido.
 //
-// A solução ingênua (voltar pro NSU 0 toda vez) foi tentada e revertida:
-// pra uma empresa já em NSU ~650, escanear tudo de novo leva ~16min só
-// de espera entre chamadas (throttle de 1.5s por chamada no cliente do
-// Sefin Nacional) — estoura o tempo máximo da function e foi a causa
-// real de vários "falha no handshake TLS" que pareciam instabilidade do
-// governo, mas eram a nossa própria varredura sendo cortada no meio.
-//
-// Em vez disso: revisita uma JANELA recente e limitada a partir do
-// checkpoint (não o histórico inteiro) — cobre o risco real (nota
-// chegando fora de ordem há pouco tempo) sem crescer pra sempre.
-// Empresa nova (checkpoint 0) começa do zero normalmente.
-//
-// Números calibrados pro throttle de 1.5s/chamada do cliente do Sefin
-// Nacional: 80 lotes ≈ 2min por empresa — dá pra rodar "buscar todas"
-// com poucas empresas dentro do maxDuration abaixo. Se o número de
-// clientes crescer bastante, ou o volume de notas por dia crescer muito
-// além de umas dezenas, revisar esses números (ou trocar pra fan-out —
-// uma invocação por empresa em vez de laço sequencial).
-const JANELA_REVISITADA = 60;
-const MAX_LOTES_POR_EMPRESA = 80;
-
-// "Buscar agora" numa competência PASSADA não pode contar com a janela
-// recente acima — NSUs de meses antigos ficam bem antes do checkpoint
-// atual, então precisa escanear desde o início. Mais lotes que o normal
-// (ainda dentro do maxDuration=300s da página, throttle de 1.5s/chamada:
-// 150 lotes ≈ 225s, sobra margem pra upsert/overhead), mas pra empresa com
-// bastante histórico pode não dar pra chegar no mês pedido numa passada só
-// — é uma busca manual, melhor tentar e trazer parcial do que não tentar.
-const MAX_LOTES_BUSCA_HISTORICA = 150;
+// Além disso, confirmado ao vivo que o NSU não é um índice que só
+// cresce pra sempre — é a posição dentro de uma janela de documentos
+// disponíveis pra consulta que parece ter um teto (pra uma empresa
+// real, só ~384 documentos disponíveis no total, não milhares, mesmo
+// a empresa existindo desde 2018). Com isso, escanear tudo desde o NSU
+// 0 em toda busca (em vez de guardar um checkpoint e só revisitar uma
+// janela recente, como este arquivo fazia antes) deixou de ser caro:
+// testado ao vivo, escanear tudo levou ~16s — bem mais rápido do que a
+// suposição antiga de que isso demoraria minutos. Removida a lógica de
+// checkpoint/janela: mais simples e sem risco de um checkpoint antigo
+// apontar pra um lugar errado. O dedup por chave_acesso (ignoreDuplicates
+// no upsert) já torna reprocessar tudo seguro e barato.
+const MAX_LOTES_BUSCA = 150;
 
 // Meses considerados por "Buscar últimos 12 meses" — janela de N+1
 // meses terminando no mês corrente (ver meses_anteriores no backend).
@@ -94,8 +79,8 @@ export type ResultadoSincronizacao = {
   erro?: string;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function syncOneCompany(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: SupabaseClient<any, any, any>,
   company: CompanyParaSincronizar,
   competencia?: string, // "YYYY-MM" — se omitido, usa o mês corrente
@@ -128,19 +113,6 @@ export async function syncOneCompany(
     const mesCorrente = mesCorrenteBrasilia();
     const competenciaAlvo = competencia && /^\d{4}-\d{2}$/.test(competencia) ? competencia : mesCorrente;
     const [anoAlvo, mesAlvo] = competenciaAlvo.split("-").map(Number);
-    const ehMesCorrente = competenciaAlvo === mesCorrente;
-    const buscaHistorico = (mesesAnteriores ?? 0) > 0;
-
-    // Mês corrente (sem pedir histórico): só revisita a janela recente de
-    // NSU (rápido, cobre o caso comum de "tem nota nova desde a última
-    // sincronização"). Mês passado, ou busca de histórico explícita: a
-    // nota já pode estar bem antes do checkpoint atual, então não tem
-    // como confiar na janela — escaneia desde o NSU 0.
-    const nsuInicial =
-      ehMesCorrente && !buscaHistorico
-        ? Math.max(0, (company.ultimo_nsu_distribuicao ?? 0) - JANELA_REVISITADA)
-        : 0;
-    const maxLotes = ehMesCorrente && !buscaHistorico ? MAX_LOTES_POR_EMPRESA : MAX_LOTES_BUSCA_HISTORICA;
 
     const resp = await fetch(`${process.env.NFSE_ENGINE_URL}/notas/buscar`, {
       method: "POST",
@@ -153,8 +125,8 @@ export async function syncOneCompany(
         ambiente,
         ano: anoAlvo,
         mes: mesAlvo,
-        nsu_inicial: nsuInicial,
-        max_lotes: maxLotes,
+        nsu_inicial: 0,
+        max_lotes: MAX_LOTES_BUSCA,
         cnpj_consulta: company.cnpj,
         meses_anteriores: mesesAnteriores ?? 0,
       }),
@@ -206,14 +178,13 @@ export async function syncOneCompany(
       if (upsertError) throw new Error(`Falha ao salvar notas: ${upsertError.message}`);
     }
 
-    // Nunca regride o checkpoint: uma busca histórica (competência
-    // passada) começa do NSU 0 e pode parar bem antes do checkpoint atual
-    // sem ter chegado nem perto dele.
-    const novoCheckpoint = Math.max(company.ultimo_nsu_distribuicao ?? 0, body.ultimo_nsu);
+    // ultimo_nsu_distribuicao não decide mais de onde a próxima busca
+    // começa (toda busca escaneia do NSU 0 — ver comentário no topo do
+    // arquivo) — guardado só como informação de diagnóstico.
     await admin
       .from("companies")
       .update({
-        ultimo_nsu_distribuicao: novoCheckpoint,
+        ultimo_nsu_distribuicao: body.ultimo_nsu,
         ultima_sincronizacao_em: new Date().toISOString(),
         ultima_sincronizacao_status: "sucesso",
         ultima_sincronizacao_erro: null,
@@ -235,8 +206,8 @@ export async function syncOneCompany(
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function syncAllCompanies(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: SupabaseClient<any, any, any>,
   competencia?: string, // "YYYY-MM" — se omitido, usa o mês corrente
   mesesAnteriores?: number, // >0 = busca de histórico pra todas

@@ -623,6 +623,49 @@ empresas via CNPJ/planilha) (concluída)**
       exatos e as duas linhas foram gravadas corretas, cada uma na sua
       competência, sem sobrescrever a outra
 
+**Bug real corrigido — sincronização perdia uma nota a cada ~50 documentos, silenciosamente (concluído)**
+- [x] Usuário reportou uma nota real da WOGEL MEDICINA FUNCIONAL que não
+      veio na sincronização — nem depois de mandar buscar de novo pra
+      competência dela. Como afeta a base de cálculo do Fator R e do
+      faturamento, o risco era sério: podia estar acontecendo com
+      qualquer empresa, silenciosamente, sem nenhum erro aparecer
+- [x] Causa raiz encontrada consultando o Sefin Nacional diretamente
+      (certificado real, descriptografado só pra esse diagnóstico
+      pontual e apagado logo em seguida): `GET /contribuintes/DFe/{nsu}`
+      devolve documentos com NSU **estritamente maior** que o pedido
+      (exclusivo), não maior-ou-igual — confirmado comparando o mesmo
+      lote pedido a partir de posições vizinhas. `buscar_notas_do_mes`
+      (`backend/nfse_client.py`) somava +1 por cima do maior NSU já visto
+      antes de pedir o próximo lote — um +1 a mais do que devia, que
+      pulava sempre o documento bem na fronteira de cada página de ~50.
+      Isso não é específico da Wogel: acontece em qualquer empresa cujo
+      histórico cruze mais de uma página (a cada ~50 documentos), sempre
+      que a fronteira cair bem em cima de um documento real
+- [x] Corrigido removendo o `+1` extra — o NSU já funciona como limite
+      inferior exclusivo por si só. Validado ao vivo, isolando a mesma
+      sequência de chamadas reais: sem o `+1`, o documento que antes
+      sumia passou a aparecer exatamente na fronteira onde antes ficava
+      de fora
+- [x] Aproveitado pra simplificar `sync-notas.ts`: o NSU também não é um
+      índice que cresce pra sempre — é a posição numa janela de
+      documentos disponíveis que parece ter um teto (pra uma empresa
+      real com histórico desde 2018, só ~384 documentos disponíveis no
+      total). Com isso, a lógica antiga de guardar um checkpoint e só
+      revisitar uma janela recente (pensada quando se imaginava que
+      escanear tudo de novo demoraria minutos) foi removida — escanear
+      tudo desde o NSU 0 em toda busca levou ~16s ao vivo, e elimina de
+      vez o risco de um checkpoint antigo apontar pra um lugar que não
+      significa mais a mesma coisa
+- [x] Testado ao vivo, ponta a ponta, com o pedido real de "buscar agora"
+      pra julho/2026 da Wogel: antes da correção, 46 notas encontradas
+      sem a nota relatada; depois, 47 notas, com a nota presente —
+      mesmos parâmetros, único código mudado
+- [x] Empresas que já sincronizaram sob o bug antigo podem ter perdido
+      notas silenciosamente nas mesmas condições — recomendado rodar
+      "Buscar últimos 12 meses" de novo pras 3 empresas com certificado
+      cadastrado, pra recuperar qualquer nota que tenha caído numa
+      fronteira de página no passado
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

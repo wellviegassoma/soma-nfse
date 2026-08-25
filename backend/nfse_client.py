@@ -865,7 +865,17 @@ class ClienteNFSeNacional:
                 except (TypeError, ValueError):
                     pass
 
-            nsu += 1
+            # NÃO soma +1 aqui: a API já devolve documentos com NSU
+            # estritamente MAIOR que o valor pedido (exclusivo, não
+            # inclusivo) — confirmado ao vivo (pedir nsu=300 devolve
+            # documentos com NSU 301 em diante). Somar +1 por cima disso
+            # pulava sempre o documento cujo NSU era exatamente
+            # "máximo do lote anterior + 1" — um bug real, silencioso,
+            # que perdia uma nota a cada fronteira de lote (a cada ~50
+            # documentos) em QUALQUER empresa com histórico grande o
+            # suficiente pra cruzar mais de uma página. Foi assim que uma
+            # nota real da Wogel Medicina Funcional ficou de fora mesmo
+            # depois de "buscar agora" de novo.
 
             if callback_progresso:
                 callback_progresso(nsu, len(encontradas))
