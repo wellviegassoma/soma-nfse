@@ -176,6 +176,7 @@ def buscar_notas(req: BuscarNotasRequest):
             ) as cliente:
                 notas, ultimo_nsu, diagnostico = cliente.buscar_notas_do_mes(
                     ano=req.ano, mes=req.mes, nsu_inicial=req.nsu_inicial, max_lotes=req.max_lotes,
+                    meses_anteriores=req.meses_anteriores,
                 )
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))

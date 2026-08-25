@@ -106,6 +106,10 @@ class BuscarNotasRequest(BaseModel):
     mes: int
     nsu_inicial: int = 0
     max_lotes: int = 2000
+    # 0 = só o mês (ano, mes) informado (comportamento original). N>0 =
+    # janela de N+1 meses terminando em (ano, mes) — usado na busca de
+    # histórico (ex.: "últimos 12 meses" = meses_anteriores=11).
+    meses_anteriores: int = 0
     # CNPJ do contribuinte cujas notas estão sendo consultadas — o app
     # desktop original SEMPRE envia esse parâmetro (mesmo consultando com
     # o certificado da própria empresa); API de distribuição retornou 403

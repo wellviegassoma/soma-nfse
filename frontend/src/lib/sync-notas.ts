@@ -45,6 +45,10 @@ const MAX_LOTES_POR_EMPRESA = 80;
 // — é uma busca manual, melhor tentar e trazer parcial do que não tentar.
 const MAX_LOTES_BUSCA_HISTORICA = 150;
 
+// Meses considerados por "Buscar últimos 12 meses" — janela de N+1
+// meses terminando no mês corrente (ver meses_anteriores no backend).
+const MESES_ANTERIORES_HISTORICO = 11;
+
 type NotaBuscada = {
   nsu: string;
   chave_acesso: string | null;
@@ -95,6 +99,7 @@ export async function syncOneCompany(
   admin: SupabaseClient<any, any, any>,
   company: CompanyParaSincronizar,
   competencia?: string, // "YYYY-MM" — se omitido, usa o mês corrente
+  mesesAnteriores?: number, // >0 = busca de histórico (janela de N+1 meses)
 ): Promise<ResultadoSincronizacao> {
   const certificado = Array.isArray(company.certificates)
     ? company.certificates[0]
@@ -124,15 +129,18 @@ export async function syncOneCompany(
     const competenciaAlvo = competencia && /^\d{4}-\d{2}$/.test(competencia) ? competencia : mesCorrente;
     const [anoAlvo, mesAlvo] = competenciaAlvo.split("-").map(Number);
     const ehMesCorrente = competenciaAlvo === mesCorrente;
+    const buscaHistorico = (mesesAnteriores ?? 0) > 0;
 
-    // Mês corrente: só revisita a janela recente de NSU (rápido, cobre o
-    // caso comum de "tem nota nova desde a última sincronização"). Mês
-    // passado: a nota já pode estar bem antes do checkpoint atual, então
-    // não tem como confiar na janela — escaneia desde o NSU 0.
-    const nsuInicial = ehMesCorrente
-      ? Math.max(0, (company.ultimo_nsu_distribuicao ?? 0) - JANELA_REVISITADA)
-      : 0;
-    const maxLotes = ehMesCorrente ? MAX_LOTES_POR_EMPRESA : MAX_LOTES_BUSCA_HISTORICA;
+    // Mês corrente (sem pedir histórico): só revisita a janela recente de
+    // NSU (rápido, cobre o caso comum de "tem nota nova desde a última
+    // sincronização"). Mês passado, ou busca de histórico explícita: a
+    // nota já pode estar bem antes do checkpoint atual, então não tem
+    // como confiar na janela — escaneia desde o NSU 0.
+    const nsuInicial =
+      ehMesCorrente && !buscaHistorico
+        ? Math.max(0, (company.ultimo_nsu_distribuicao ?? 0) - JANELA_REVISITADA)
+        : 0;
+    const maxLotes = ehMesCorrente && !buscaHistorico ? MAX_LOTES_POR_EMPRESA : MAX_LOTES_BUSCA_HISTORICA;
 
     const resp = await fetch(`${process.env.NFSE_ENGINE_URL}/notas/buscar`, {
       method: "POST",
@@ -148,6 +156,7 @@ export async function syncOneCompany(
         nsu_inicial: nsuInicial,
         max_lotes: maxLotes,
         cnpj_consulta: company.cnpj,
+        meses_anteriores: mesesAnteriores ?? 0,
       }),
       cache: "no-store",
     });
@@ -230,6 +239,7 @@ export async function syncOneCompany(
 export async function syncAllCompanies(
   admin: SupabaseClient<any, any, any>,
   competencia?: string, // "YYYY-MM" — se omitido, usa o mês corrente
+  mesesAnteriores?: number, // >0 = busca de histórico pra todas
 ): Promise<ResultadoSincronizacao[]> {
   const { data: companies } = await admin
     .from("companies")
@@ -239,7 +249,11 @@ export async function syncAllCompanies(
 
   const resultados: ResultadoSincronizacao[] = [];
   for (const company of companies ?? []) {
-    resultados.push(await syncOneCompany(admin, company as CompanyParaSincronizar, competencia));
+    resultados.push(
+      await syncOneCompany(admin, company as CompanyParaSincronizar, competencia, mesesAnteriores),
+    );
   }
   return resultados;
 }
+
+export { MESES_ANTERIORES_HISTORICO };

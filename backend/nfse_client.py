@@ -736,16 +736,24 @@ class ClienteNFSeNacional:
         salvar_bruto_em: Optional[str] = None,
         callback_progresso: Optional[Callable[[int, int], None]] = None,
         callback_status: Optional[Callable[[str], None]] = None,
+        meses_anteriores: int = 0,
     ) -> tuple[list[NotaEncontrada], int, DiagnosticoBusca]:
         """
         Varre a distribuição por NSU a partir de `nsu_inicial`, filtrando
         localmente as notas cuja data de COMPETÊNCIA (<dCompet> do XML)
-        OU cuja data de EMISSÃO cai no (ano, mes) informado — cobre tanto
+        OU cuja data de EMISSÃO cai no período pesquisado — cobre tanto
         o caso normal quanto o de notas emitidas com data retroativa
         (emitidas no mês pesquisado, mas com competência de um mês
         anterior). Cada `NotaEncontrada` retornada indica em
         `bate_competencia` qual dos dois critérios ela satisfaz — usado
         para separar os dois grupos no relatório.
+
+        Por padrão (`meses_anteriores=0`) o período é só (ano, mes). Com
+        `meses_anteriores=N`, o período vira uma janela de N+1 meses
+        terminando em (ano, mes) inclusive — usado na busca de histórico
+        (ex.: "últimos 12 meses" = meses_anteriores=11). Nesse modo,
+        `nsu_inicial` normalmente precisa ser 0 (o histórico mais antigo
+        fica bem antes do checkpoint de NSU recente).
 
         Retorna (lista_de_notas, ultimo_nsu_processado, diagnostico).
         Guarde o último NSU para continuar de onde parou numa próxima
@@ -763,6 +771,18 @@ class ClienteNFSeNacional:
         diagnostico = DiagnosticoBusca()
         nsu = nsu_inicial
         lotes_vazios_seguidos = 0
+
+        # Índice absoluto de mês (ano*12+mes) pra comparar datas por
+        # faixa em vez de igualdade exata — permite janela de vários
+        # meses sem mudar a lógica de filtro linha a linha.
+        idx_fim = ano * 12 + mes
+        idx_inicio = idx_fim - meses_anteriores
+
+        def _no_periodo(data) -> bool:
+            if not data:
+                return False
+            idx = data.year * 12 + data.month
+            return idx_inicio <= idx <= idx_fim
 
         for _ in range(max_lotes):
             payload = self.consultar_lote_por_nsu(
@@ -817,14 +837,8 @@ class ClienteNFSeNacional:
                         data_competencia = self._extrair_competencia_do_xml(xml_texto)
                         data_competencia_ou_fallback = data_competencia or data_emissao
 
-                        bate_competencia = bool(
-                            data_competencia_ou_fallback
-                            and data_competencia_ou_fallback.year == ano
-                            and data_competencia_ou_fallback.month == mes
-                        )
-                        bate_emissao = bool(
-                            data_emissao and data_emissao.year == ano and data_emissao.month == mes
-                        )
+                        bate_competencia = _no_periodo(data_competencia_ou_fallback)
+                        bate_emissao = _no_periodo(data_emissao)
 
                         if not data_competencia_ou_fallback and not data_emissao:
                             diagnostico.documentos_sem_data_reconhecida += 1

@@ -442,6 +442,32 @@ empresas via CNPJ/planilha) (concluída)**
       Real, "—" = sem regime definido), direto do `tax_regime` já
       cadastrado, sem precisar entrar em cada empresa pra saber
 
+**Ajuste — Buscar últimos 12 meses (histórico) (concluído)**
+- [x] Novo botão "Buscar últimos 12 meses", tanto na tela global
+      `/admin/fechamento` (todas as empresas com certificado) quanto
+      dentro do Fechamento de cada empresa (só aquela empresa) — escaneia
+      o histórico completo desde o NSU 0, com uma janela de 12 meses
+      (mês corrente + 11 anteriores) em vez de um mês só, sem precisar
+      trocar de competência manualmente 12 vezes
+- [x] `meses_anteriores` novo parâmetro em `BuscarNotasRequest`
+      (`backend/schemas.py`) e em `buscar_notas_do_mes()`
+      (`backend/nfse_client.py`) — troca o filtro de mês exato por uma
+      faixa de índices (ano×12+mês) entre `competência - N` e
+      `competência`; `N=0` mantém o comportamento antigo (mês exato)
+- [x] `syncOneCompany`/`syncAllCompanies` (`sync-notas.ts`) ganharam um
+      parâmetro opcional `mesesAnteriores` — quando setado, força
+      `nsuInicial=0` e o teto de lotes da busca histórica
+      (`MAX_LOTES_BUSCA_HISTORICA`), igual já acontecia pra competência
+      passada avulsa
+- [x] Verificado antes de implementar: só 3 das 206 empresas têm
+      certificado cadastrado, então "buscar todas" pula as outras 203
+      quase instantaneamente — não tem risco de estourar o tempo da
+      function por causa de empresa sem certificado
+- [x] Testado ao vivo com dados reais: individual (ADELFOS MEDICAL)
+      trouxe 22 notas em ~11s; "buscar todas" processou as 3 empresas com
+      certificado em ~40s (97 notas no total), dentro do limite de 300s
+      da function
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

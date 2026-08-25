@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { BuscarAgoraButton } from "./BuscarAgoraButton";
+import { BuscarHistoricoButton } from "./BuscarHistoricoButton";
 
 export const metadata = { title: "Fechamento — Painel SOMA" };
 export const maxDuration = 300;
@@ -120,6 +121,9 @@ export default async function AdminFechamentoPage(
             </a>
             <BuscarAgoraButton companyId={companyId} competencia={competencia} />
           </div>
+        </div>
+        <div className="mt-4 flex justify-end border-t border-border pt-4">
+          <BuscarHistoricoButton companyId={companyId} />
         </div>
       </Card>
 

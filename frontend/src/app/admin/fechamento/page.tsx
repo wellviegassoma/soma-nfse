@@ -6,6 +6,7 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { BuscarTodasButton } from "./BuscarTodasButton";
+import { BuscarHistoricoTodasButton } from "./BuscarHistoricoTodasButton";
 
 export const metadata = { title: "Fechamento — Painel SOMA" };
 export const maxDuration = 300;
@@ -69,6 +70,9 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
           O ZIP traz, por empresa: XML e PDF (DANFSe) de cada nota da competência, mais o
           relatório mensal consolidado. Pode demorar um pouco dependendo do volume.
         </p>
+        <div className="mt-4 flex justify-end border-t border-border pt-4">
+          <BuscarHistoricoTodasButton />
+        </div>
       </Card>
 
       <Card className="divide-y divide-border overflow-hidden">
