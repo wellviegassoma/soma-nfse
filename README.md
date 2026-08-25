@@ -212,6 +212,36 @@ contábil (concluída)**
       imediatamente (progresso parcial não se perde se der timeout numa
       leva grande)
 
+**Fase J — Fechamento importado + correção da Visão geral (concluída)**
+- [x] Aba **Fechamento importado** (`/admin/empresas/[id]/fechamento/importar`):
+      upload manual de um ou vários XMLs de NFS-e/DPS já baixados por fora
+      (ex.: pela aplicação Python própria do usuário, já que a sincronização
+      automática via distribuição por NSU se mostrou instável contra
+      `adn.nfse.gov.br` em produção real). Mesma técnica de extração por
+      regex do resto do motor (`lib/xml-nota.ts`, mirando
+      `nfse_client.py:_extrair_campos_relatorio`), gravando em
+      `notas_distribuidas` com `origem = 'importado_manual'` e `nsu = null`
+      — entra no mesmo relatório, Fechamento, Visão geral e Tops que a
+      sincronização automática já alimenta
+- [x] Migration `20260819130000_fase_j_fechamento_importado.sql`: `nsu` virou
+      opcional (não existe NSU numa nota importada manualmente) + coluna
+      `origem` (`distribuicao` | `importado_manual`)
+- [x] Dedup via `insert` + captura do erro `23505` (violação do índice único
+      por `chave_acesso`) — reporta como "ignorado" em vez de duplicar;
+      testado ao vivo (usuário de teste descartável): lote com uma nota nova
+      + uma já existente na base → resultado correto (1 importada, 1
+      ignorada), nota nova apareceu no Fechamento (68 notas, faturamento
+      atualizado)
+- [x] **Bug corrigido**: a Visão geral (`/admin`) só somava a tabela `dps`
+      (notas emitidas pelo próprio soma-nfse), nunca `notas_distribuidas`
+      (sincronizadas ou importadas do governo) — empresas com notas só
+      sincronizadas/importadas apareciam com faturamento e notas emitidas
+      zerados, fora dos Tops. Corrigido com `unificarNotasDeSaida()`
+      (`admin/page.tsx`), que mescla `dps` + `notas_distribuidas` (direção
+      saída) deduplicando por `chave_acesso` — testado ao vivo com os dados
+      reais da SOMA Contabilidade Integrada (68 notas, R$ 65.685,79,
+      aparecendo corretamente nos Top 5)
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

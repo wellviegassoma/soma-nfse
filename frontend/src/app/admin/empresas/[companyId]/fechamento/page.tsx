@@ -112,7 +112,14 @@ export default async function AdminFechamentoPage(
               </a>
             )}
           </form>
-          <BuscarAgoraButton companyId={companyId} />
+          <div className="flex items-center gap-3">
+            <a href={`/admin/empresas/${companyId}/fechamento/importar`}>
+              <Button type="button" variant="secondary">
+                Importar XML
+              </Button>
+            </a>
+            <BuscarAgoraButton companyId={companyId} />
+          </div>
         </div>
       </Card>
 

@@ -22,13 +22,62 @@ type DpsRow = {
   valor: number;
   status: string;
   data_competencia: string;
-  nfse: { status: string } | { status: string }[] | null;
+  nfse: { status: string; access_key: string | null } | { status: string; access_key: string | null }[] | null;
 };
 
-function notaValida(nota: DpsRow): boolean {
-  if (nota.status !== "ACCEPTED") return false;
-  const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
-  return !nfseArr.some((n) => n.status === "CANCELADA");
+type NotaDistribuidaRow = {
+  company_id: string;
+  chave_acesso: string | null;
+  valor_servico: number | null;
+  competencia: string | null;
+  cancelada: boolean;
+  direcao: string;
+};
+
+// Uma nota emitida pelo próprio soma-nfse, uma vez processada pelo
+// Sefin Nacional, também aparece em notas_distribuidas quando
+// sincronizada (mesma chave_acesso) — sem isso, contaria duas vezes.
+type NotaUnificada = {
+  companyId: string;
+  competencia: string;
+  valor: number;
+  cancelada: boolean;
+  chaveAcesso: string | null;
+};
+
+function unificarNotasDeSaida(dpsRows: DpsRow[], distribuidas: NotaDistribuidaRow[]): NotaUnificada[] {
+  const vistos = new Set<string>();
+  const unificadas: NotaUnificada[] = [];
+
+  for (const nota of dpsRows) {
+    if (nota.status !== "ACCEPTED") continue; // rejeitada nunca teve chave_acesso — tratada à parte
+    const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
+    const chaveAcesso = nfseArr[0]?.access_key ?? null;
+    const cancelada = nfseArr.some((n) => n.status === "CANCELADA");
+    if (chaveAcesso) vistos.add(chaveAcesso);
+    unificadas.push({
+      companyId: nota.company_id,
+      competencia: nota.data_competencia.slice(0, 7),
+      valor: Number(nota.valor),
+      cancelada,
+      chaveAcesso,
+    });
+  }
+
+  for (const nota of distribuidas) {
+    if (nota.direcao !== "saida") continue;
+    if (nota.chave_acesso && vistos.has(nota.chave_acesso)) continue; // já contada via dps
+    if (nota.chave_acesso) vistos.add(nota.chave_acesso);
+    unificadas.push({
+      companyId: nota.company_id,
+      competencia: (nota.competencia ?? "").slice(0, 7),
+      valor: Number(nota.valor_servico ?? 0),
+      cancelada: nota.cancelada,
+      chaveAcesso: nota.chave_acesso,
+    });
+  }
+
+  return unificadas;
 }
 
 const COMPETENCIA_REGEX = /^\d{4}-\d{2}$/;
@@ -49,19 +98,25 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   // Escala atual do produto é pequena (poucas empresas/notas) — busca
   // tudo e agrega em JS. Se crescer muito, trocar por uma agregação SQL
   // (RPC) em vez de trazer toda a tabela `dps` pro servidor Next.js.
-  const [{ data: companies }, { data: notas }] = await Promise.all([
+  const [{ data: companies }, { data: notas }, { data: distribuidas }] = await Promise.all([
     supabase
       .from("companies")
       .select("id, legal_name, trade_name, created_at")
       .order("legal_name", { ascending: true }),
     supabase
       .from("dps")
-      .select("company_id, valor, status, data_competencia, nfse(status)")
+      .select("company_id, valor, status, data_competencia, nfse(status, access_key)")
       .order("data_competencia", { ascending: false }),
+    supabase
+      .from("notas_distribuidas")
+      .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao")
+      .eq("direcao", "saida"),
   ]);
 
   const empresas = companies ?? [];
   const todasNotas = (notas ?? []) as unknown as DpsRow[];
+  const todasDistribuidas = (distribuidas ?? []) as NotaDistribuidaRow[];
+  const notasUnificadas = unificarNotasDeSaida(todasNotas, todasDistribuidas);
 
   type Agregado = {
     notasCompetencia: number;
@@ -87,31 +142,36 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   let rejeitadasCompetenciaTotal = 0;
   let canceladasCompetenciaTotal = 0;
 
-  for (const nota of todasNotas) {
-    const agr = porEmpresa.get(nota.company_id) ?? vazio();
-    const naCompetencia = nota.data_competencia.slice(0, 7) === competencia;
-    const valida = notaValida(nota);
-    const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
-    const cancelada = nfseArr.some((n) => n.status === "CANCELADA");
+  for (const nota of notasUnificadas) {
+    const agr = porEmpresa.get(nota.companyId) ?? vazio();
+    const naCompetencia = nota.competencia === competencia;
 
-    if (valida) {
+    if (!nota.cancelada) {
       agr.notasTotal += 1;
-      agr.faturamentoTotal += Number(nota.valor);
+      agr.faturamentoTotal += nota.valor;
     }
     if (naCompetencia) {
-      if (valida) {
+      if (!nota.cancelada) {
         agr.notasCompetencia += 1;
-        agr.faturamentoCompetencia += Number(nota.valor);
+        agr.faturamentoCompetencia += nota.valor;
         notasCompetenciaTotal += 1;
-        faturamentoCompetenciaTotal += Number(nota.valor);
-      } else if (nota.status === "REJECTED") {
-        agr.notasRejeitadasCompetencia += 1;
-        rejeitadasCompetenciaTotal += 1;
-      } else if (cancelada) {
+        faturamentoCompetenciaTotal += nota.valor;
+      } else {
         agr.notasCanceladasCompetencia += 1;
         canceladasCompetenciaTotal += 1;
       }
     }
+    porEmpresa.set(nota.companyId, agr);
+  }
+
+  // Rejeitada é um conceito exclusivo de dps (nunca gera chave_acesso,
+  // então nunca aparece em notas_distribuidas) — mantido à parte.
+  for (const nota of todasNotas) {
+    if (nota.status !== "REJECTED") continue;
+    if (nota.data_competencia.slice(0, 7) !== competencia) continue;
+    const agr = porEmpresa.get(nota.company_id) ?? vazio();
+    agr.notasRejeitadasCompetencia += 1;
+    rejeitadasCompetenciaTotal += 1;
     porEmpresa.set(nota.company_id, agr);
   }
 
