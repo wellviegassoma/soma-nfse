@@ -242,6 +242,41 @@ contábil (concluída)**
       reais da SOMA Contabilidade Integrada (68 notas, R$ 65.685,79,
       aparecendo corretamente nos Top 5)
 
+**Fase K — Importação em lote (XML de todas as empresas + cadastro de
+empresas via CNPJ/planilha) (concluída)**
+- [x] `/admin/fechamento/importar`: mesma ideia do Fechamento importado da
+      Fase J, mas sem escolher empresa antes — identifica a empresa de cada
+      nota pelo CNPJ do prestador ou do tomador contra o cadastro
+      (`companies.cnpj`) e distribui automaticamente; se os dois lados do
+      documento forem empresas nossas (uma faturou a outra), grava dos dois
+      lados (saída numa, entrada na outra). Nota cujo CNPJ não bate com
+      nenhuma empresa cadastrada aparece como erro em vez de ser
+      descartada silenciosamente. Reaproveita o mesmo extrator
+      (`xml-nota.ts`) e o mesmo helper de gravação/dedup da Fase J,
+      extraído para `salvarNotaImportada()` em `lib/actions/fechamento.ts`
+- [x] Busca automática de dados de CNPJ (Receita Federal, via BrasilAPI) no
+      cadastro de empresa (`/admin/empresas/novo`): botão "Buscar dados"
+      preenche razão social, nome fantasia, CNAE e código IBGE do
+      município a partir do CNPJ digitado — campos continuam editáveis
+      manualmente depois
+  - **Bug real corrigido**: BrasilAPI retorna 403 pro User-Agent padrão
+    (`"node"`) que o `fetch` nativo do Node manda quando nenhum header é
+    passado — confirmado comparando `curl` com/sem `-A`. Corrigido
+    passando um `User-Agent` explícito (`lib/cnpj-lookup.ts`)
+- [x] `/admin/empresas/importar`: upload de planilha (.xlsx/.xls/.csv, via
+      `xlsx`/SheetJS) com coluna de nome e de CNPJ — para cada linha, busca
+      os dados completos na Receita Federal (mesmo helper acima, com
+      throttle de 350ms entre chamadas) e cria a empresa já preenchida;
+      linha com CNPJ já cadastrado é ignorada (dedup), e linha cujo CNPJ
+      não é encontrado na Receita ainda assim é importada, só que sem
+      enriquecimento (usa o nome da própria planilha)
+- [x] Testado ao vivo (usuário de teste descartável): busca de CNPJ real
+      (Nubank) preenchendo o formulário de nova empresa corretamente;
+      planilha com 3 linhas (1 nova com CNPJ real, 1 já cadastrada, 1 com
+      CNPJ inválido na Receita) → resultado correto (2 importadas, 1
+      ignorada); XML de nota nova sem empresa pré-selecionada → identificada
+      e importada na empresa certa pelo CNPJ do prestador
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

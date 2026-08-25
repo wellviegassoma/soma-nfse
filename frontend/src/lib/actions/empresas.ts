@@ -8,7 +8,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSomaStaff } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
+import { buscarDadosCnpj, type DadosCnpj } from "@/lib/cnpj-lookup";
 import type { ActionState } from "@/lib/actions/auth";
+
+export async function buscarCnpjAction(
+  cnpj: string,
+): Promise<{ data: DadosCnpj } | { error: string }> {
+  await requireSomaStaff();
+  const digits = cnpj.replace(/\D/g, "");
+  return buscarDadosCnpj(digits);
+}
+
+const taxRegimeEnum = z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL"]);
 
 const createCompanySchema = z.object({
   organizationName: z.string().trim().min(2, "Informe o nome da empresa/organização."),
@@ -19,6 +30,9 @@ const createCompanySchema = z.object({
     .trim()
     .optional()
     .transform((v) => (v ? v.replace(/\D/g, "") : undefined)),
+  cnae: z.string().trim().optional(),
+  municipalityIbgeCode: z.string().trim().optional(),
+  taxRegime: taxRegimeEnum.optional().or(z.literal("")),
 });
 
 export async function createCompany(
@@ -32,6 +46,9 @@ export async function createCompany(
     legalName: formData.get("legalName"),
     tradeName: formData.get("tradeName") || undefined,
     cnpj: formData.get("cnpj") || undefined,
+    cnae: formData.get("cnae") || undefined,
+    municipalityIbgeCode: formData.get("municipalityIbgeCode") || undefined,
+    taxRegime: formData.get("taxRegime") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -55,6 +72,9 @@ export async function createCompany(
       legal_name: parsed.data.legalName,
       trade_name: parsed.data.tradeName || null,
       cnpj: parsed.data.cnpj || null,
+      cnae: parsed.data.cnae || null,
+      municipality_ibge_code: parsed.data.municipalityIbgeCode || null,
+      tax_regime: parsed.data.taxRegime || null,
     })
     .select("id")
     .single();
@@ -77,6 +97,164 @@ export async function createCompany(
 
   revalidatePath("/admin/empresas");
   redirect(`/admin/empresas/${company.id}`);
+}
+
+const IMPORT_EMPRESAS_THROTTLE_MS = 350;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function normalizarCabecalho(v: unknown): string {
+  return String(v ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
+function encontrarColuna(linha: Record<string, unknown>, candidatos: string[]): unknown {
+  const chaves = Object.keys(linha);
+  for (const candidato of candidatos) {
+    const chave = chaves.find((k) => normalizarCabecalho(k) === candidato);
+    if (chave) return linha[chave];
+  }
+  return undefined;
+}
+
+export type ImportarEmpresasState =
+  | {
+      error?: string;
+      resultado?: {
+        importadas: number;
+        ignoradas: number;
+        erros: { linha: string; motivo: string }[];
+      };
+    }
+  | undefined;
+
+export async function importarEmpresasPlanilha(
+  _prevState: ImportarEmpresasState,
+  formData: FormData,
+): Promise<ImportarEmpresasState> {
+  await requireSomaStaff();
+
+  const arquivo = formData.get("file");
+  if (!(arquivo instanceof File) || arquivo.size === 0) {
+    return { error: "Selecione uma planilha (.xlsx, .xls ou .csv)." };
+  }
+
+  const XLSX = await import("xlsx");
+  let linhas: Record<string, unknown>[];
+  try {
+    const buffer = Buffer.from(await arquivo.arrayBuffer());
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const primeiraAba = workbook.SheetNames[0];
+    linhas = XLSX.utils.sheet_to_json(workbook.Sheets[primeiraAba], { defval: "" });
+  } catch {
+    return { error: "Não foi possível ler essa planilha. Confira o formato do arquivo." };
+  }
+
+  if (linhas.length === 0) {
+    return { error: "A planilha está vazia." };
+  }
+
+  const supabase = await createClient();
+  const erros: { linha: string; motivo: string }[] = [];
+  const vistosNoLote = new Set<string>();
+  let importadas = 0;
+  let ignoradas = 0;
+
+  for (let i = 0; i < linhas.length; i++) {
+    const numeroLinha = `linha ${i + 2}`; // +2: cabeçalho + índice 1-based
+    const linha = linhas[i];
+
+    const nomeBruto = encontrarColuna(linha, ["nome", "empresa", "razao social", "razaosocial"]);
+    const cnpjBruto = encontrarColuna(linha, ["cnpj"]);
+    const nome = String(nomeBruto ?? "").trim();
+    const cnpjDigits = String(cnpjBruto ?? "").replace(/\D/g, "");
+
+    if (!cnpjDigits) {
+      erros.push({ linha: numeroLinha, motivo: "Sem CNPJ preenchido." });
+      continue;
+    }
+    if (cnpjDigits.length !== 14) {
+      erros.push({ linha: numeroLinha, motivo: `CNPJ "${cnpjBruto}" inválido (precisa ter 14 dígitos).` });
+      continue;
+    }
+    if (vistosNoLote.has(cnpjDigits)) {
+      ignoradas += 1;
+      continue;
+    }
+    vistosNoLote.add(cnpjDigits);
+
+    const { data: existente } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("cnpj", cnpjDigits)
+      .maybeSingle();
+    if (existente) {
+      ignoradas += 1;
+      continue;
+    }
+
+    const lookup = await buscarDadosCnpj(cnpjDigits);
+    await sleep(IMPORT_EMPRESAS_THROTTLE_MS);
+
+    const dados = "data" in lookup ? lookup.data : null;
+    const legalName = dados?.razaoSocial || nome;
+    if (!legalName) {
+      erros.push({
+        linha: numeroLinha,
+        motivo: "data" in lookup ? "Sem nome nem razão social." : lookup.error,
+      });
+      continue;
+    }
+
+    const { data: org, error: orgError } = await supabase
+      .from("organizations")
+      .insert({ name: nome || legalName })
+      .select("id")
+      .single();
+    if (orgError || !org) {
+      erros.push({ linha: numeroLinha, motivo: "Não foi possível criar a organização." });
+      continue;
+    }
+
+    const { data: company, error: companyError } = await supabase
+      .from("companies")
+      .insert({
+        organization_id: org.id,
+        legal_name: legalName,
+        trade_name: dados?.nomeFantasia || null,
+        cnpj: cnpjDigits,
+        cnae: dados?.cnae || null,
+        municipality_ibge_code: dados?.municipioIbge || null,
+        tax_regime: dados?.simplesNacional ? "SIMPLES_NACIONAL" : null,
+      })
+      .select("id")
+      .single();
+    if (companyError || !company) {
+      erros.push({
+        linha: numeroLinha,
+        motivo:
+          companyError?.code === "23505"
+            ? "Já existe uma empresa com esse CNPJ."
+            : "Não foi possível criar a empresa.",
+      });
+      continue;
+    }
+
+    await logAudit({
+      companyId: company.id,
+      action: "CREATE",
+      entity: "company",
+      entityId: company.id,
+      newValue: { legal_name: legalName, cnpj: cnpjDigits, origem: "importacao_planilha" },
+    });
+
+    importadas += 1;
+  }
+
+  revalidatePath("/admin/empresas");
+  return { resultado: { importadas, ignoradas, erros } };
 }
 
 const inviteSchema = z.object({

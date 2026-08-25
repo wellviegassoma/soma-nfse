@@ -57,6 +57,11 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
                 Baixar tudo (ZIP)
               </Button>
             </a>
+            <a href="/admin/fechamento/importar">
+              <Button type="button" variant="secondary">
+                Importar XML
+              </Button>
+            </a>
           </form>
           <BuscarTodasButton />
         </div>

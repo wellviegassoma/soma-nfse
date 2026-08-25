@@ -23,9 +23,14 @@ export default async function AdminEmpresasPage() {
             {companies?.length ?? 0} empresa(s) cadastrada(s)
           </p>
         </div>
-        <Link href="/admin/empresas/novo">
-          <Button>+ Nova empresa</Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/admin/empresas/importar">
+            <Button variant="secondary">Importar planilha</Button>
+          </Link>
+          <Link href="/admin/empresas/novo">
+            <Button>+ Nova empresa</Button>
+          </Link>
+        </div>
       </div>
 
       {!companies || companies.length === 0 ? (
