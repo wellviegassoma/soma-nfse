@@ -104,6 +104,7 @@ export type Rbt12Resolvido = {
   rbt12: number;
   estimado: boolean;
   usandoManual: boolean;
+  manualDesatualizado: boolean;
   mesesDisponiveis: number;
 };
 
@@ -113,11 +114,18 @@ export type Rbt12Resolvido = {
 // prioriza o RBT12 manual configurado na empresa — senão projeta
 // proporcionalmente pelos meses disponíveis. Mesma lógica usada tanto na
 // aba Impostos de uma empresa quanto na Visão geral (todas de uma vez).
+//
+// RBT12 é uma janela móvel — muda todo mês — então o valor manual só
+// serve pra competência em que foi de fato apurado (rbt12ManualCompetencia).
+// Fora disso ele fica desatualizado; nunca é reaplicado silenciosamente
+// (bug real corrigido: alíquota de um mês saindo igual à do mês anterior
+// porque o manual tinha ficado parado).
 export function resolverRbt12(params: {
   competencia: string;
   receitaPorMes: (mes: string) => number;
   mesesComDados: Set<string>;
   rbt12Manual: number | null;
+  rbt12ManualCompetencia: string | null;
 }): Rbt12Resolvido {
   const meses12 = competenciasRbt12(params.competencia);
   const mesesDisponiveis = meses12.filter((m) => params.mesesComDados.has(m)).length;
@@ -125,12 +133,22 @@ export function resolverRbt12(params: {
   const rbt12Bruto = meses12.reduce((acc, m) => acc + params.receitaPorMes(m), 0);
   const rbt12EstimadoPeloSistema =
     historicoInsuficiente && mesesDisponiveis > 0 ? (rbt12Bruto / mesesDisponiveis) * 12 : rbt12Bruto;
-  const usandoManual = historicoInsuficiente && params.rbt12Manual != null;
-  const rbt12 = usandoManual ? params.rbt12Manual! : rbt12EstimadoPeloSistema;
+
+  const manualValido =
+    historicoInsuficiente &&
+    params.rbt12Manual != null &&
+    params.rbt12ManualCompetencia === params.competencia;
+  const manualDesatualizado =
+    historicoInsuficiente &&
+    params.rbt12Manual != null &&
+    params.rbt12ManualCompetencia !== params.competencia;
+
+  const rbt12 = manualValido ? params.rbt12Manual! : rbt12EstimadoPeloSistema;
   return {
     rbt12,
-    estimado: historicoInsuficiente && !usandoManual,
-    usandoManual,
+    estimado: historicoInsuficiente && !manualValido,
+    usandoManual: manualValido,
+    manualDesatualizado,
     mesesDisponiveis,
   };
 }

@@ -48,7 +48,7 @@ export default async function ImpostosPage(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, tax_regime, sujeito_fator_r, fator_r_percentual, rbt12_manual, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+      "id, tax_regime, sujeito_fator_r, fator_r_percentual, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
     )
     .eq("id", companyId)
     .single();
@@ -99,13 +99,19 @@ export default async function ImpostosPage(
 
   if (company.tax_regime === "SIMPLES_NACIONAL") {
     const mesesComDados = new Set(notas.filter((n) => !n.cancelada).map((n) => n.competencia));
-    const { rbt12, estimado: rbt12Estimado, usandoManual: usandoRbt12Manual, mesesDisponiveis } =
-      resolverRbt12({
-        competencia,
-        receitaPorMes: (mes) => somarFaturamento(notas, [mes]),
-        mesesComDados,
-        rbt12Manual: company.rbt12_manual,
-      });
+    const {
+      rbt12,
+      estimado: rbt12Estimado,
+      usandoManual: usandoRbt12Manual,
+      manualDesatualizado: rbt12ManualDesatualizado,
+      mesesDisponiveis,
+    } = resolverRbt12({
+      competencia,
+      receitaPorMes: (mes) => somarFaturamento(notas, [mes]),
+      mesesComDados,
+      rbt12Manual: company.rbt12_manual,
+      rbt12ManualCompetencia: company.rbt12_manual_competencia,
+    });
 
     const resultado = calcularSimplesNacional({
       receitaMes,
@@ -153,7 +159,19 @@ export default async function ImpostosPage(
           </Card>
         </div>
 
-        {resultado.rbt12Estimado && (
+        {rbt12ManualDesatualizado && (
+          <Alert tone="danger">
+            RBT12 manual configurado em Dados fiscais está desatualizado (não é pra essa
+            competência) — ignorado. RBT12 abaixo foi{" "}
+            {mesesDisponiveis > 0 ? "projetado a partir do histórico no sistema" : "zerado por falta de histórico"}
+            . Atualize o RBT12 manual e a competência de referência em{" "}
+            <Link href={`/admin/empresas/${companyId}/dados-fiscais`} className="underline">
+              Dados fiscais
+            </Link>
+            .
+          </Alert>
+        )}
+        {resultado.rbt12Estimado && !rbt12ManualDesatualizado && (
           <Alert tone="warning">
             {mesesDisponiveis > 0
               ? `Menos de 12 meses de histórico no sistema (${mesesDisponiveis} mês(es)) — RBT12 projetado proporcionalmente.`
@@ -168,7 +186,7 @@ export default async function ImpostosPage(
         {usandoRbt12Manual && (
           <Alert tone="warning">
             Histórico no sistema insuficiente ({mesesDisponiveis} de 12 meses) — usando o RBT12
-            informado manualmente em Dados fiscais.
+            informado manualmente em Dados fiscais pra essa competência.
           </Alert>
         )}
 

@@ -173,20 +173,34 @@ export function FiscalForm({ company }: { company: Company }) {
               }
             />
           </Field>
-          <Field
-            label="RBT12 manual (R$)"
-            htmlFor="rbt12Manual"
-            hint="Só preencha se a empresa já faturava antes de entrar no sistema — sem isso, o RBT12 é calculado só com o faturamento que o sistema já tem registrado, o que fica baixo demais pros primeiros meses"
-          >
-            <Input
-              id="rbt12Manual"
-              name="rbt12Manual"
-              type="number"
-              step="0.01"
-              min={0}
-              defaultValue={company.rbt12_manual ?? ""}
-            />
-          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="RBT12 manual (R$)"
+              htmlFor="rbt12Manual"
+              hint="Só preencha se a empresa já faturava antes de entrar no sistema"
+            >
+              <Input
+                id="rbt12Manual"
+                name="rbt12Manual"
+                type="number"
+                step="0.01"
+                min={0}
+                defaultValue={company.rbt12_manual ?? ""}
+              />
+            </Field>
+            <Field
+              label="Competência de referência"
+              htmlFor="rbt12ManualCompetencia"
+              hint="RBT12 é uma janela de 12 meses que muda todo mês — esse valor só é usado quando bater exatamente com o mês sendo calculado. Atualize aqui todo mês pra manter válido."
+            >
+              <Input
+                id="rbt12ManualCompetencia"
+                name="rbt12ManualCompetencia"
+                type="month"
+                defaultValue={company.rbt12_manual_competencia ?? ""}
+              />
+            </Field>
+          </div>
         </div>
 
         <div className="flex flex-col gap-3 rounded-lg border border-border p-4">

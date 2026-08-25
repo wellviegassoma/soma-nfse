@@ -355,6 +355,24 @@ empresas via CNPJ/planilha) (concluída)**
       alíquota e imposto corretos: as outras 52 (sem `tax_regime`) mostraram
       "—" corretamente
 
+**Bug real corrigido — RBT12 manual ficava desatualizado silenciosamente**
+- [x] O RBT12 manual (campo único, sem saber a que mês se referia) era
+      reaplicado igual em qualquer competência depois de configurado —
+      confirmado com dados reais da própria SOMA Contabilidade Integrada
+      (planilha `025-SN.xlsx`): alíquota de agosto/2026 saiu igual à de
+      julho/2026 porque o valor manual tinha sido informado com base em
+      julho e nunca atualizado
+- [x] Nova coluna `companies.rbt12_manual_competencia` — o valor manual só
+      é usado quando essa competência bate exatamente com a que está
+      sendo calculada; fora disso o sistema avisa que está desatualizado
+      (`Alert` vermelho) e cai pro cálculo estimado a partir do sistema,
+      em vez de reaplicar o número errado silenciosamente
+- [x] Testado ao vivo com o valor real da SOMA (R$801.559,88, marcado
+      como referente a 07/2026): competência de julho usa o valor manual
+      corretamente (11,55%, batendo com a planilha); competência de
+      agosto mostra o aviso de desatualizado e usa o RBT12 estimado pelo
+      sistema em vez do valor de julho
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

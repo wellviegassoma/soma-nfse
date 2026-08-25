@@ -108,7 +108,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
     supabase
       .from("companies")
       .select(
-        "id, legal_name, trade_name, created_at, tax_regime, sujeito_fator_r, fator_r_percentual, rbt12_manual, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+        "id, legal_name, trade_name, created_at, tax_regime, sujeito_fator_r, fator_r_percentual, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
       )
       .order("legal_name", { ascending: true }),
     supabase
@@ -204,6 +204,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       receitaPorMes,
       mesesComDados: new Set(porMes?.keys() ?? []),
       rbt12Manual: empresa.rbt12_manual,
+      rbt12ManualCompetencia: empresa.rbt12_manual_competencia,
     });
     const imposto = calcularImpostoResumo({
       taxRegime: empresa.tax_regime,
