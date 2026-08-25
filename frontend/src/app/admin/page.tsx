@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { competenciasTrimestre, resolverRbt12 } from "@/lib/faturamento";
+import { calcularImpostoResumo } from "@/lib/calculo-impostos";
 
 export const metadata = { title: "Visão geral — Painel SOMA" };
 
@@ -15,6 +17,10 @@ function formatMoney(value: number) {
 function formatCompetencia(competencia: string) {
   const [ano, mes] = competencia.split("-");
   return `${mes}/${ano}`;
+}
+
+function formatPercent(value: number) {
+  return `${(value * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 }
 
 type DpsRow = {
@@ -101,7 +107,9 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   const [{ data: companies }, { data: notas }, { data: distribuidas }] = await Promise.all([
     supabase
       .from("companies")
-      .select("id, legal_name, trade_name, created_at")
+      .select(
+        "id, legal_name, trade_name, created_at, tax_regime, sujeito_fator_r, fator_r_percentual, rbt12_manual, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+      )
       .order("legal_name", { ascending: true }),
     supabase
       .from("dps")
@@ -175,10 +183,41 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
     porEmpresa.set(nota.company_id, agr);
   }
 
-  const linhas = empresas.map((empresa) => ({
-    empresa,
-    agr: porEmpresa.get(empresa.id) ?? vazio(),
-  }));
+  // Receita por empresa/mês (não cancelada) — base pro RBT12 (Simples) e
+  // pro trimestre (Lucro Presumido) de cada empresa na coluna de imposto.
+  const porEmpresaPorMes = new Map<string, Map<string, number>>();
+  for (const nota of notasUnificadas) {
+    if (nota.cancelada) continue;
+    const porMes = porEmpresaPorMes.get(nota.companyId) ?? new Map<string, number>();
+    porMes.set(nota.competencia, (porMes.get(nota.competencia) ?? 0) + nota.valor);
+    porEmpresaPorMes.set(nota.companyId, porMes);
+  }
+  const mesesTrimestre = competenciasTrimestre(competencia);
+  const ehUltimoMesDoTrimestre = competencia === mesesTrimestre[2];
+
+  const linhas = empresas.map((empresa) => {
+    const agr = porEmpresa.get(empresa.id) ?? vazio();
+    const porMes = porEmpresaPorMes.get(empresa.id);
+    const receitaPorMes = (mes: string) => porMes?.get(mes) ?? 0;
+    const { rbt12 } = resolverRbt12({
+      competencia,
+      receitaPorMes,
+      mesesComDados: new Set(porMes?.keys() ?? []),
+      rbt12Manual: empresa.rbt12_manual,
+    });
+    const imposto = calcularImpostoResumo({
+      taxRegime: empresa.tax_regime,
+      receitaMes: agr.faturamentoCompetencia,
+      rbt12,
+      sujeitoFatorR: empresa.sujeito_fator_r,
+      fatorRPercentual: empresa.fator_r_percentual,
+      receitaTrimestre: mesesTrimestre.reduce((acc, m) => acc + receitaPorMes(m), 0),
+      ehUltimoMesDoTrimestre,
+      apuracaoMensal: empresa.irpj_csll_apuracao_mensal,
+      aliquotaIss: empresa.iss_aliquota_padrao,
+    });
+    return { empresa, agr, imposto };
+  });
 
   const porFaturamento = [...linhas]
     .filter((l) => l.agr.faturamentoCompetencia > 0)
@@ -358,23 +397,37 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
             Nenhuma empresa cadastrada ainda.
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {linhasOrdenadas.map(({ empresa, agr }) => (
-              <div key={empresa.id} className="flex items-center justify-between gap-4 px-5 py-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-foreground">
-                    {empresa.trade_name || empresa.legal_name}
+          <>
+            <div className="flex items-center gap-4 border-b border-border px-5 py-2 text-xs font-medium text-foreground/40">
+              <div className="min-w-0 flex-1">Empresa</div>
+              <div className="w-16 shrink-0 text-right">Alíquota</div>
+              <div className="w-28 shrink-0 text-right">Imposto do mês</div>
+              <div className="w-28 shrink-0 text-right">Faturamento</div>
+            </div>
+            <div className="divide-y divide-border">
+              {linhasOrdenadas.map(({ empresa, agr, imposto }) => (
+                <div key={empresa.id} className="flex items-center gap-4 px-5 py-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-foreground">
+                      {empresa.trade_name || empresa.legal_name}
+                    </div>
+                    <div className="text-xs text-foreground/50">
+                      {agr.notasCompetencia} nota(s) na competência
+                    </div>
                   </div>
-                  <div className="text-xs text-foreground/50">
-                    {agr.notasCompetencia} nota(s) na competência
+                  <div className="w-16 shrink-0 text-right text-sm text-foreground/70">
+                    {imposto ? formatPercent(imposto.aliquotaEfetiva) : "—"}
+                  </div>
+                  <div className="w-28 shrink-0 text-right text-sm font-medium text-foreground">
+                    {imposto ? formatMoney(imposto.valor) : "—"}
+                  </div>
+                  <div className="w-28 shrink-0 text-right text-sm font-semibold text-foreground">
+                    {formatMoney(agr.faturamentoCompetencia)}
                   </div>
                 </div>
-                <div className="shrink-0 text-sm font-semibold text-foreground">
-                  {formatMoney(agr.faturamentoCompetencia)}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         )}
       </Card>
     </div>

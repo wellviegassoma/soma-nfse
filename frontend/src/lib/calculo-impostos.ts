@@ -147,3 +147,48 @@ export function calcularLucroPresumido(params: {
     baseTrimestreIrpj: baseIrpjTrimestre,
   };
 }
+
+export type ResumoImposto = { aliquotaEfetiva: number; valor: number };
+
+// Versão resumida (só alíquota efetiva + valor do mês), independente do
+// regime — usada em listas com várias empresas (ex.: Visão geral), onde
+// não cabe o detalhamento por componente. `null` quando o regime não tem
+// cálculo suportado (sem regime definido, ou Lucro Real).
+export function calcularImpostoResumo(params: {
+  taxRegime: string | null;
+  receitaMes: number;
+  rbt12: number;
+  sujeitoFatorR: boolean;
+  fatorRPercentual: number | null;
+  receitaTrimestre: number;
+  ehUltimoMesDoTrimestre: boolean;
+  apuracaoMensal: boolean;
+  aliquotaIss: number | null;
+}): ResumoImposto | null {
+  if (params.taxRegime === "SIMPLES_NACIONAL") {
+    const r = calcularSimplesNacional({
+      receitaMes: params.receitaMes,
+      rbt12: params.rbt12,
+      rbt12Estimado: false, // não afeta o cálculo em si, só é exibido separadamente
+      sujeitoFatorR: params.sujeitoFatorR,
+      fatorRPercentual: params.fatorRPercentual,
+    });
+    return { aliquotaEfetiva: r.aliquotaEfetiva, valor: r.dasTotal };
+  }
+
+  if (params.taxRegime === "LUCRO_PRESUMIDO") {
+    const r = calcularLucroPresumido({
+      receitaMes: params.receitaMes,
+      receitaTrimestre: params.receitaTrimestre,
+      ehUltimoMesDoTrimestre: params.ehUltimoMesDoTrimestre,
+      apuracaoMensal: params.apuracaoMensal,
+      aliquotaIss: params.aliquotaIss,
+    });
+    return {
+      aliquotaEfetiva: params.receitaMes > 0 ? r.total / params.receitaMes : 0,
+      valor: r.total,
+    };
+  }
+
+  return null;
+}

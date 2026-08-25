@@ -99,3 +99,38 @@ export function competenciasTrimestre(competencia: string): string[] {
   const primeiroMes = Math.floor((mes - 1) / 3) * 3 + 1;
   return [0, 1, 2].map((i) => `${ano}-${String(primeiroMes + i).padStart(2, "0")}`);
 }
+
+export type Rbt12Resolvido = {
+  rbt12: number;
+  estimado: boolean;
+  usandoManual: boolean;
+  mesesDisponiveis: number;
+};
+
+// Resolve o RBT12 pra uma competência: usa o faturamento dos 12 meses
+// anteriores já registrado no sistema; se o histórico for insuficiente
+// (empresa nova no sistema, mesmo que já faturasse antes por fora),
+// prioriza o RBT12 manual configurado na empresa — senão projeta
+// proporcionalmente pelos meses disponíveis. Mesma lógica usada tanto na
+// aba Impostos de uma empresa quanto na Visão geral (todas de uma vez).
+export function resolverRbt12(params: {
+  competencia: string;
+  receitaPorMes: (mes: string) => number;
+  mesesComDados: Set<string>;
+  rbt12Manual: number | null;
+}): Rbt12Resolvido {
+  const meses12 = competenciasRbt12(params.competencia);
+  const mesesDisponiveis = meses12.filter((m) => params.mesesComDados.has(m)).length;
+  const historicoInsuficiente = mesesDisponiveis < 12;
+  const rbt12Bruto = meses12.reduce((acc, m) => acc + params.receitaPorMes(m), 0);
+  const rbt12EstimadoPeloSistema =
+    historicoInsuficiente && mesesDisponiveis > 0 ? (rbt12Bruto / mesesDisponiveis) * 12 : rbt12Bruto;
+  const usandoManual = historicoInsuficiente && params.rbt12Manual != null;
+  const rbt12 = usandoManual ? params.rbt12Manual! : rbt12EstimadoPeloSistema;
+  return {
+    rbt12,
+    estimado: historicoInsuficiente && !usandoManual,
+    usandoManual,
+    mesesDisponiveis,
+  };
+}

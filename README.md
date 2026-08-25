@@ -343,6 +343,18 @@ empresas via CNPJ/planilha) (concluída)**
       (IRPJ/CSLL calculados sobre a base trimestral mesmo em mês sem
       faturamento próprio)
 
+**Ajuste na Fase N — Alíquota e imposto do mês na Visão geral (concluído)**
+- [x] Tabela "Faturamento por empresa" da Visão geral ganhou duas colunas:
+      alíquota efetiva e imposto estimado do mês, calculados pra cada
+      empresa da lista de uma vez (reaproveita `calcularImpostoResumo` e
+      `resolverRbt12`, extraído de `lib/faturamento.ts` pra não duplicar a
+      lógica que já existia só na aba Impostos de uma empresa). Empresa
+      sem regime tributário configurado (ou Lucro Real) mostra "—" nas
+      duas colunas em vez de quebrar
+- [x] Testado ao vivo: única empresa com regime configurado mostrou
+      alíquota e imposto corretos: as outras 52 (sem `tax_regime`) mostraram
+      "—" corretamente
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

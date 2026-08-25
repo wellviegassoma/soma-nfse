@@ -9,8 +9,8 @@ import { Alert } from "@/components/ui/Alert";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import {
   buscarFaturamentoMensal,
-  competenciasRbt12,
   competenciasTrimestre,
+  resolverRbt12,
   somarFaturamento,
 } from "@/lib/faturamento";
 import { calcularLucroPresumido, calcularSimplesNacional } from "@/lib/calculo-impostos";
@@ -98,16 +98,14 @@ export default async function ImpostosPage(
   }
 
   if (company.tax_regime === "SIMPLES_NACIONAL") {
-    const meses12 = competenciasRbt12(competencia);
-    const rbt12Bruto = somarFaturamento(notas, meses12);
     const mesesComDados = new Set(notas.filter((n) => !n.cancelada).map((n) => n.competencia));
-    const mesesDisponiveis = meses12.filter((m) => mesesComDados.has(m)).length;
-    const historicoInsuficiente = mesesDisponiveis < 12;
-    const rbt12EstimadoPeloSistema =
-      historicoInsuficiente && mesesDisponiveis > 0 ? (rbt12Bruto / mesesDisponiveis) * 12 : rbt12Bruto;
-    const usandoRbt12Manual = historicoInsuficiente && company.rbt12_manual != null;
-    const rbt12 = usandoRbt12Manual ? company.rbt12_manual! : rbt12EstimadoPeloSistema;
-    const rbt12Estimado = historicoInsuficiente && !usandoRbt12Manual;
+    const { rbt12, estimado: rbt12Estimado, usandoManual: usandoRbt12Manual, mesesDisponiveis } =
+      resolverRbt12({
+        competencia,
+        receitaPorMes: (mes) => somarFaturamento(notas, [mes]),
+        mesesComDados,
+        rbt12Manual: company.rbt12_manual,
+      });
 
     const resultado = calcularSimplesNacional({
       receitaMes,
