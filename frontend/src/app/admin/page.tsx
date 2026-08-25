@@ -127,7 +127,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
         .from("notas_distribuidas")
         .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao")
         .eq("direcao", "saida"),
-      supabase.from("folha_mensal").select("company_id, competencia, valor"),
+      supabase.from("folha_mensal").select("company_id, competencia, valor, fgts"),
     ]);
 
   const empresas = companies ?? [];
@@ -135,10 +135,12 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   const todasDistribuidas = (distribuidas ?? []) as NotaDistribuidaRow[];
   const notasUnificadas = unificarNotasDeSaida(todasNotas, todasDistribuidas);
 
+  // Fator R oficial é sobre a "folha de salários, incluídos encargos" —
+  // folha + FGTS do mês, não só o bruto.
   const porEmpresaPorMesFolha = new Map<string, Map<string, number>>();
   for (const f of folhas ?? []) {
     const porMes = porEmpresaPorMesFolha.get(f.company_id) ?? new Map<string, number>();
-    porMes.set(f.competencia, Number(f.valor));
+    porMes.set(f.competencia, Number(f.valor) + (f.fgts != null ? Number(f.fgts) : 0));
     porEmpresaPorMesFolha.set(f.company_id, porMes);
   }
 

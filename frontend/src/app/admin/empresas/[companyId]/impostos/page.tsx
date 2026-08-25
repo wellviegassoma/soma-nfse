@@ -118,7 +118,9 @@ export default async function ImpostosPage(
     let fatorRPercentual: number | null = null;
     if (company.sujeito_fator_r) {
       const folhaMensal = await buscarFolhaMensal(supabase, companyId);
-      const folhaPorMes = new Map(folhaMensal.map((f) => [f.competencia, f.valor]));
+      const folhaPorMes = new Map(
+        folhaMensal.map((f) => [f.competencia, f.valor + (f.fgts ?? 0)]),
+      );
       const { fp12 } = resolverFp12({
         competencia,
         folhaPorMes: (mes) => folhaPorMes.get(mes),

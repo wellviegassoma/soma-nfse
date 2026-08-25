@@ -580,6 +580,19 @@ empresas via CNPJ/planilha) (concluída)**
 - [x] Testado ao vivo com o arquivo real: FGTS extraído (R$652,20) bateu
       exato com o "Total FGTS" do PDF, e persistiu certo na tabela
 
+**Correção — FGTS entra sim na conta do Fator R (concluído)**
+- [x] Ajuste acima saiu inicialmente como campo só informativo — usuário
+      corrigiu: FGTS deve somar na conta mesmo, que é a definição oficial
+      de "folha de salários, incluídos encargos" (LC 123/2006). FP12
+      agora soma folha + FGTS de cada mês (`admin/page.tsx`,
+      `impostos/page.tsx` e `fator-r/page.tsx`); o campo de folha que
+      aparece pra editar continua mostrando só o valor bruto — a soma com
+      o FGTS acontece só na hora de calcular o Fator R
+- [x] Testado com dado real já importado pelo usuário (WOGEL MEDICINA
+      FUNCIONAL, competência 07/2026 com FGTS de R$652,20): folha+FGTS
+      acumulados de agosto/2026 bateu exato (R$271.186,09) com a soma
+      manual dos 12 meses incluindo esse FGTS
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

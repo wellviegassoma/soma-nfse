@@ -88,6 +88,11 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
   const mesesComDadosReceita = new Set(notas.filter((n) => !n.cancelada).map((n) => n.competencia));
   const folhaPorMes = new Map(folhaMensal.map((f) => [f.competencia, f.valor]));
   const fgtsPorMes = new Map(folhaMensal.map((f) => [f.competencia, f.fgts]));
+  // Fator R oficial é sobre a "folha de salários, incluídos encargos" —
+  // folha + FGTS do mês, não só o bruto (que é o que aparece pra editar).
+  const folhaComEncargosPorMes = new Map(
+    folhaMensal.map((f) => [f.competencia, f.valor + (f.fgts ?? 0)]),
+  );
 
   const competencia = mesCorrenteBrasilia();
   const meses = ultimosMeses(competencia, MESES_EXIBIDOS);
@@ -102,7 +107,7 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
     });
     const { fp12, estimado } = resolverFp12({
       competencia: mes,
-      folhaPorMes: (m) => folhaPorMes.get(m),
+      folhaPorMes: (m) => folhaComEncargosPorMes.get(m),
       mesesComDados: new Set(folhaPorMes.keys()),
     });
     const fatorR = resolverFatorR(fp12, rbt12);
@@ -139,7 +144,7 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Competência</th>
                 <th className="px-4 py-3 text-left font-medium">Folha / FGTS do mês</th>
-                <th className="px-4 py-3 text-left font-medium">Folha acumulada (12m)</th>
+                <th className="px-4 py-3 text-left font-medium">Folha + FGTS acumulados (12m)</th>
                 <th className="px-4 py-3 text-left font-medium">RBT12</th>
                 <th className="px-4 py-3 text-left font-medium">Fator R</th>
                 <th className="px-4 py-3 text-left font-medium">Anexo</th>
