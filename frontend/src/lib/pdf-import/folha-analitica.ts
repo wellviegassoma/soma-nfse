@@ -1,9 +1,12 @@
 import "server-only";
+import { proximaCompetencia } from "@/lib/competencia";
 import { parseNumeroBr } from "./numero-br";
 
 export type FolhaAnaliticaImportada = {
-  competencia: string; // "YYYY-MM"
-  valor: number | null; // Total Geral da Folha
+  competenciaProLabore: string; // "YYYY-MM" — mesmo mês da folha
+  competenciaSalariosFgts: string; // "YYYY-MM" — mês seguinte (pago/recolhido depois)
+  proLabore: number | null;
+  salarios: number | null;
   fgts: number | null; // Total FGTS (Informações adicionais)
   motivo?: string; // preenchido quando os valores não puderam ser extraídos com confiança
 };
@@ -20,18 +23,26 @@ export type FolhaAnaliticaImportada = {
 // Funcionários. Se a contagem não bater com 22, é sinal de que o layout
 // mudou — melhor pedir preenchimento manual do que arriscar um número
 // errado indo pro Fator R.
+//
+// Pró-labore some do "Total Geral da Folha" por subtração — diferente do
+// resto da tabela (Resumo das Bases), a lista de funcionários lê em
+// ordem visual normal, então o rótulo "PRO LABORE" aparece colado no
+// valor de cada sócio (testado com arquivo real).
 export function parseFolhaAnalitica(texto: string): FolhaAnaliticaImportada | null {
   const datas = [...texto.matchAll(/(\d{2})\/(\d{2})\/(\d{4})/g)];
   if (datas.length < 2) return null;
-  const competencia = `${datas[1][3]}-${datas[1][2]}`;
+  const competenciaProLabore = `${datas[1][3]}-${datas[1][2]}`;
+  const competenciaSalariosFgts = proximaCompetencia(competenciaProLabore);
 
   const blocoRotulos =
     /Folha\.{5,}:\s*\r?\n?\s*F[ée]rias\.{5,}:\s*\r?\n?\s*Totais das Bases\.{5,}:\s*\r?\n?\s*Rescis[ãa]o\.{5,}:\s*\r?\n?\s*D[ée]cimo Terceiro\.{5,}:([\s\S]*?)Resili[çc][ãa]o\.{5,}:/;
   const m = texto.match(blocoRotulos);
   if (!m) {
     return {
-      competencia,
-      valor: null,
+      competenciaProLabore,
+      competenciaSalariosFgts,
+      proLabore: null,
+      salarios: null,
       fgts: null,
       motivo: "Não reconheci o formato desse PDF de folha.",
     };
@@ -40,16 +51,21 @@ export function parseFolhaAnalitica(texto: string): FolhaAnaliticaImportada | nu
   const numeros = [...m[1].matchAll(/-?[\d.]+,\d{2}|\d+/g)].map((x) => x[0]);
   if (numeros.length !== 22) {
     return {
-      competencia,
-      valor: null,
+      competenciaProLabore,
+      competenciaSalariosFgts,
+      proLabore: null,
+      salarios: null,
       fgts: null,
       motivo: "O layout desse PDF parece diferente do esperado — confira e digite os valores.",
     };
   }
 
-  return {
-    competencia,
-    valor: parseNumeroBr(numeros[20]),
-    fgts: parseNumeroBr(numeros[16]),
-  };
+  const totalGeralFolha = parseNumeroBr(numeros[20]);
+  const fgts = parseNumeroBr(numeros[16]);
+
+  const proLaboreMatches = [...texto.matchAll(/PR[OÓ][\s-]?LABORE\s+([\d.,]+)/gi)];
+  const proLabore = proLaboreMatches.reduce((acc, mm) => acc + parseNumeroBr(mm[1]), 0);
+  const salarios = Math.round((totalGeralFolha - proLabore) * 100) / 100;
+
+  return { competenciaProLabore, competenciaSalariosFgts, proLabore, salarios, fgts };
 }

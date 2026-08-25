@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { importarFolhaAnalitica, salvarFolhaMensal } from "@/lib/actions/folha";
+import { importarFolhaAnalitica, salvarFolhaAnaliticaImportada } from "@/lib/actions/folha";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
@@ -12,12 +12,18 @@ function formatCompetencia(competencia: string) {
   return `${mes}/${ano}`;
 }
 
+type Revisao = {
+  competenciaProLabore: string;
+  competenciaSalariosFgts: string;
+  proLabore: string;
+  salarios: string;
+  fgts: string;
+};
+
 export function ImportarFolhaAnaliticaForm({ companyId }: { companyId: string }) {
   const [importState, importAction, importPending] = useActionState(importarFolhaAnalitica, undefined);
-  const [revisao, setRevisao] = useState<{ competencia: string; valor: string; fgts: string } | null>(
-    null,
-  );
-  const [saveState, saveAction, savePending] = useActionState(salvarFolhaMensal, undefined);
+  const [revisao, setRevisao] = useState<Revisao | null>(null);
+  const [saveState, saveAction, savePending] = useActionState(salvarFolhaAnaliticaImportada, undefined);
 
   // Ajusta o estado local (revisão) em resposta a um novo resultado de
   // action, direto durante o render — evita o useEffect+setState.
@@ -25,10 +31,13 @@ export function ImportarFolhaAnaliticaForm({ companyId }: { companyId: string })
   if (importState !== importStateVisto) {
     setImportStateVisto(importState);
     if (importState?.resultado) {
+      const r = importState.resultado;
       setRevisao({
-        competencia: importState.resultado.competencia,
-        valor: importState.resultado.valor != null ? String(importState.resultado.valor) : "",
-        fgts: importState.resultado.fgts != null ? String(importState.resultado.fgts) : "",
+        competenciaProLabore: r.competenciaProLabore,
+        competenciaSalariosFgts: r.competenciaSalariosFgts,
+        proLabore: r.proLabore != null ? String(r.proLabore) : "",
+        salarios: r.salarios != null ? String(r.salarios) : "",
+        fgts: r.fgts != null ? String(r.fgts) : "",
       });
     }
   }
@@ -43,8 +52,10 @@ export function ImportarFolhaAnaliticaForm({ companyId }: { companyId: string })
       <div>
         <div className="text-sm font-semibold text-foreground/70">Importar folha de pagamento</div>
         <p className="text-xs text-foreground/50">
-          Sobe o PDF da folha analítica de um mês — o sistema tenta identificar o total, mas
-          confira sempre antes de salvar (o layout desse relatório varia mais que o do PGDAS-D).
+          Sobe o PDF da folha analítica de um mês — separa pró-labore de salários e já lança cada
+          um na competência certa pro Fator R (pró-labore no mês da própria folha; salários e FGTS
+          no mês seguinte, quando são efetivamente pagos/recolhidos). Confira sempre antes de
+          salvar (o layout desse relatório varia mais que o do PGDAS-D).
         </p>
       </div>
 
@@ -61,49 +72,81 @@ export function ImportarFolhaAnaliticaForm({ companyId }: { companyId: string })
       {importState?.resultado?.motivo && <Alert tone="warning">{importState.resultado.motivo}</Alert>}
 
       {revisao && (
-        <form action={saveAction} className="flex flex-wrap items-end gap-3">
+        <form action={saveAction} className="flex flex-col gap-4">
           <input type="hidden" name="companyId" value={companyId} />
-          <input type="hidden" name="competencia" value={revisao.competencia} />
-          <div className="text-sm text-foreground/70">
-            Competência: <span className="font-medium text-foreground">{formatCompetencia(revisao.competencia)}</span>
+          <input type="hidden" name="competenciaProLabore" value={revisao.competenciaProLabore} />
+          <input
+            type="hidden"
+            name="competenciaSalariosFgts"
+            value={revisao.competenciaSalariosFgts}
+          />
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-[220px]">
+              <Field
+                label={`Pró-labore — ${formatCompetencia(revisao.competenciaProLabore)}`}
+                htmlFor="proLabore"
+              >
+                <Input
+                  id="proLabore"
+                  name="proLabore"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={revisao.proLabore}
+                  onChange={(e) => setRevisao((r) => ({ ...r!, proLabore: e.target.value }))}
+                  required
+                />
+              </Field>
+            </div>
+            <div className="w-[220px]">
+              <Field
+                label={`Salários — ${formatCompetencia(revisao.competenciaSalariosFgts)}`}
+                htmlFor="salarios"
+              >
+                <Input
+                  id="salarios"
+                  name="salarios"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={revisao.salarios}
+                  onChange={(e) => setRevisao((r) => ({ ...r!, salarios: e.target.value }))}
+                  required
+                />
+              </Field>
+            </div>
+            <div className="w-[220px]">
+              <Field
+                label={`FGTS — ${formatCompetencia(revisao.competenciaSalariosFgts)}`}
+                htmlFor="fgts"
+              >
+                <Input
+                  id="fgts"
+                  name="fgts"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={revisao.fgts}
+                  onChange={(e) => setRevisao((r) => ({ ...r!, fgts: e.target.value }))}
+                  required
+                />
+              </Field>
+            </div>
           </div>
-          <div className="w-[200px]">
-            <Field label="Folha do mês (R$)" htmlFor="valor">
-              <Input
-                id="valor"
-                name="valor"
-                type="number"
-                step="0.01"
-                min={0}
-                value={revisao.valor}
-                onChange={(e) => setRevisao((r) => ({ ...r!, valor: e.target.value }))}
-                required
-              />
-            </Field>
+
+          <div className="flex gap-3">
+            <Button type="submit" loading={savePending}>
+              Confirmar e salvar
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setRevisao(null)}>
+              Cancelar
+            </Button>
           </div>
-          <div className="w-[200px]">
-            <Field label="FGTS do mês (R$)" htmlFor="fgts">
-              <Input
-                id="fgts"
-                name="fgts"
-                type="number"
-                step="0.01"
-                min={0}
-                value={revisao.fgts}
-                onChange={(e) => setRevisao((r) => ({ ...r!, fgts: e.target.value }))}
-              />
-            </Field>
-          </div>
-          <Button type="submit" loading={savePending}>
-            Confirmar e salvar
-          </Button>
-          <Button type="button" variant="secondary" onClick={() => setRevisao(null)}>
-            Cancelar
-          </Button>
         </form>
       )}
       {saveState?.error && <Alert tone="danger">{saveState.error}</Alert>}
-      {saveState?.success && <Alert tone="success">Folha do mês salva.</Alert>}
+      {saveState?.success && <Alert tone="success">Pró-labore, salários e FGTS salvos.</Alert>}
     </div>
   );
 }

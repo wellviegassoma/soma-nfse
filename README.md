@@ -593,6 +593,36 @@ empresas via CNPJ/planilha) (concluída)**
       acumulados de agosto/2026 bateu exato (R$271.186,09) com a soma
       manual dos 12 meses incluindo esse FGTS
 
+**Ajuste — Pró-labore separado de salários, cada um na competência certa (concluído)**
+- [x] "Folha" na importação da folha analítica estava lumpada (salário +
+      pró-labore juntos) e tudo lançado na mesma competência — o usuário
+      corrigiu o conceito: pró-labore entra no mês da própria folha
+      (regime de competência), mas salários e FGTS só são efetivamente
+      pagos/recolhidos no mês seguinte (salário sai por volta do dia 5,
+      FGTS até dia 20 via FGTS Digital) — regime de caixa pros dois. Uma
+      importação agora grava em duas competências diferentes
+- [x] Nova coluna `pro_labore` em `folha_mensal`; `valor` passa a
+      significar "salários" nesse fluxo (continua sendo "total já
+      oficial" no fluxo do PGDAS-D, que não precisa separar — o número
+      de lá já vem correto por competência)
+- [x] `parseFolhaAnalitica` agora extrai pró-labore separado (soma das
+      ocorrências de "PRO LABORE"/"PRÓ-LABORE" na lista de funcionários,
+      testado com arquivo real: R$6.000,00, batendo exato) e calcula
+      salários por subtração (Total Geral da Folha − pró-labore =
+      R$8.152,61, também exato)
+- [x] Tela de revisão mostra os três campos com a competência de cada um
+      já indicada no rótulo ("Pró-labore — 07/2026", "Salários —
+      08/2026", "FGTS — 08/2026"); ao salvar, grava em duas linhas de
+      `folha_mensal` sem apagar o que já existia em cada uma (busca a
+      linha atual antes de upsertar, só sobrescrevendo o campo da vez)
+- [x] Corrigido também o dado real já importado antes dessa mudança
+      (WOGEL MEDICINA FUNCIONAL, competência 07/2026) pra refletir o
+      modelo novo — antes lumpado numa competência só, agora
+      pró-labore em 07/2026 e salários+FGTS em 08/2026
+- [x] Testado ao vivo, ponta a ponta: os dois valores extraídos bateram
+      exatos e as duas linhas foram gravadas corretas, cada uma na sua
+      competência, sem sobrescrever a outra
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

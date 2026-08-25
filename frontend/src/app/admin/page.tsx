@@ -6,7 +6,7 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { competenciasTrimestre, resolverRbt12 } from "@/lib/faturamento";
-import { resolverFatorR, resolverFp12 } from "@/lib/folha";
+import { resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { calcularImpostoResumo } from "@/lib/calculo-impostos";
 
 export const metadata = { title: "Visão geral — Painel SOMA" };
@@ -127,7 +127,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
         .from("notas_distribuidas")
         .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao")
         .eq("direcao", "saida"),
-      supabase.from("folha_mensal").select("company_id, competencia, valor, fgts"),
+      supabase.from("folha_mensal").select("company_id, competencia, valor, pro_labore, fgts"),
     ]);
 
   const empresas = companies ?? [];
@@ -136,11 +136,18 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   const notasUnificadas = unificarNotasDeSaida(todasNotas, todasDistribuidas);
 
   // Fator R oficial é sobre a "folha de salários, incluídos encargos" —
-  // folha + FGTS do mês, não só o bruto.
+  // salários + pró-labore + FGTS do mês, não só o bruto.
   const porEmpresaPorMesFolha = new Map<string, Map<string, number>>();
   for (const f of folhas ?? []) {
     const porMes = porEmpresaPorMesFolha.get(f.company_id) ?? new Map<string, number>();
-    porMes.set(f.competencia, Number(f.valor) + (f.fgts != null ? Number(f.fgts) : 0));
+    porMes.set(
+      f.competencia,
+      totalFolhaComEncargos({
+        valor: Number(f.valor),
+        proLabore: f.pro_labore != null ? Number(f.pro_labore) : null,
+        fgts: f.fgts != null ? Number(f.fgts) : null,
+      }),
+    );
     porEmpresaPorMesFolha.set(f.company_id, porMes);
   }
 

@@ -13,7 +13,7 @@ import {
   resolverRbt12,
   somarFaturamento,
 } from "@/lib/faturamento";
-import { buscarFolhaMensal, resolverFatorR, resolverFp12 } from "@/lib/folha";
+import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { calcularLucroPresumido, calcularSimplesNacional } from "@/lib/calculo-impostos";
 
 export const metadata = { title: "Impostos — Painel SOMA" };
@@ -118,9 +118,7 @@ export default async function ImpostosPage(
     let fatorRPercentual: number | null = null;
     if (company.sujeito_fator_r) {
       const folhaMensal = await buscarFolhaMensal(supabase, companyId);
-      const folhaPorMes = new Map(
-        folhaMensal.map((f) => [f.competencia, f.valor + (f.fgts ?? 0)]),
-      );
+      const folhaPorMes = new Map(folhaMensal.map((f) => [f.competencia, totalFolhaComEncargos(f)]));
       const { fp12 } = resolverFp12({
         competencia,
         folhaPorMes: (mes) => folhaPorMes.get(mes),

@@ -8,11 +8,13 @@ export function FolhaMensalInlineForm({
   companyId,
   competencia,
   valorAtual,
+  proLaboreAtual,
   fgtsAtual,
 }: {
   companyId: string;
   competencia: string;
   valorAtual: number | null;
+  proLaboreAtual: number | null;
   fgtsAtual: number | null;
 }) {
   const [state, formAction, pending] = useActionState(salvarFolhaMensal, undefined);
@@ -27,8 +29,17 @@ export function FolhaMensalInlineForm({
         step="0.01"
         min={0}
         defaultValue={valorAtual ?? ""}
-        placeholder="Folha"
+        placeholder="Salários"
         required
+        className="w-24 rounded border border-border bg-surface px-2 py-1 text-sm"
+      />
+      <input
+        name="proLabore"
+        type="number"
+        step="0.01"
+        min={0}
+        defaultValue={proLaboreAtual ?? ""}
+        placeholder="Pró-labore"
         className="w-24 rounded border border-border bg-surface px-2 py-1 text-sm"
       />
       <input

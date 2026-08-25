@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { buscarFaturamentoMensal, resolverRbt12, somarFaturamento } from "@/lib/faturamento";
-import { buscarFolhaMensal, resolverFatorR, resolverFp12 } from "@/lib/folha";
+import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { decidirAnexoFatorR } from "@/lib/calculo-impostos";
 import { FolhaMensalInlineForm } from "./FolhaMensalInlineForm";
 import { ImportarPgdasdForm } from "./ImportarPgdasdForm";
@@ -87,12 +87,12 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
 
   const mesesComDadosReceita = new Set(notas.filter((n) => !n.cancelada).map((n) => n.competencia));
   const folhaPorMes = new Map(folhaMensal.map((f) => [f.competencia, f.valor]));
+  const proLaborePorMes = new Map(folhaMensal.map((f) => [f.competencia, f.proLabore]));
   const fgtsPorMes = new Map(folhaMensal.map((f) => [f.competencia, f.fgts]));
   // Fator R oficial é sobre a "folha de salários, incluídos encargos" —
-  // folha + FGTS do mês, não só o bruto (que é o que aparece pra editar).
-  const folhaComEncargosPorMes = new Map(
-    folhaMensal.map((f) => [f.competencia, f.valor + (f.fgts ?? 0)]),
-  );
+  // salários + pró-labore + FGTS do mês, não só o bruto (que é o que
+  // aparece pra editar).
+  const folhaComEncargosPorMes = new Map(folhaMensal.map((f) => [f.competencia, totalFolhaComEncargos(f)]));
 
   const competencia = mesCorrenteBrasilia();
   const meses = ultimosMeses(competencia, MESES_EXIBIDOS);
@@ -115,6 +115,7 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
     return {
       competencia: mes,
       folhaDoMes: folhaPorMes.get(mes) ?? null,
+      proLaboreDoMes: proLaborePorMes.get(mes) ?? null,
       fgtsDoMes: fgtsPorMes.get(mes) ?? null,
       fp12,
       fp12Estimado: estimado,
@@ -143,8 +144,8 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
             <thead className="bg-surface-muted text-xs text-foreground/50">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Competência</th>
-                <th className="px-4 py-3 text-left font-medium">Folha / FGTS do mês</th>
-                <th className="px-4 py-3 text-left font-medium">Folha + FGTS acumulados (12m)</th>
+                <th className="px-4 py-3 text-left font-medium">Salários / Pró-labore / FGTS</th>
+                <th className="px-4 py-3 text-left font-medium">Folha + encargos acumulados (12m)</th>
                 <th className="px-4 py-3 text-left font-medium">RBT12</th>
                 <th className="px-4 py-3 text-left font-medium">Fator R</th>
                 <th className="px-4 py-3 text-left font-medium">Anexo</th>
@@ -161,6 +162,7 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
                       companyId={companyId}
                       competencia={linha.competencia}
                       valorAtual={linha.folhaDoMes}
+                      proLaboreAtual={linha.proLaboreDoMes}
                       fgtsAtual={linha.fgtsDoMes}
                     />
                   </td>

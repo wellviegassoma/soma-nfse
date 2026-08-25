@@ -12,6 +12,14 @@ export function mesCorrenteBrasilia(): string {
   return `${ano}-${mes}`;
 }
 
+// "YYYY-MM" do mês seguinte a `competencia` ("YYYY-MM").
+export function proximaCompetencia(competencia: string): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const proximoMes = mes === 12 ? 1 : mes + 1;
+  const proximoAno = mes === 12 ? ano + 1 : ano;
+  return `${proximoAno}-${String(proximoMes).padStart(2, "0")}`;
+}
+
 // "YYYY-MM-DD" de hoje no fuso de Brasília — mesmo motivo do
 // mesCorrenteBrasilia acima; `new Date().toISOString()` usa UTC e pode
 // já mostrar o dia/mês seguinte pra quem está no Brasil à noite.

@@ -2,7 +2,12 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { competenciasRbt12 } from "@/lib/faturamento";
 
-export type FolhaMensal = { competencia: string; valor: number; fgts: number | null };
+export type FolhaMensal = {
+  competencia: string;
+  valor: number; // salários (folha analítica) ou total já oficial (PGDAS-D/manual)
+  proLabore: number | null; // lançado na competência da própria folha
+  fgts: number | null; // lançado na competência seguinte, igual salários
+};
 
 export async function buscarFolhaMensal(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -11,13 +16,21 @@ export async function buscarFolhaMensal(
 ): Promise<FolhaMensal[]> {
   const { data } = await supabase
     .from("folha_mensal")
-    .select("competencia, valor, fgts")
+    .select("competencia, valor, pro_labore, fgts")
     .eq("company_id", companyId);
   return (data ?? []).map((r) => ({
     competencia: r.competencia,
     valor: Number(r.valor),
+    proLabore: r.pro_labore != null ? Number(r.pro_labore) : null,
     fgts: r.fgts != null ? Number(r.fgts) : null,
   }));
+}
+
+// Folha "incluídos encargos" pra fins de Fator R: salários (ou total já
+// oficial) + pró-labore + FGTS — cada um já lançado na competência certa
+// no momento da importação/preenchimento, então aqui é só somar.
+export function totalFolhaComEncargos(f: Pick<FolhaMensal, "valor" | "proLabore" | "fgts">): number {
+  return f.valor + (f.proLabore ?? 0) + (f.fgts ?? 0);
 }
 
 export type Fp12Resolvido = {
