@@ -382,6 +382,22 @@ empresas via CNPJ/planilha) (concluída)**
       nos dois (R$ 7.628,35 / 11,7% em 08/2026, já com o RBT12 real
       atualizado)
 
+**Ajuste — RBT12 manual rolando automaticamente (concluído)**
+- [x] Antes, o RBT12 manual só valia pra competência exata em que foi
+      informado — no mês seguinte, precisava reinformar na mão (avisava
+      que estava desatualizado, mas não fazia nada sozinho). Corrigido a
+      pedido do usuário: a partir da competência de referência, o valor
+      manual perde 1/12 do peso por mês enquanto o faturamento real do
+      sistema (esse sim, exato, mês a mês) vai entrando no lugar —
+      depois de 12 meses o manual já não pesa nada e o sistema calcula
+      inteiramente sozinho, sem precisar preencher de novo
+- [x] Testado ao vivo com dados reais da SOMA Contabilidade Integrada:
+      competência igual à referência (08/2026) usa o valor manual exato
+      (bateu com a planilha real: R$7.628,35); competência seguinte
+      (09/2026, ainda sem sincronizar) combinou automaticamente 11/12 do
+      valor de referência com o faturamento real de agosto já no sistema
+      — contas conferidas na mão, bateram exatas
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

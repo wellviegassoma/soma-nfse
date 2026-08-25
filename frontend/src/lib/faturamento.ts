@@ -100,26 +100,52 @@ export function competenciasTrimestre(competencia: string): string[] {
   return [0, 1, 2].map((i) => `${ano}-${String(primeiroMes + i).padStart(2, "0")}`);
 }
 
+// Diferença em meses entre duas competências "YYYY-MM" (b − a). Positivo
+// quando b é depois de a.
+function diferencaEmMeses(a: string, b: string): number {
+  const [anoA, mesA] = a.split("-").map(Number);
+  const [anoB, mesB] = b.split("-").map(Number);
+  return (anoB - anoA) * 12 + (mesB - mesA);
+}
+
+// "YYYY-MM" de todo mês entre `inicio` (incluso) e `fimExclusivo` (não
+// incluso), assumindo fimExclusivo >= inicio.
+function mesesEntre(inicio: string, fimExclusivo: string): string[] {
+  const n = diferencaEmMeses(inicio, fimExclusivo);
+  const [ano, mes] = inicio.split("-").map(Number);
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const d = new Date(Date.UTC(ano, mes - 1 + i, 1));
+    out.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
 export type Rbt12Resolvido = {
   rbt12: number;
   estimado: boolean;
   usandoManual: boolean;
-  manualDesatualizado: boolean;
+  manualRolando: boolean;
+  manualNaoAplicavel: boolean;
   mesesDisponiveis: number;
 };
 
 // Resolve o RBT12 pra uma competência: usa o faturamento dos 12 meses
 // anteriores já registrado no sistema; se o histórico for insuficiente
 // (empresa nova no sistema, mesmo que já faturasse antes por fora),
-// prioriza o RBT12 manual configurado na empresa — senão projeta
-// proporcionalmente pelos meses disponíveis. Mesma lógica usada tanto na
-// aba Impostos de uma empresa quanto na Visão geral (todas de uma vez).
+// combina o RBT12 manual configurado na empresa (informado uma vez, pra
+// uma competência de referência) com o faturamento real do sistema desde
+// então — sem precisar reinformar todo mês.
 //
-// RBT12 é uma janela móvel — muda todo mês — então o valor manual só
-// serve pra competência em que foi de fato apurado (rbt12ManualCompetencia).
-// Fora disso ele fica desatualizado; nunca é reaplicado silenciosamente
-// (bug real corrigido: alíquota de um mês saindo igual à do mês anterior
-// porque o manual tinha ficado parado).
+// RBT12 é uma janela móvel de 12 meses. Informado o valor pra uma
+// competência de referência R, pra qualquer competência X depois de R o
+// valor de R vai "saindo" da janela gradualmente (perde 1/12 do peso por
+// mês) enquanto o faturamento real dos meses entre R e X (esse sim,
+// exato, vindo do sistema) vai entrando — depois de 12 meses o valor de
+// R já não pesa nada e o sistema passa a usar só a própria história, sem
+// precisar mais do manual. Pra competência igual à referência, usa o
+// valor manual direto; pra competência ANTES da referência, o manual não
+// se aplica (não tem como "voltar no tempo").
 export function resolverRbt12(params: {
   competencia: string;
   receitaPorMes: (mes: string) => number;
@@ -134,21 +160,37 @@ export function resolverRbt12(params: {
   const rbt12EstimadoPeloSistema =
     historicoInsuficiente && mesesDisponiveis > 0 ? (rbt12Bruto / mesesDisponiveis) * 12 : rbt12Bruto;
 
-  const manualValido =
-    historicoInsuficiente &&
-    params.rbt12Manual != null &&
-    params.rbt12ManualCompetencia === params.competencia;
-  const manualDesatualizado =
-    historicoInsuficiente &&
-    params.rbt12Manual != null &&
-    params.rbt12ManualCompetencia !== params.competencia;
+  const temManual = params.rbt12Manual != null && params.rbt12ManualCompetencia != null;
+  const n = temManual
+    ? diferencaEmMeses(params.rbt12ManualCompetencia!, params.competencia)
+    : null;
 
-  const rbt12 = manualValido ? params.rbt12Manual! : rbt12EstimadoPeloSistema;
+  // n === 0: competência de referência exata. 1..11: janela rolando
+  // (mistura manual decrescente + real crescente). >=12: manual já saiu
+  // 100% da janela, não pesa mais nada. <0: competência é antes da
+  // referência, não dá pra aplicar.
+  if (historicoInsuficiente && temManual && n !== null && n >= 0 && n < 12) {
+    const pesoManual = (12 - n) / 12;
+    const mesesReais = n === 0 ? [] : mesesEntre(params.rbt12ManualCompetencia!, params.competencia);
+    const receitaReal = mesesReais.reduce((acc, m) => acc + params.receitaPorMes(m), 0);
+    const rbt12 = params.rbt12Manual! * pesoManual + receitaReal;
+    return {
+      rbt12,
+      estimado: false,
+      usandoManual: n === 0,
+      manualRolando: n > 0,
+      manualNaoAplicavel: false,
+      mesesDisponiveis,
+    };
+  }
+
+  const manualNaoAplicavel = historicoInsuficiente && temManual && n !== null && n < 0;
   return {
-    rbt12,
-    estimado: historicoInsuficiente && !manualValido,
-    usandoManual: manualValido,
-    manualDesatualizado,
+    rbt12: rbt12EstimadoPeloSistema,
+    estimado: historicoInsuficiente,
+    usandoManual: false,
+    manualRolando: false,
+    manualNaoAplicavel,
     mesesDisponiveis,
   };
 }

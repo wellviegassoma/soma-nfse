@@ -103,7 +103,8 @@ export default async function ImpostosPage(
       rbt12,
       estimado: rbt12Estimado,
       usandoManual: usandoRbt12Manual,
-      manualDesatualizado: rbt12ManualDesatualizado,
+      manualRolando: rbt12ManualRolando,
+      manualNaoAplicavel: rbt12ManualNaoAplicavel,
       mesesDisponiveis,
     } = resolverRbt12({
       competencia,
@@ -159,19 +160,29 @@ export default async function ImpostosPage(
           </Card>
         </div>
 
-        {rbt12ManualDesatualizado && (
-          <Alert tone="danger">
-            RBT12 manual configurado em Dados fiscais está desatualizado (não é pra essa
-            competência) — ignorado. RBT12 abaixo foi{" "}
-            {mesesDisponiveis > 0 ? "projetado a partir do histórico no sistema" : "zerado por falta de histórico"}
-            . Atualize o RBT12 manual e a competência de referência em{" "}
-            <Link href={`/admin/empresas/${companyId}/dados-fiscais`} className="underline">
-              Dados fiscais
-            </Link>
+        {rbt12ManualNaoAplicavel && (
+          <Alert tone="warning">
+            O RBT12 manual configurado em Dados fiscais é referente a uma competência posterior a
+            essa — não se aplica aqui. RBT12 abaixo{" "}
+            {mesesDisponiveis > 0 ? "foi projetado a partir do histórico no sistema" : "ficou zerado por falta de histórico"}
             .
           </Alert>
         )}
-        {resultado.rbt12Estimado && !rbt12ManualDesatualizado && (
+        {rbt12ManualRolando && (
+          <Alert tone="warning">
+            Histórico no sistema insuficiente — RBT12 combina o valor de referência informado em
+            Dados fiscais (perdendo peso gradualmente) com o faturamento real já registrado no
+            sistema desde então. Em pouco tempo o sistema terá 12 meses próprios e não vai
+            depender mais desse valor.
+          </Alert>
+        )}
+        {usandoRbt12Manual && (
+          <Alert tone="warning">
+            Histórico no sistema insuficiente ({mesesDisponiveis} de 12 meses) — usando o RBT12
+            informado manualmente em Dados fiscais pra essa competência.
+          </Alert>
+        )}
+        {resultado.rbt12Estimado && !rbt12ManualNaoAplicavel && !rbt12ManualRolando && !usandoRbt12Manual && (
           <Alert tone="warning">
             {mesesDisponiveis > 0
               ? `Menos de 12 meses de histórico no sistema (${mesesDisponiveis} mês(es)) — RBT12 projetado proporcionalmente.`
@@ -181,12 +192,6 @@ export default async function ImpostosPage(
               Dados fiscais
             </Link>
             .
-          </Alert>
-        )}
-        {usandoRbt12Manual && (
-          <Alert tone="warning">
-            Histórico no sistema insuficiente ({mesesDisponiveis} de 12 meses) — usando o RBT12
-            informado manualmente em Dados fiscais pra essa competência.
           </Alert>
         )}
 
