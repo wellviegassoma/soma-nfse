@@ -277,6 +277,38 @@ empresas via CNPJ/planilha) (concluída)**
       ignorada); XML de nota nova sem empresa pré-selecionada → identificada
       e importada na empresa certa pelo CNPJ do prestador
 
+**Fase M — Ajustes de cadastro e correção do "Buscar agora" (concluída)**
+- [x] Nome da empresa (razão social/nome fantasia) editável depois de criada
+      — antes só dava pra definir na criação; novo formulário no topo de
+      Dados fiscais (`updateCompanyIdentity`)
+- [x] Busca + ordenação alfabética em `/admin/empresas` — filtro por nome
+      ou CNPJ (`.or()` do PostgREST, com sanitização de vírgula/parênteses
+      que quebrariam a sintaxe do filtro), lista ordenada por `legal_name`
+      em vez de `created_at`
+- [x] **ISS retido pelo tomador** (`tpRetISSQN`) no cadastro de serviço —
+      o backend (`dps_builder.py`/`schemas.py`) já aceitava o campo desde a
+      Fase C, mas o cadastro nunca expôs a opção, então toda nota emitida
+      até aqui saiu com `tpRetISSQN=1` (não retido) mesmo quando o tomador
+      de fato retém. Novo campo `services.tipo_retencao_issqn` (domínio
+      1/2/3, migration `20260825140000_fase_l_iss_retido.sql`), select no
+      formulário de serviço, e `lib/actions/notas.ts` passando o valor pro
+      motor de emissão
+- [x] **Bug real corrigido**: "Buscar agora" (sincronização sob demanda)
+      ignorava por completo a competência selecionada na tela — sempre
+      pedia notas do mês corrente pro backend (`ano`/`mes` fixos em
+      `new Date()`), então escolher um mês passado e clicar "buscar" nunca
+      trazia nada, mesmo relatando sucesso. Corrigido em duas partes
+      (`lib/sync-notas.ts`): (1) `ano`/`mes` agora vêm da competência
+      selecionada, não mais do relógio; (2) pra competência **passada**,
+      a janela recente de NSU (croqui pensado só pra pegar nota nova desde
+      o checkpoint) não serve — nota antiga já está bem antes dele —, então
+      nesse caso o scan reinicia do NSU 0 com um teto de lotes maior
+      (`MAX_LOTES_BUSCA_HISTORICA`), e o checkpoint nunca regride (sempre
+      `Math.max` contra o valor atual). Testado ao vivo: URL de consulta
+      passou a mostrar `/DFe/0?...` (NSU 0) ao buscar competência passada,
+      contra o comportamento antigo que sempre usava a janela do checkpoint
+      independente do mês escolhido
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

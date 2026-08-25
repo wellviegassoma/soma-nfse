@@ -118,7 +118,7 @@ export default async function AdminFechamentoPage(
                 Importar XML
               </Button>
             </a>
-            <BuscarAgoraButton companyId={companyId} />
+            <BuscarAgoraButton companyId={companyId} competencia={competencia} />
           </div>
         </div>
       </Card>

@@ -5,9 +5,10 @@ import Link from "next/link";
 import { saveService } from "@/lib/actions/servicos";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { Field } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Alert";
-import type { Service } from "@/lib/types";
+import { RETENCAO_ISSQN_LABELS, type Service } from "@/lib/types";
 import type { ServiceCodeSuggestions } from "./suggestions";
 
 export function ServiceForm({
@@ -96,6 +97,19 @@ export function ServiceForm({
               max={100}
               defaultValue={service?.iss_rate ?? ""}
             />
+          </Field>
+          <Field label="Retenção do ISS" htmlFor="tipoRetencaoIssqn">
+            <Select
+              id="tipoRetencaoIssqn"
+              name="tipoRetencaoIssqn"
+              defaultValue={String(service?.tipo_retencao_issqn ?? 1)}
+            >
+              {Object.entries(RETENCAO_ISSQN_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
           </Field>
         </div>
       </div>

@@ -5,17 +5,32 @@ import { buscarAgora } from "@/lib/actions/fechamento";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 
-export function BuscarAgoraButton({ companyId }: { companyId: string }) {
+export function BuscarAgoraButton({
+  companyId,
+  competencia,
+}: {
+  companyId: string;
+  competencia: string;
+}) {
   const [state, formAction, pending] = useActionState(buscarAgora, undefined);
+  const mesAtual = new Date().toISOString().slice(0, 7);
+  const buscaHistorica = competencia !== mesAtual;
 
   return (
     <div className="flex flex-col gap-2">
       <form action={formAction}>
         <input type="hidden" name="companyId" value={companyId} />
+        <input type="hidden" name="competencia" value={competencia} />
         <Button type="submit" variant="secondary" loading={pending}>
-          Buscar agora
+          Buscar agora ({competencia})
         </Button>
       </form>
+      {buscaHistorica && (
+        <p className="text-xs text-foreground/50">
+          Competência passada — a busca escaneia desde o início e pode não achar tudo numa
+          tentativa só para empresas com muito histórico. Clique de novo se faltar nota.
+        </p>
+      )}
       {state?.error && <Alert tone="danger">{state.error}</Alert>}
       {state?.resultado && (
         <Alert tone={state.resultado.status === "sucesso" ? "success" : "danger"}>

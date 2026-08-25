@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptSecret, fromBytea } from "@/lib/certificate";
 import { classificarDirecao } from "@/lib/notas-distribuidas";
+import { mesCorrenteBrasilia } from "@/lib/competencia";
 import type { NfseAmbiente } from "@/lib/types";
 
 const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
@@ -34,6 +35,15 @@ const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
 // uma invocação por empresa em vez de laço sequencial).
 const JANELA_REVISITADA = 60;
 const MAX_LOTES_POR_EMPRESA = 80;
+
+// "Buscar agora" numa competência PASSADA não pode contar com a janela
+// recente acima — NSUs de meses antigos ficam bem antes do checkpoint
+// atual, então precisa escanear desde o início. Mais lotes que o normal
+// (ainda dentro do maxDuration=300s da página, throttle de 1.5s/chamada:
+// 150 lotes ≈ 225s, sobra margem pra upsert/overhead), mas pra empresa com
+// bastante histórico pode não dar pra chegar no mês pedido numa passada só
+// — é uma busca manual, melhor tentar e trazer parcial do que não tentar.
+const MAX_LOTES_BUSCA_HISTORICA = 150;
 
 type NotaBuscada = {
   nsu: string;
@@ -84,6 +94,7 @@ export type ResultadoSincronizacao = {
 export async function syncOneCompany(
   admin: SupabaseClient<any, any, any>,
   company: CompanyParaSincronizar,
+  competencia?: string, // "YYYY-MM" — se omitido, usa o mês corrente
 ): Promise<ResultadoSincronizacao> {
   const certificado = Array.isArray(company.certificates)
     ? company.certificates[0]
@@ -109,7 +120,20 @@ export async function syncOneCompany(
     const senha = decryptSecret(fromBytea(certificado.encrypted_password)).toString("utf8");
     const ambiente = AMBIENTE_MAP[company.nfse_ambiente as NfseAmbiente];
 
-    const hoje = new Date();
+    const mesCorrente = mesCorrenteBrasilia();
+    const competenciaAlvo = competencia && /^\d{4}-\d{2}$/.test(competencia) ? competencia : mesCorrente;
+    const [anoAlvo, mesAlvo] = competenciaAlvo.split("-").map(Number);
+    const ehMesCorrente = competenciaAlvo === mesCorrente;
+
+    // Mês corrente: só revisita a janela recente de NSU (rápido, cobre o
+    // caso comum de "tem nota nova desde a última sincronização"). Mês
+    // passado: a nota já pode estar bem antes do checkpoint atual, então
+    // não tem como confiar na janela — escaneia desde o NSU 0.
+    const nsuInicial = ehMesCorrente
+      ? Math.max(0, (company.ultimo_nsu_distribuicao ?? 0) - JANELA_REVISITADA)
+      : 0;
+    const maxLotes = ehMesCorrente ? MAX_LOTES_POR_EMPRESA : MAX_LOTES_BUSCA_HISTORICA;
+
     const resp = await fetch(`${process.env.NFSE_ENGINE_URL}/notas/buscar`, {
       method: "POST",
       headers: {
@@ -119,10 +143,10 @@ export async function syncOneCompany(
       body: JSON.stringify({
         certificado: { pfx_base64: pfxBase64, senha },
         ambiente,
-        ano: hoje.getUTCFullYear(),
-        mes: hoje.getUTCMonth() + 1,
-        nsu_inicial: Math.max(0, (company.ultimo_nsu_distribuicao ?? 0) - JANELA_REVISITADA),
-        max_lotes: MAX_LOTES_POR_EMPRESA,
+        ano: anoAlvo,
+        mes: mesAlvo,
+        nsu_inicial: nsuInicial,
+        max_lotes: maxLotes,
         cnpj_consulta: company.cnpj,
       }),
       cache: "no-store",
@@ -173,10 +197,14 @@ export async function syncOneCompany(
       if (upsertError) throw new Error(`Falha ao salvar notas: ${upsertError.message}`);
     }
 
+    // Nunca regride o checkpoint: uma busca histórica (competência
+    // passada) começa do NSU 0 e pode parar bem antes do checkpoint atual
+    // sem ter chegado nem perto dele.
+    const novoCheckpoint = Math.max(company.ultimo_nsu_distribuicao ?? 0, body.ultimo_nsu);
     await admin
       .from("companies")
       .update({
-        ultimo_nsu_distribuicao: body.ultimo_nsu,
+        ultimo_nsu_distribuicao: novoCheckpoint,
         ultima_sincronizacao_em: new Date().toISOString(),
         ultima_sincronizacao_status: "sucesso",
         ultima_sincronizacao_erro: null,
@@ -201,6 +229,7 @@ export async function syncOneCompany(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function syncAllCompanies(
   admin: SupabaseClient<any, any, any>,
+  competencia?: string, // "YYYY-MM" — se omitido, usa o mês corrente
 ): Promise<ResultadoSincronizacao[]> {
   const { data: companies } = await admin
     .from("companies")
@@ -210,7 +239,7 @@ export async function syncAllCompanies(
 
   const resultados: ResultadoSincronizacao[] = [];
   for (const company of companies ?? []) {
-    resultados.push(await syncOneCompany(admin, company as CompanyParaSincronizar));
+    resultados.push(await syncOneCompany(admin, company as CompanyParaSincronizar, competencia));
   }
   return resultados;
 }

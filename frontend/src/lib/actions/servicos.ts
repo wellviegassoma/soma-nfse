@@ -50,6 +50,7 @@ const serviceSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
+  tipoRetencaoIssqn: z.coerce.number().int().min(1).max(3),
   active: z.coerce.boolean(),
 });
 
@@ -76,6 +77,7 @@ export async function saveService(
     aliquotaCofins: formData.get("aliquotaCofins") || undefined,
     retencaoIrrfAliquota: formData.get("retencaoIrrfAliquota") || undefined,
     retencaoPisCofinsCsllAliquota: formData.get("retencaoPisCofinsCsllAliquota") || undefined,
+    tipoRetencaoIssqn: formData.get("tipoRetencaoIssqn"),
     active: formData.get("active") === "on",
   });
   if (!parsed.success) {
@@ -100,6 +102,7 @@ export async function saveService(
     aliquota_cofins: rest.aliquotaCofins ?? null,
     retencao_irrf_aliquota: rest.retencaoIrrfAliquota ?? null,
     retencao_pis_cofins_csll_aliquota: rest.retencaoPisCofinsCsllAliquota ?? null,
+    tipo_retencao_issqn: rest.tipoRetencaoIssqn,
     active: rest.active,
   };
 

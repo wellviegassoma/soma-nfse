@@ -59,6 +59,8 @@ export async function buscarAgora(
   await requireSomaStaff();
   const companyId = formData.get("companyId");
   if (typeof companyId !== "string") return { error: "Empresa inválida." };
+  const competenciaRaw = formData.get("competencia");
+  const competencia = typeof competenciaRaw === "string" ? competenciaRaw : undefined;
 
   const admin = createAdminClient();
   const { data: company } = await admin
@@ -70,7 +72,7 @@ export async function buscarAgora(
     .single();
   if (!company) return { error: "Empresa não encontrada." };
 
-  const resultado = await syncOneCompany(admin, company);
+  const resultado = await syncOneCompany(admin, company, competencia);
   revalidatePath(`/admin/empresas/${companyId}/fechamento`);
   return { resultado };
 }
@@ -81,9 +83,12 @@ export type BuscarTodasState =
 
 export async function buscarTodasAgora(
   _prevState: BuscarTodasState,
+  formData: FormData,
 ): Promise<BuscarTodasState> {
   await requireSomaStaff();
-  const resultados = await syncAllCompanies(createAdminClient());
+  const competenciaRaw = formData.get("competencia");
+  const competencia = typeof competenciaRaw === "string" ? competenciaRaw : undefined;
+  const resultados = await syncAllCompanies(createAdminClient(), competencia);
   revalidatePath("/admin/fechamento");
   return { resultados };
 }

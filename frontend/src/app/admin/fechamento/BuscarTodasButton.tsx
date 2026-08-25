@@ -5,7 +5,7 @@ import { buscarTodasAgora } from "@/lib/actions/fechamento";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 
-export function BuscarTodasButton() {
+export function BuscarTodasButton({ competencia }: { competencia: string }) {
   const [state, formAction, pending] = useActionState(buscarTodasAgora, undefined);
 
   const sucessos = state?.resultados?.filter((r) => r.status === "sucesso").length ?? 0;
@@ -16,8 +16,9 @@ export function BuscarTodasButton() {
   return (
     <div className="flex flex-col gap-2">
       <form action={formAction}>
+        <input type="hidden" name="competencia" value={competencia} />
         <Button type="submit" loading={pending}>
-          Buscar todas agora
+          Buscar todas agora ({competencia})
         </Button>
       </form>
       {state?.resultados && (

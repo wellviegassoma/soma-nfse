@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import type { Company } from "@/lib/types";
 import { FiscalForm } from "./FiscalForm";
+import { CompanyNameForm } from "./CompanyNameForm";
 
 export const metadata = { title: "Dados fiscais — Painel SOMA" };
 
@@ -23,8 +24,17 @@ export default async function AdminCompanyFiscalPage(
   if (!company) notFound();
 
   return (
-    <Card className="max-w-2xl p-6 sm:p-8">
-      <FiscalForm company={company as Company} />
-    </Card>
+    <div className="flex flex-col gap-6">
+      <Card className="max-w-2xl p-6 sm:p-8">
+        <CompanyNameForm
+          companyId={company.id}
+          legalName={company.legal_name}
+          tradeName={company.trade_name}
+        />
+      </Card>
+      <Card className="max-w-2xl p-6 sm:p-8">
+        <FiscalForm company={company as Company} />
+      </Card>
+    </div>
   );
 }

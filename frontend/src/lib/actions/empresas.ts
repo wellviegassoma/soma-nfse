@@ -99,6 +99,56 @@ export async function createCompany(
   redirect(`/admin/empresas/${company.id}`);
 }
 
+const updateIdentitySchema = z.object({
+  companyId: uuidLike,
+  legalName: z.string().trim().min(2, "Informe a razão social."),
+  tradeName: z.string().trim().optional(),
+});
+
+export async function updateCompanyIdentity(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireSomaStaff();
+
+  const parsed = updateIdentitySchema.safeParse({
+    companyId: formData.get("companyId"),
+    legalName: formData.get("legalName"),
+    tradeName: formData.get("tradeName") || undefined,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const { companyId, legalName, tradeName } = parsed.data;
+
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("companies")
+    .select("legal_name, trade_name")
+    .eq("id", companyId)
+    .single();
+
+  const { error } = await supabase
+    .from("companies")
+    .update({ legal_name: legalName, trade_name: tradeName || null })
+    .eq("id", companyId);
+  if (error) return { error: "Não foi possível salvar o nome da empresa." };
+
+  await logAudit({
+    companyId,
+    action: "UPDATE",
+    entity: "company_identity",
+    entityId: companyId,
+    oldValue: before,
+    newValue: { legal_name: legalName, trade_name: tradeName || null },
+  });
+
+  revalidatePath(`/admin/empresas/${companyId}`);
+  revalidatePath(`/admin/empresas/${companyId}/dados-fiscais`);
+  revalidatePath("/admin/empresas");
+  return { success: true };
+}
+
 const IMPORT_EMPRESAS_THROTTLE_MS = 350;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

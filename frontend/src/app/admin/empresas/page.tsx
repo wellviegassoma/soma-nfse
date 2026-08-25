@@ -2,15 +2,31 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 
 export const metadata = { title: "Empresas — Painel SOMA" };
 
-export default async function AdminEmpresasPage() {
+export default async function AdminEmpresasPage(props: PageProps<"/admin/empresas">) {
+  const searchParams = await props.searchParams;
+  const q = typeof searchParams.q === "string" ? searchParams.q.trim() : "";
+
   const supabase = await createClient();
-  const { data: companies, error } = await supabase
+  let query = supabase
     .from("companies")
     .select("id, legal_name, trade_name, cnpj, created_at")
-    .order("created_at", { ascending: false });
+    .order("legal_name", { ascending: true });
+
+  if (q) {
+    // PostgREST usa vírgula/parênteses como separador na sintaxe de `.or()`
+    // — precisa tirar do termo de busca pra não quebrar o filtro.
+    const termoSeguro = q.replace(/[,()]/g, " ").trim();
+    const digits = q.replace(/\D/g, "");
+    const termos = [`legal_name.ilike.%${termoSeguro}%`, `trade_name.ilike.%${termoSeguro}%`];
+    if (digits) termos.push(`cnpj.ilike.%${digits}%`);
+    if (termoSeguro || digits) query = query.or(termos.join(","));
+  }
+
+  const { data: companies, error } = await query;
 
   if (error) throw error;
 
@@ -20,7 +36,7 @@ export default async function AdminEmpresasPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">Empresas</h1>
           <p className="text-sm text-foreground/60">
-            {companies?.length ?? 0} empresa(s) cadastrada(s)
+            {companies?.length ?? 0} empresa(s) {q ? "encontrada(s)" : "cadastrada(s)"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -33,9 +49,28 @@ export default async function AdminEmpresasPage() {
         </div>
       </div>
 
+      <form className="flex gap-3">
+        <Input
+          name="q"
+          defaultValue={q}
+          placeholder="Buscar por nome ou CNPJ..."
+          className="max-w-sm"
+        />
+        <Button type="submit" variant="secondary">
+          Buscar
+        </Button>
+        {q && (
+          <Link href="/admin/empresas">
+            <Button type="button" variant="ghost">
+              Limpar
+            </Button>
+          </Link>
+        )}
+      </form>
+
       {!companies || companies.length === 0 ? (
         <Card className="p-10 text-center text-sm text-foreground/50">
-          Nenhuma empresa cadastrada ainda.
+          {q ? `Nenhuma empresa encontrada para "${q}".` : "Nenhuma empresa cadastrada ainda."}
         </Card>
       ) : (
         <Card className="divide-y divide-border overflow-hidden">

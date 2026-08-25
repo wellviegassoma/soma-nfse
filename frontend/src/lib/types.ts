@@ -96,7 +96,15 @@ export type Service = {
   aliquota_cofins: number | null;
   retencao_pis_cofins_csll_aliquota: number | null;
   retencao_irrf_aliquota: number | null;
+  tipo_retencao_issqn: number;
   active: boolean;
+};
+
+// tpRetISSQN — domínio do layout NFS-e Nacional.
+export const RETENCAO_ISSQN_LABELS: Record<number, string> = {
+  1: "Não retido (prestador recolhe)",
+  2: "Retido pelo tomador",
+  3: "Retido pelo intermediário",
 };
 
 export type ServicePublic = {

@@ -63,7 +63,7 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
               </Button>
             </a>
           </form>
-          <BuscarTodasButton />
+          <BuscarTodasButton competencia={competencia} />
         </div>
         <p className="mt-3 text-xs text-foreground/50">
           O ZIP traz, por empresa: XML e PDF (DANFSe) de cada nota da competência, mais o

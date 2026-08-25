@@ -95,7 +95,7 @@ export async function issueNfse(
     supabase
       .from("services")
       .select(
-        "national_tax_code, municipal_tax_code, nbs, cst_pis_cofins, percentual_total_tributos_federal, percentual_total_tributos_estadual, percentual_total_tributos_municipal, aliquota_pis, aliquota_cofins, retencao_pis_cofins_csll_aliquota, retencao_irrf_aliquota",
+        "national_tax_code, municipal_tax_code, nbs, cst_pis_cofins, percentual_total_tributos_federal, percentual_total_tributos_estadual, percentual_total_tributos_municipal, aliquota_pis, aliquota_cofins, retencao_pis_cofins_csll_aliquota, retencao_irrf_aliquota, tipo_retencao_issqn",
       )
       .eq("id", serviceId)
       .single(),
@@ -193,6 +193,7 @@ export async function issueNfse(
     descricao_servico: description,
     valor_servico: amount,
     data_competencia: competenceDate,
+    tipo_retencao_issqn: service.tipo_retencao_issqn ?? 1,
     ...(service.cst_pis_cofins ? { cst_pis_cofins: service.cst_pis_cofins } : {}),
     percentual_total_tributos_federal: service.percentual_total_tributos_federal,
     percentual_total_tributos_estadual: service.percentual_total_tributos_estadual,
