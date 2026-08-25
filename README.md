@@ -186,13 +186,16 @@ contábil (concluída)**
       corretamente com dados reais
 
 **Ajustes na Fase I (concluídos)**
-- [x] Reprocessa **do zero (NSU 0)** toda vez, em vez de resumir do
-      checkpoint — a distribuição por NSU filtra localmente por (ano, mês)
-      e um documento fora do filtro não é revisitado numa próxima
-      execução, então resumir arriscava nunca pegar uma nota que apareceu
-      fora de ordem. `companies.ultimo_nsu_distribuicao` vira só
-      informativo. Trade-off assumido: fica mais caro (mais chamadas ao
-      Sefin Nacional) conforme o histórico da empresa cresce
+- [x] ~~Reprocessa do zero (NSU 0) toda vez~~ — **tentado e revertido**:
+      pra uma empresa em NSU ~650, escanear tudo de novo leva ~16min só
+      de espera entre chamadas (throttle de 1.5s/chamada no cliente do
+      Sefin Nacional), estourando o tempo máximo da function — foi a
+      causa real de vários "falha no handshake TLS" que pareciam
+      instabilidade do governo, mas eram a nossa própria varredura sendo
+      cortada no meio. Solução final: revisita uma **janela recente e
+      limitada** (60 NSUs) a partir do checkpoint a cada execução — cobre
+      nota fora de ordem recente sem crescer pra sempre. Números
+      calibrados pro throttle (ver comentário em `lib/sync-notas.ts`)
 - [x] **Fechamento agora é exclusivo da SOMA** (SUPER_ADMIN/ADMIN_SOMA) —
       removido da área do cliente, movido pra dentro do Painel SOMA
       (`/admin/empresas/[id]/fechamento`). RLS de `notas_distribuidas`

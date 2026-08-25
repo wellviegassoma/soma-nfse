@@ -19,7 +19,7 @@ export async function buscarAgora(
   const { data: company } = await admin
     .from("companies")
     .select(
-      "id, cnpj, nfse_ambiente, certificates(encrypted_file, encrypted_password, expires_at)",
+      "id, cnpj, nfse_ambiente, ultimo_nsu_distribuicao, certificates(encrypted_file, encrypted_password, expires_at)",
     )
     .eq("id", companyId)
     .single();

@@ -9,14 +9,31 @@ const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
   PRODUCAO: "producao",
 };
 
-// Reprocessa do zero (NSU 0) toda vez — a distribuição por NSU filtra
-// localmente por (ano, mês) e um documento fora do filtro não fica
-// "guardado" pra próxima vez, então resumir de um checkpoint arrisca
-// nunca pegar uma nota que apareceu fora de ordem na distribuição.
-// Reprocessar tudo é mais caro (mais chamadas ao Sefin Nacional a cada
-// dia, crescendo com o histórico da empresa), mas garante que "não tem
-// nota nova" significa isso mesmo — decisão explícita, não é bug.
-const MAX_LOTES_POR_EMPRESA = 500;
+// A distribuição por NSU filtra localmente por (ano, mês) e um
+// documento fora do filtro não fica "guardado" pra próxima vez, então
+// resumir cegamente do último checkpoint arriscava nunca pegar uma nota
+// que apareceu fora de ordem na distribuição.
+//
+// A solução ingênua (voltar pro NSU 0 toda vez) foi tentada e revertida:
+// pra uma empresa já em NSU ~650, escanear tudo de novo leva ~16min só
+// de espera entre chamadas (throttle de 1.5s por chamada no cliente do
+// Sefin Nacional) — estoura o tempo máximo da function e foi a causa
+// real de vários "falha no handshake TLS" que pareciam instabilidade do
+// governo, mas eram a nossa própria varredura sendo cortada no meio.
+//
+// Em vez disso: revisita uma JANELA recente e limitada a partir do
+// checkpoint (não o histórico inteiro) — cobre o risco real (nota
+// chegando fora de ordem há pouco tempo) sem crescer pra sempre.
+// Empresa nova (checkpoint 0) começa do zero normalmente.
+//
+// Números calibrados pro throttle de 1.5s/chamada do cliente do Sefin
+// Nacional: 80 lotes ≈ 2min por empresa — dá pra rodar "buscar todas"
+// com poucas empresas dentro do maxDuration abaixo. Se o número de
+// clientes crescer bastante, ou o volume de notas por dia crescer muito
+// além de umas dezenas, revisar esses números (ou trocar pra fan-out —
+// uma invocação por empresa em vez de laço sequencial).
+const JANELA_REVISITADA = 60;
+const MAX_LOTES_POR_EMPRESA = 80;
 
 type NotaBuscada = {
   nsu: string;
@@ -49,6 +66,7 @@ type CompanyParaSincronizar = {
   id: string;
   cnpj: string | null;
   nfse_ambiente: string;
+  ultimo_nsu_distribuicao?: number | null;
   certificates:
     | { encrypted_file: string; encrypted_password: string; expires_at: string }
     | { encrypted_file: string; encrypted_password: string; expires_at: string }[]
@@ -103,7 +121,7 @@ export async function syncOneCompany(
         ambiente,
         ano: hoje.getUTCFullYear(),
         mes: hoje.getUTCMonth() + 1,
-        nsu_inicial: 0,
+        nsu_inicial: Math.max(0, (company.ultimo_nsu_distribuicao ?? 0) - JANELA_REVISITADA),
         max_lotes: MAX_LOTES_POR_EMPRESA,
         cnpj_consulta: company.cnpj,
       }),
@@ -187,7 +205,7 @@ export async function syncAllCompanies(
   const { data: companies } = await admin
     .from("companies")
     .select(
-      "id, cnpj, nfse_ambiente, certificates(encrypted_file, encrypted_password, expires_at)",
+      "id, cnpj, nfse_ambiente, ultimo_nsu_distribuicao, certificates(encrypted_file, encrypted_password, expires_at)",
     );
 
   const resultados: ResultadoSincronizacao[] = [];
