@@ -51,6 +51,11 @@ export type Company = {
   dps_next_number: number;
   regime_especial_tributacao: number;
   allow_retroactive_emission: boolean;
+  sujeito_fator_r: boolean;
+  fator_r_percentual: number | null;
+  rbt12_manual: number | null;
+  irpj_csll_apuracao_mensal: boolean;
+  iss_aliquota_padrao: number | null;
 };
 
 export type Organization = {

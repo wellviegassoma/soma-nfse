@@ -385,6 +385,9 @@ export async function inviteUserToCompany(
   return { success: true };
 }
 
+const percentualParaFracao = (v: string | undefined) =>
+  v ? Number(v.replace(",", ".")) / 100 : undefined;
+
 const updateFiscalSchema = z.object({
   companyId: uuidLike,
   municipalRegistration: z.string().trim().optional(),
@@ -396,6 +399,14 @@ const updateFiscalSchema = z.object({
   dpsNextNumber: z.coerce.number().int().min(1, "Precisa ser maior que zero."),
   regimeEspecialTributacao: z.coerce.number().int().min(0).max(6),
   allowRetroactiveEmission: z.boolean(),
+  sujeitoFatorR: z.boolean(),
+  fatorRPercentual: z.string().optional().transform(percentualParaFracao),
+  rbt12Manual: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
+  irpjCsllApuracaoMensal: z.boolean(),
+  issAliquotaPadrao: z.string().optional().transform(percentualParaFracao),
 });
 
 export async function updateCompanyFiscal(
@@ -415,6 +426,11 @@ export async function updateCompanyFiscal(
     dpsNextNumber: formData.get("dpsNextNumber"),
     regimeEspecialTributacao: formData.get("regimeEspecialTributacao"),
     allowRetroactiveEmission: formData.get("allowRetroactiveEmission") === "on",
+    sujeitoFatorR: formData.get("sujeitoFatorR") === "on",
+    fatorRPercentual: formData.get("fatorRPercentual") || undefined,
+    rbt12Manual: formData.get("rbt12Manual") || undefined,
+    irpjCsllApuracaoMensal: formData.get("irpjCsllApuracaoMensal") === "on",
+    issAliquotaPadrao: formData.get("issAliquotaPadrao") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -426,7 +442,7 @@ export async function updateCompanyFiscal(
   const { data: before } = await supabase
     .from("companies")
     .select(
-      "municipal_registration, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission",
+      "municipal_registration, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, fator_r_percentual, rbt12_manual, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
     )
     .eq("id", companyId)
     .single();
@@ -441,6 +457,11 @@ export async function updateCompanyFiscal(
     dps_next_number: rest.dpsNextNumber,
     regime_especial_tributacao: rest.regimeEspecialTributacao,
     allow_retroactive_emission: rest.allowRetroactiveEmission,
+    sujeito_fator_r: rest.sujeitoFatorR,
+    fator_r_percentual: rest.fatorRPercentual ?? null,
+    rbt12_manual: rest.rbt12Manual ?? null,
+    irpj_csll_apuracao_mensal: rest.irpjCsllApuracaoMensal,
+    iss_aliquota_padrao: rest.issAliquotaPadrao ?? null,
   };
 
   const { error } = await supabase.from("companies").update(newValue).eq("id", companyId);

@@ -10,6 +10,7 @@ const TABS = [
   { href: "servicos", label: "Serviços" },
   { href: "usuarios", label: "Usuários" },
   { href: "fechamento", label: "Fechamento" },
+  { href: "impostos", label: "Impostos" },
 ];
 
 export function AdminCompanyTabs({ companyId }: { companyId: string }) {

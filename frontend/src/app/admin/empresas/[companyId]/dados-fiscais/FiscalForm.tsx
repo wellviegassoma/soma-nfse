@@ -136,6 +136,98 @@ export function FiscalForm({ company }: { company: Company }) {
         </label>
       </div>
 
+      <div className="flex flex-col gap-4 border-t border-border pt-6">
+        <h2 className="text-sm font-semibold text-foreground/70">
+          Cálculo de imposto (aba Impostos)
+        </h2>
+
+        <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-foreground/50">
+            Simples Nacional
+          </div>
+          <label className="flex items-start gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              name="sujeitoFatorR"
+              defaultChecked={company.sujeito_fator_r}
+              className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+            />
+            <span>
+              Sujeito ao Fator R (decide entre Anexo III e V)
+              <span className="block text-xs text-foreground/50">
+                Sem isso, o cálculo usa direto o Anexo III. O sistema não controla folha de
+                pagamento — informe o percentual já calculado por fora.
+              </span>
+            </span>
+          </label>
+          <Field label="% do Fator R" htmlFor="fatorRPercentual" hint="Ex.: 28 = 28%. Acima de 28% usa Anexo III, abaixo usa Anexo V">
+            <Input
+              id="fatorRPercentual"
+              name="fatorRPercentual"
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              defaultValue={
+                company.fator_r_percentual != null ? company.fator_r_percentual * 100 : ""
+              }
+            />
+          </Field>
+          <Field
+            label="RBT12 manual (R$)"
+            htmlFor="rbt12Manual"
+            hint="Só preencha se a empresa já faturava antes de entrar no sistema — sem isso, o RBT12 é calculado só com o faturamento que o sistema já tem registrado, o que fica baixo demais pros primeiros meses"
+          >
+            <Input
+              id="rbt12Manual"
+              name="rbt12Manual"
+              type="number"
+              step="0.01"
+              min={0}
+              defaultValue={company.rbt12_manual ?? ""}
+            />
+          </Field>
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-foreground/50">
+            Lucro Presumido
+          </div>
+          <label className="flex items-start gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              name="irpjCsllApuracaoMensal"
+              defaultChecked={company.irpj_csll_apuracao_mensal}
+              className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+            />
+            <span>
+              Antecipar IRPJ/CSLL mensalmente
+              <span className="block text-xs text-foreground/50">
+                Por padrão, IRPJ/CSLL do Lucro Presumido são apurados por trimestre (guia só no
+                3º mês). Marque para recolher mês a mês em vez de esperar o trimestre fechar.
+              </span>
+            </span>
+          </label>
+          <Field
+            label="Alíquota de ISS do município (%)"
+            htmlFor="issAliquotaPadrao"
+            hint="Usada no cálculo agregado mensal de ISS"
+          >
+            <Input
+              id="issAliquotaPadrao"
+              name="issAliquotaPadrao"
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              defaultValue={
+                company.iss_aliquota_padrao != null ? company.iss_aliquota_padrao * 100 : ""
+              }
+            />
+          </Field>
+        </div>
+      </div>
+
       <div>
         <Button type="submit" loading={pending}>
           Salvar

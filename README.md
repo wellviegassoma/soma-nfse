@@ -309,6 +309,40 @@ empresas via CNPJ/planilha) (concluída)**
       contra o comportamento antigo que sempre usava a janela do checkpoint
       independente do mês escolhido
 
+**Fase N — Cálculo de imposto (Simples Nacional + Lucro Presumido) (concluída)**
+- [x] Nova aba **Impostos** por empresa (`/admin/empresas/[id]/impostos`) —
+      estimativa de DAS (Simples) ou guia de IRPJ/CSLL/PIS/COFINS/ISS
+      (Lucro Presumido) com base no faturamento já registrado no sistema
+      (mesma fonte unificada `dps` + `notas_distribuidas` da Visão geral),
+      não substitui a apuração oficial (PGDAS-D/ECF)
+- [x] Lógica conferida célula a célula contra as duas planilhas manuais
+      reais da SOMA (`047-LP.xlsx` Lucro Presumido, `064-SN.xlsx` Simples
+      Nacional) — script Node comparando meus cálculos contra os valores
+      já calculados nas planilhas, bateram exatos (RBT12, alíquota
+      efetiva, faixa, partilha do DAS, IRPJ/CSLL trimestral)
+  - Simples Nacional: tabela oficial dos Anexos III e V (LC 123/2006 +
+    reforma 2018) embutida em `lib/simples-nacional-tabela.ts`; RBT12
+    calculado a partir do faturamento dos 12 meses anteriores à
+    competência; alíquota efetiva = (RBT12×alíquota − parcela a
+    deduzir)/RBT12; ISS com piso de 2% e teto de 5%, como na planilha
+  - Lucro Presumido: IRPJ 15% sobre presunção de 32% (+ adicional de 10%
+    sobre o que exceder R$60mil/trimestre) e CSLL 9% sobre presunção de
+    32%, apurados por trimestre (guia só sai no 3º mês, com opção de
+    antecipar mensalmente); PIS 0,65% e COFINS 3% sempre mensais
+- [x] **Fator R** (decide Anexo III x V) e **RBT12** informados
+    manualmente por empresa em Dados fiscais — o sistema não tem
+    controle de folha de pagamento (Fator R real depende disso) nem
+    histórico de faturamento anterior à entrada da empresa no sistema
+    (RBT12 ficaria artificialmente baixo só com o que está aqui). Mesmo
+    raciocínio de "informar manualmente o que o sistema não rastreia" já
+    usado no resto do projeto
+- [x] Testado ao vivo: Simples Nacional com RBT12 manual (R$780mil,
+      Anexo III faixa 4) — todos os componentes do DAS conferidos contra
+      o cálculo esperado; Lucro Presumido no meio do trimestre (IRPJ/CSLL
+      zerados, com aviso da base acumulada) e no fechamento do trimestre
+      (IRPJ/CSLL calculados sobre a base trimestral mesmo em mês sem
+      faturamento próprio)
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
