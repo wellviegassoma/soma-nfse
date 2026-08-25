@@ -373,6 +373,15 @@ empresas via CNPJ/planilha) (concluída)**
       agosto mostra o aviso de desatualizado e usa o RBT12 estimado pelo
       sistema em vez do valor de julho
 
+**Ajuste — Top 5 de imposto e alíquota na Visão geral (concluído)**
+- [x] Dois novos cards ao lado dos Top 5 já existentes (faturamento e
+      notas emitidas): **Top 5 — maior imposto do mês** e **Top 5 — maior
+      alíquota**, usando o mesmo `imposto` já calculado por empresa pra
+      preencher as colunas da tabela de faturamento
+- [x] Testado ao vivo — SOMA Contabilidade Integrada aparece corretamente
+      nos dois (R$ 7.628,35 / 11,7% em 08/2026, já com o RBT12 real
+      atualizado)
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

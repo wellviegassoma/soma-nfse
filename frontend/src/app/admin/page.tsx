@@ -230,6 +230,16 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
     .sort((a, b) => b.agr.notasCompetencia - a.agr.notasCompetencia)
     .slice(0, 5);
 
+  const porImposto = [...linhas]
+    .filter((l) => l.imposto != null && l.imposto.valor > 0)
+    .sort((a, b) => b.imposto!.valor - a.imposto!.valor)
+    .slice(0, 5);
+
+  const porAliquota = [...linhas]
+    .filter((l) => l.imposto != null && l.imposto.aliquotaEfetiva > 0)
+    .sort((a, b) => b.imposto!.aliquotaEfetiva - a.imposto!.aliquotaEfetiva)
+    .slice(0, 5);
+
   const linhasOrdenadas = [...linhas].sort(
     (a, b) => b.agr.faturamentoCompetencia - a.agr.faturamentoCompetencia,
   );
@@ -381,6 +391,62 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
                   </span>
                   <span className="shrink-0 text-sm font-semibold text-foreground">
                     {agr.notasCompetencia}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Card className="overflow-hidden">
+          <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
+            Top 5 — maior imposto do mês
+          </div>
+          {porImposto.length === 0 ? (
+            <div className="p-6 text-center text-sm text-foreground/50">
+              Nenhuma empresa com imposto calculado nessa competência.
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {porImposto.map(({ empresa, imposto }, i) => (
+                <div key={empresa.id} className="flex items-center gap-3 px-5 py-3">
+                  <span className="w-4 shrink-0 text-xs font-semibold text-foreground/40">
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                    {empresa.trade_name || empresa.legal_name}
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold text-foreground">
+                    {formatMoney(imposto!.valor)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card className="overflow-hidden">
+          <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
+            Top 5 — maior alíquota
+          </div>
+          {porAliquota.length === 0 ? (
+            <div className="p-6 text-center text-sm text-foreground/50">
+              Nenhuma empresa com alíquota calculada nessa competência.
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {porAliquota.map(({ empresa, imposto }, i) => (
+                <div key={empresa.id} className="flex items-center gap-3 px-5 py-3">
+                  <span className="w-4 shrink-0 text-xs font-semibold text-foreground/40">
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                    {empresa.trade_name || empresa.legal_name}
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold text-foreground">
+                    {formatPercent(imposto!.aliquotaEfetiva)}
                   </span>
                 </div>
               ))}
