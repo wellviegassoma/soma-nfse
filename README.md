@@ -436,6 +436,12 @@ empresas via CNPJ/planilha) (concluída)**
       excedente trimestral) como linhas separadas, batendo exato com o
       cálculo manual
 
+**Ajuste — Coluna de regime tributário na Visão geral (concluído)**
+- [x] Nova coluna "Regime" na tabela "Faturamento por empresa" — sigla
+      curta (SN = Simples Nacional, LP = Lucro Presumido, LR = Lucro
+      Real, "—" = sem regime definido), direto do `tax_regime` já
+      cadastrado, sem precisar entrar em cada empresa pra saber
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

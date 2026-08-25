@@ -23,6 +23,12 @@ function formatPercent(value: number) {
   return `${(value * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 }
 
+const SIGLA_REGIME: Record<string, string> = {
+  SIMPLES_NACIONAL: "SN",
+  LUCRO_PRESUMIDO: "LP",
+  LUCRO_REAL: "LR",
+};
+
 type DpsRow = {
   company_id: string;
   valor: number;
@@ -467,6 +473,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
           <>
             <div className="flex items-center gap-4 border-b border-border px-5 py-2 text-xs font-medium text-foreground/40">
               <div className="min-w-0 flex-1">Empresa</div>
+              <div className="w-12 shrink-0 text-right">Regime</div>
               <div className="w-16 shrink-0 text-right">Alíquota</div>
               <div className="w-28 shrink-0 text-right">Imposto do mês</div>
               <div className="w-28 shrink-0 text-right">Faturamento</div>
@@ -481,6 +488,9 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
                     <div className="text-xs text-foreground/50">
                       {agr.notasCompetencia} nota(s) na competência
                     </div>
+                  </div>
+                  <div className="w-12 shrink-0 text-right text-sm text-foreground/70">
+                    {empresa.tax_regime ? SIGLA_REGIME[empresa.tax_regime] : "—"}
                   </div>
                   <div className="w-16 shrink-0 text-right text-sm text-foreground/70">
                     {imposto ? formatPercent(imposto.aliquotaEfetiva) : "—"}
