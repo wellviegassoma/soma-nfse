@@ -269,16 +269,17 @@ export default async function ImpostosPage(
 
       {!resultado.apuracaoMensal && !ehUltimoMesDoTrimestre && (
         <Alert tone="warning">
-          Apuração trimestral — IRPJ/CSLL desse mês só saem na guia do último mês do trimestre (
-          {formatCompetencia(mesesTrimestre[2])}). Base acumulada até aqui:{" "}
+          IRPJ e CSLL abaixo são a estimativa desse mês — como a apuração é trimestral, o DARF de
+          verdade só sai no fechamento do trimestre ({formatCompetencia(mesesTrimestre[2])}),
+          somando os 3 meses. Base acumulada do trimestre até aqui:{" "}
           {formatMoney(resultado.baseTrimestreIrpj)} (IRPJ).
         </Alert>
       )}
 
       {resultado.adicionalIrpjAplicado && (
         <Alert tone="warning">
-          Base do IRPJ no trimestre passou de R$ 60.000,00 — adicional de 10% já incluído no
-          valor abaixo.
+          Base do IRPJ no trimestre passou de R$ 60.000,00 — o adicional de 10% aparece
+          destacado numa linha própria abaixo.
         </Alert>
       )}
 
@@ -288,9 +289,17 @@ export default async function ImpostosPage(
         </div>
         <div className="divide-y divide-border">
           <div className="flex items-center justify-between px-5 py-3 text-sm">
-            <span className="text-foreground/70">IRPJ</span>
-            <span className="font-medium text-foreground">{formatMoney(resultado.irpj)}</span>
+            <span className="text-foreground/70">IRPJ (15%)</span>
+            <span className="font-medium text-foreground">{formatMoney(resultado.irpjBase)}</span>
           </div>
+          {resultado.irpjAdicional > 0 && (
+            <div className="flex items-center justify-between px-5 py-3 text-sm">
+              <span className="text-foreground/70">Adicional de IRPJ (10%)</span>
+              <span className="font-medium text-foreground">
+                {formatMoney(resultado.irpjAdicional)}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between px-5 py-3 text-sm">
             <span className="text-foreground/70">CSLL</span>
             <span className="font-medium text-foreground">{formatMoney(resultado.csll)}</span>

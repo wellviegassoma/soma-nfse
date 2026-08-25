@@ -83,6 +83,8 @@ const PIS_ALIQUOTA = 0.0065; // regime cumulativo
 const COFINS_ALIQUOTA = 0.03; // regime cumulativo
 
 export type ResultadoLucroPresumido = {
+  irpjBase: number;
+  irpjAdicional: number;
   irpj: number;
   csll: number;
   pis: number;
@@ -108,33 +110,30 @@ export function calcularLucroPresumido(params: {
   const baseIrpjMes = receitaMes * PRESUNCAO_SERVICOS_IRPJ;
   const baseIrpjTrimestre = receitaTrimestre * PRESUNCAO_SERVICOS_IRPJ;
   const baseCsllMes = receitaMes * PRESUNCAO_SERVICOS_CSLL;
-  const baseCsllTrimestre = receitaTrimestre * PRESUNCAO_SERVICOS_CSLL;
 
-  // O adicional de 10% só é verificado no fechamento do trimestre (ou a
-  // cada mês, se antecipação mensal, mas sempre sobre a base acumulada do
-  // trimestre até ali) — mesma regra da planilha manual: só entra na
-  // conta no 3º mês.
+  // IRPJ/CSLL sempre mostram a estimativa do MÊS (base do próprio mês),
+  // não zerado nos dois primeiros meses do trimestre esperando o
+  // fechamento — mesmo quando o recolhimento real só sai trimestral, é
+  // mais útil ver o valor acumulando mês a mês do que ver R$0,00 até o
+  // 3º mês. O adicional de 10% continua sendo assentado só no fechamento
+  // do trimestre (mesma regra da planilha manual), sobre a base
+  // acumulada do trimestre até ali — não dá pra saber se ele se aplica
+  // usando só o mês isolado.
   const adicionalIrpj = ehUltimoMesDoTrimestre
     ? Math.max(0, baseIrpjTrimestre - IRPJ_ADICIONAL_LIMITE_TRIMESTRE) * IRPJ_ADICIONAL_ALIQUOTA
     : 0;
 
-  const irpj = apuracaoMensal
-    ? baseIrpjMes * IRPJ_ALIQUOTA + adicionalIrpj
-    : ehUltimoMesDoTrimestre
-      ? baseIrpjTrimestre * IRPJ_ALIQUOTA + adicionalIrpj
-      : 0;
-
-  const csll = apuracaoMensal
-    ? baseCsllMes * CSLL_ALIQUOTA
-    : ehUltimoMesDoTrimestre
-      ? baseCsllTrimestre * CSLL_ALIQUOTA
-      : 0;
+  const irpjBase = baseIrpjMes * IRPJ_ALIQUOTA;
+  const irpj = irpjBase + adicionalIrpj;
+  const csll = baseCsllMes * CSLL_ALIQUOTA;
 
   const pis = receitaMes * PIS_ALIQUOTA;
   const cofins = receitaMes * COFINS_ALIQUOTA;
   const iss = aliquotaIss != null ? receitaMes * aliquotaIss : null;
 
   return {
+    irpjBase,
+    irpjAdicional: adicionalIrpj,
     irpj,
     csll,
     pis,

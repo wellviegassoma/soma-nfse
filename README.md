@@ -419,6 +419,23 @@ empresas via CNPJ/planilha) (concluída)**
       sincronizou com sucesso — 22 notas reais recuperadas
       (R$ 96.250,43 em saídas)
 
+**Ajuste — Lucro Presumido: IRPJ/CSLL sempre por mês, adicional em linha própria**
+- [x] IRPJ e CSLL na aba Impostos agora sempre mostram a estimativa do
+      **mês** selecionado (base do próprio mês × alíquota) — antes, fora
+      do último mês do trimestre mostrava R$0,00 (esperando o
+      fechamento), e no último mês mostrava a base do trimestre inteiro
+      lumpada (podendo parecer "alto demais" pra quem está olhando só
+      aquele mês)
+- [x] O adicional de 10% (quando a base do trimestre passa de R$60mil)
+      continua sendo assentado só no fechamento do trimestre — mas agora
+      aparece em **linha própria** ("Adicional de IRPJ") em vez de
+      embutido dentro do valor de IRPJ, deixando claro quanto é base e
+      quanto é adicional
+- [x] Testado ao vivo: mês que é o fechamento do trimestre mostra IRPJ
+      (15% sobre a base do mês) e Adicional de IRPJ (10% sobre o
+      excedente trimestral) como linhas separadas, batendo exato com o
+      cálculo manual
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
