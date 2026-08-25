@@ -2,7 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_ROUTES = ["/login", "/esqueci-senha", "/redefinir-senha"];
-const PUBLIC_PREFIXES = ["/auth/"];
+// /api/cron/ não usa sessão de usuário — autentica sozinha via
+// CRON_SECRET (ver route.ts), porque quem chama é o Vercel Cron, não um
+// navegador logado. Sem essa exceção, o middleware redireciona a
+// chamada pro /login antes de a rota conseguir checar o token.
+const PUBLIC_PREFIXES = ["/auth/", "/api/cron/"];
 
 function isPublicRoute(pathname: string) {
   return (

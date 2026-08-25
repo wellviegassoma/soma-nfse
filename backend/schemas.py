@@ -106,6 +106,12 @@ class BuscarNotasRequest(BaseModel):
     mes: int
     nsu_inicial: int = 0
     max_lotes: int = 2000
+    # CNPJ do contribuinte cujas notas estão sendo consultadas — o app
+    # desktop original SEMPRE envia esse parâmetro (mesmo consultando com
+    # o certificado da própria empresa); API de distribuição retornou 403
+    # num teste real sem ele, mesmo com raiz de CNPJ batendo com o
+    # certificado.
+    cnpj_consulta: Optional[str] = None
 
 
 class NotaEncontradaOut(BaseModel):

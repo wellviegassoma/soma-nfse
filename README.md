@@ -142,6 +142,49 @@ docs/       especificação do produto
       tomador já cadastrado + um novo — resultado correto (1 importado, 1
       ignorado), tomador novo apareceu na lista
 
+**Fase I — Sincronização diária de notas (saída + entrada) pro fechamento
+contábil (concluída)**
+- [x] Portado do app desktop original (`C:\nfse_app`, byte a byte, mesmo
+      princípio das outras fases): `nfse_client.py` (distribuição por NSU,
+      `GET /contribuintes/DFe/{nsu}`), `relatorio.py` (PDF de fechamento
+      mensal — saída/entrada × ativas/canceladas) e `codigos_atividade.py`.
+      Endpoints novos no backend: `POST /notas/buscar`, `POST
+      /relatorios/faturamento`
+- [x] **Bug real corrigido, confirmado contra produção**: a API de
+      distribuição respondia 403 mesmo com o certificado correto (raiz de
+      CNPJ batendo) — o app desktop original sempre envia o parâmetro
+      `cnpj_consulta` explícito, mesmo consultando com o certificado da
+      própria empresa; nosso port omitia esse campo. Adicionado em
+      `BuscarNotasRequest.cnpj_consulta` — confirmado buscando 75 notas
+      reais (67 saída + 5 entrada + 3 canceladas) em 19/08/2026
+- [x] Tabela `notas_distribuidas` (XML completo + campos extraídos +
+      direção saída/entrada, calculada pela raiz do CNPJ) e checkpoint de
+      NSU por empresa (`companies.ultimo_nsu_distribuicao`) — nunca
+      reescaneia do zero
+- [x] `frontend/src/app/api/cron/sync-notas` — Vercel Cron (`vercel.json`,
+      1x/dia às 03:00 Brasília), autenticado por `CRON_SECRET` (não usa
+      sessão — precisa estar em `PUBLIC_PREFIXES` do middleware). Decripta
+      o certificado de cada empresa, chama `/notas/buscar` a partir do
+      checkpoint, grava em `notas_distribuidas`, atualiza status da última
+      sincronização (`companies.ultima_sincronizacao_*`)
+  - **Bug real corrigido**: o índice único usado no `upsert` (dedup por
+    `chave_acesso`) era parcial (`where chave_acesso is not null`) — o
+    PostgREST não consegue usar índice parcial como alvo de `ON CONFLICT`,
+    então todo upsert falhava *silenciosamente* (sem checagem de erro no
+    código) e a sincronização reportava sucesso com a tabela vazia.
+    Corrigido: índice comum (já lida com múltiplos NULLs sem precisar de
+    `where`) + checagem de erro explícita no route.ts
+  - Escala atual (poucas empresas) roda tudo sequencial numa function só,
+    com teto de lotes por empresa por execução — se crescer muito, trocar
+    por fan-out (uma invocação por empresa)
+- [x] Aba **Fechamento** por empresa: filtro de competência, contadores
+      saída/entrada/canceladas/não-classificadas, listas, botão "Baixar
+      relatório PDF" (`fechamento/relatorio/route.ts`, usa as notas já
+      sincronizadas — não precisa do certificado de novo)
+- [x] Testado ao vivo em produção real (empresa SOMA Contabilidade
+      Integrada): sincronização completa, PDF de 8 páginas gerado
+      corretamente com dados reais
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

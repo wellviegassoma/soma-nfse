@@ -14,8 +14,7 @@ original (mesmo código já validado contra notas reais aceitas) — ver
 docs/spec.md na raiz do monorepo para o histórico dessa decisão.
 
 Rotas ainda não portadas (não são bloqueio pra emitir/consultar):
-/notas/buscar, /relatorios/faturamento, /municipios, /cep, /cnpj,
-/codigos-tributacao-nacional, /codigos-nbs.
+/municipios, /cep, /cnpj, /codigos-tributacao-nacional, /codigos-nbs.
 """
 
 from __future__ import annotations
@@ -34,16 +33,23 @@ from fastapi.responses import Response
 
 import danfse
 import emissor
+import relatorio
 from auth import exigir_token_interno
 from certificado import carregar_certificado_pfx, limpar_certificado_temporario
 from certificado_temp import certificado_temporario
+from nfse_client import ClienteNFSeNacional
 from schemas import (
+    BuscarNotasRequest,
+    BuscarNotasResponse,
     CancelarNotaRequest,
     CancelarNotaResponse,
     DanfseRequest,
+    DiagnosticoBuscaOut,
     EmitirNotaRequest,
     EmitirNotaResponse,
+    NotaEncontradaOut,
     ParametrosServicoRequest,
+    RelatorioFaturamentoRequest,
 )
 from sefin_nacional_client import ClienteSefinNacional, ErroSefinNacional
 
@@ -156,6 +162,49 @@ def gerar_danfse(req: DanfseRequest):
             danfse.gerar_danfse_pdf(req.xml_nfse, caminho_pdf, cancelada=req.cancelada)
         except danfse.ErroDanfse as e:
             raise HTTPException(status_code=422, detail=str(e))
+        pdf_bytes = Path(caminho_pdf).read_bytes()
+    return Response(content=pdf_bytes, media_type="application/pdf")
+
+
+@app.post("/notas/buscar", response_model=BuscarNotasResponse, dependencies=[Depends(exigir_token_interno)])
+def buscar_notas(req: BuscarNotasRequest):
+    pfx_bytes = base64.b64decode(req.certificado.pfx_base64)
+    try:
+        with certificado_temporario(pfx_bytes) as caminho_pfx:
+            with ClienteNFSeNacional(
+                caminho_pfx, req.certificado.senha, ambiente=req.ambiente, cnpj_consulta=req.cnpj_consulta,
+            ) as cliente:
+                notas, ultimo_nsu, diagnostico = cliente.buscar_notas_do_mes(
+                    ano=req.ano, mes=req.mes, nsu_inicial=req.nsu_inicial, max_lotes=req.max_lotes,
+                )
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return BuscarNotasResponse(
+        notas=[NotaEncontradaOut(**vars(n)) for n in notas],
+        ultimo_nsu=ultimo_nsu,
+        diagnostico=DiagnosticoBuscaOut(
+            total_documentos_vistos=diagnostico.total_documentos_vistos,
+            documentos_sem_xml_decodificavel=diagnostico.documentos_sem_xml_decodificavel,
+            documentos_sem_data_reconhecida=diagnostico.documentos_sem_data_reconhecida,
+            documentos_com_data_fora_do_mes=diagnostico.documentos_com_data_fora_do_mes,
+            resumo_texto=diagnostico.resumo_texto(req.ano, req.mes),
+        ),
+    )
+
+
+@app.post("/relatorios/faturamento", dependencies=[Depends(exigir_token_interno)])
+def gerar_relatorio_faturamento(req: RelatorioFaturamentoRequest):
+    with tempfile.TemporaryDirectory(prefix="nfse_engine_relatorio_") as pasta:
+        caminho_pdf = str(Path(pasta) / "relatorio.pdf")
+        relatorio.gerar_relatorio_pdf(
+            caminho_saida=caminho_pdf,
+            nome_empresa=req.nome_empresa,
+            cnpj_empresa=req.cnpj_empresa,
+            ano=req.ano,
+            mes=req.mes,
+            notas=req.notas,
+        )
         pdf_bytes = Path(caminho_pdf).read_bytes()
     return Response(content=pdf_bytes, media_type="application/pdf")
 
