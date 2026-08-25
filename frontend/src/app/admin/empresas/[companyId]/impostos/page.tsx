@@ -13,7 +13,9 @@ import {
   resolverRbt12,
   somarFaturamento,
 } from "@/lib/faturamento";
+import { buscarFolhaMensal, resolverFatorR, resolverFp12 } from "@/lib/folha";
 import { calcularLucroPresumido, calcularSimplesNacional } from "@/lib/calculo-impostos";
+import { FolhaMensalForm } from "./FolhaMensalForm";
 
 export const metadata = { title: "Impostos — Painel SOMA" };
 
@@ -48,7 +50,7 @@ export default async function ImpostosPage(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, tax_regime, sujeito_fator_r, fator_r_percentual, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+      "id, tax_regime, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
     )
     .eq("id", companyId)
     .single();
@@ -114,12 +116,24 @@ export default async function ImpostosPage(
       rbt12ManualCompetencia: company.rbt12_manual_competencia,
     });
 
+    const folhaMensal = company.sujeito_fator_r ? await buscarFolhaMensal(supabase, companyId) : [];
+    const folhaPorMes = new Map(folhaMensal.map((f) => [f.competencia, f.valor]));
+    const fp12Info = company.sujeito_fator_r
+      ? resolverFp12({
+          competencia,
+          folhaPorMes: (mes) => folhaPorMes.get(mes),
+          mesesComDados: new Set(folhaPorMes.keys()),
+        })
+      : null;
+    const fatorRPercentual = fp12Info ? resolverFatorR(fp12Info.fp12, rbt12) : null;
+    const folhaDoMes = folhaPorMes.get(competencia) ?? null;
+
     const resultado = calcularSimplesNacional({
       receitaMes,
       rbt12,
       rbt12Estimado,
       sujeitoFatorR: company.sujeito_fator_r,
-      fatorRPercentual: company.fator_r_percentual,
+      fatorRPercentual,
     });
 
     return (
@@ -193,6 +207,53 @@ export default async function ImpostosPage(
             </Link>
             .
           </Alert>
+        )}
+
+        {company.sujeito_fator_r && fp12Info && (
+          <Card className="flex flex-col gap-4 p-6">
+            <div className="text-sm font-semibold text-foreground/70">
+              Fator R — decide Anexo III (≥28%) ou Anexo V (abaixo de 28%)
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div>
+                <div className="text-xs text-foreground/50">
+                  Folha acumulada 12 meses{fp12Info.estimado ? " (estimada)" : ""}
+                </div>
+                <div className="mt-1 text-base font-semibold text-foreground">
+                  {formatMoney(fp12Info.fp12)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-foreground/50">Fator R</div>
+                <div className="mt-1 text-base font-semibold text-foreground">
+                  {fatorRPercentual != null ? formatPercent(fatorRPercentual) : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-foreground/50">Meses de folha informados</div>
+                <div className="mt-1 text-base font-semibold text-foreground">
+                  {fp12Info.mesesDisponiveis} de 12
+                </div>
+              </div>
+            </div>
+
+            {fatorRPercentual == null && (
+              <Alert tone="warning">
+                Nenhuma folha de pagamento informada ainda — usando Anexo III por padrão (regra
+                oficial na ausência de Fator R). Preencha a folha do mês abaixo pra passar a
+                calcular de verdade.
+              </Alert>
+            )}
+            {fatorRPercentual != null && fp12Info.estimado && (
+              <Alert tone="warning">
+                Menos de 12 meses de folha informados ({fp12Info.mesesDisponiveis} mês(es)) — Fator
+                R projetado proporcionalmente. Continue preenchendo mês a mês pra ficar exato.
+              </Alert>
+            )}
+
+            <FolhaMensalForm companyId={companyId} competencia={competencia} valorAtual={folhaDoMes} />
+          </Card>
         )}
 
         <Card className="overflow-hidden">

@@ -155,24 +155,12 @@ export function FiscalForm({ company }: { company: Company }) {
             <span>
               Sujeito ao Fator R (decide entre Anexo III e V)
               <span className="block text-xs text-foreground/50">
-                Sem isso, o cálculo usa direto o Anexo III. O sistema não controla folha de
-                pagamento — informe o percentual já calculado por fora.
+                Sem isso, o cálculo usa direto o Anexo III. Com isso marcado, o Fator R
+                (folha ÷ RBT12) é calculado sozinho a partir da folha de pagamento informada
+                mês a mês na aba Impostos da empresa.
               </span>
             </span>
           </label>
-          <Field label="% do Fator R" htmlFor="fatorRPercentual" hint="Ex.: 28 = 28%. Acima de 28% usa Anexo III, abaixo usa Anexo V">
-            <Input
-              id="fatorRPercentual"
-              name="fatorRPercentual"
-              type="number"
-              step="0.01"
-              min={0}
-              max={100}
-              defaultValue={
-                company.fator_r_percentual != null ? company.fator_r_percentual * 100 : ""
-              }
-            />
-          </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               label="RBT12 manual (R$)"

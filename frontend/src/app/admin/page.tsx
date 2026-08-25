@@ -6,6 +6,7 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { competenciasTrimestre, resolverRbt12 } from "@/lib/faturamento";
+import { resolverFatorR, resolverFp12 } from "@/lib/folha";
 import { calcularImpostoResumo } from "@/lib/calculo-impostos";
 
 export const metadata = { title: "Visão geral — Painel SOMA" };
@@ -110,27 +111,36 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   // Escala atual do produto é pequena (poucas empresas/notas) — busca
   // tudo e agrega em JS. Se crescer muito, trocar por uma agregação SQL
   // (RPC) em vez de trazer toda a tabela `dps` pro servidor Next.js.
-  const [{ data: companies }, { data: notas }, { data: distribuidas }] = await Promise.all([
-    supabase
-      .from("companies")
-      .select(
-        "id, legal_name, trade_name, created_at, tax_regime, sujeito_fator_r, fator_r_percentual, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
-      )
-      .order("legal_name", { ascending: true }),
-    supabase
-      .from("dps")
-      .select("company_id, valor, status, data_competencia, nfse(status, access_key)")
-      .order("data_competencia", { ascending: false }),
-    supabase
-      .from("notas_distribuidas")
-      .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao")
-      .eq("direcao", "saida"),
-  ]);
+  const [{ data: companies }, { data: notas }, { data: distribuidas }, { data: folhas }] =
+    await Promise.all([
+      supabase
+        .from("companies")
+        .select(
+          "id, legal_name, trade_name, created_at, tax_regime, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+        )
+        .order("legal_name", { ascending: true }),
+      supabase
+        .from("dps")
+        .select("company_id, valor, status, data_competencia, nfse(status, access_key)")
+        .order("data_competencia", { ascending: false }),
+      supabase
+        .from("notas_distribuidas")
+        .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao")
+        .eq("direcao", "saida"),
+      supabase.from("folha_mensal").select("company_id, competencia, valor"),
+    ]);
 
   const empresas = companies ?? [];
   const todasNotas = (notas ?? []) as unknown as DpsRow[];
   const todasDistribuidas = (distribuidas ?? []) as NotaDistribuidaRow[];
   const notasUnificadas = unificarNotasDeSaida(todasNotas, todasDistribuidas);
+
+  const porEmpresaPorMesFolha = new Map<string, Map<string, number>>();
+  for (const f of folhas ?? []) {
+    const porMes = porEmpresaPorMesFolha.get(f.company_id) ?? new Map<string, number>();
+    porMes.set(f.competencia, Number(f.valor));
+    porEmpresaPorMesFolha.set(f.company_id, porMes);
+  }
 
   type Agregado = {
     notasCompetencia: number;
@@ -212,12 +222,22 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       rbt12Manual: empresa.rbt12_manual,
       rbt12ManualCompetencia: empresa.rbt12_manual_competencia,
     });
+    let fatorRPercentual: number | null = null;
+    if (empresa.sujeito_fator_r) {
+      const porMesFolha = porEmpresaPorMesFolha.get(empresa.id);
+      const { fp12 } = resolverFp12({
+        competencia,
+        folhaPorMes: (mes) => porMesFolha?.get(mes),
+        mesesComDados: new Set(porMesFolha?.keys() ?? []),
+      });
+      fatorRPercentual = resolverFatorR(fp12, rbt12);
+    }
     const imposto = calcularImpostoResumo({
       taxRegime: empresa.tax_regime,
       receitaMes: agr.faturamentoCompetencia,
       rbt12,
       sujeitoFatorR: empresa.sujeito_fator_r,
-      fatorRPercentual: empresa.fator_r_percentual,
+      fatorRPercentual,
       receitaTrimestre: mesesTrimestre.reduce((acc, m) => acc + receitaPorMes(m), 0),
       ehUltimoMesDoTrimestre,
       apuracaoMensal: empresa.irpj_csll_apuracao_mensal,

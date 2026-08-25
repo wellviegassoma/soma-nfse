@@ -400,7 +400,6 @@ const updateFiscalSchema = z.object({
   regimeEspecialTributacao: z.coerce.number().int().min(0).max(6),
   allowRetroactiveEmission: z.boolean(),
   sujeitoFatorR: z.boolean(),
-  fatorRPercentual: z.string().optional().transform(percentualParaFracao),
   rbt12Manual: z
     .string()
     .optional()
@@ -428,7 +427,6 @@ export async function updateCompanyFiscal(
     regimeEspecialTributacao: formData.get("regimeEspecialTributacao"),
     allowRetroactiveEmission: formData.get("allowRetroactiveEmission") === "on",
     sujeitoFatorR: formData.get("sujeitoFatorR") === "on",
-    fatorRPercentual: formData.get("fatorRPercentual") || undefined,
     rbt12Manual: formData.get("rbt12Manual") || undefined,
     rbt12ManualCompetencia: formData.get("rbt12ManualCompetencia") || undefined,
     irpjCsllApuracaoMensal: formData.get("irpjCsllApuracaoMensal") === "on",
@@ -444,7 +442,7 @@ export async function updateCompanyFiscal(
   const { data: before } = await supabase
     .from("companies")
     .select(
-      "municipal_registration, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, fator_r_percentual, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+      "municipal_registration, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
     )
     .eq("id", companyId)
     .single();
@@ -460,7 +458,6 @@ export async function updateCompanyFiscal(
     regime_especial_tributacao: rest.regimeEspecialTributacao,
     allow_retroactive_emission: rest.allowRetroactiveEmission,
     sujeito_fator_r: rest.sujeitoFatorR,
-    fator_r_percentual: rest.fatorRPercentual ?? null,
     rbt12_manual: rest.rbt12Manual ?? null,
     rbt12_manual_competencia: rest.rbt12ManualCompetencia || null,
     irpj_csll_apuracao_mensal: rest.irpjCsllApuracaoMensal,

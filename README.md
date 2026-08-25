@@ -468,6 +468,38 @@ empresas via CNPJ/planilha) (concluída)**
       certificado em ~40s (97 notas no total), dentro do limite de 300s
       da function
 
+**Ajuste — Fator R com controle mensal de verdade (concluído)**
+- [x] Antes, o Fator R (folha ÷ RBT12, decide Anexo III x V no Simples
+      Nacional) era um percentual fixo informado uma única vez por
+      empresa em Dados fiscais — não acompanhava a janela móvel de 12
+      meses como o RBT12 já fazia. A pedido do usuário, passou a seguir a
+      mesma lógica: folha de pagamento informada mês a mês (não tem fonte
+      automática no sistema, diferente da receita, que vem das notas), e
+      o Fator R de cada competência é calculado sozinho a partir da soma
+      dos 12 meses de folha informados ÷ RBT12 da mesma janela
+- [x] Nova tabela `folha_mensal` (empresa + competência + valor,
+      `supabase/migrations/20260826100000_fase_n_folha_mensal_fator_r.sql`),
+      RLS exclusiva da equipe SOMA — mesmo padrão de `notas_distribuidas`
+- [x] `resolverFp12()`/`resolverFatorR()` (`lib/folha.ts`) — janela de 12
+      meses idêntica ao RBT12 (`competenciasRbt12`), soma os meses de
+      folha informados e projeta proporcionalmente se o histórico ainda
+      for incompleto; sem decaimento de valor manual como o RBT12 tem,
+      porque aqui não existe "dado automático" pra fazer a transição — é
+      sempre o que foi preenchido na mão
+- [x] Novo campo "Folha de pagamento do mês" direto na aba Impostos da
+      empresa (mostra FP12 acumulado, Fator R calculado e quantos meses
+      já foram informados) — o percentual fixo antigo (`fator_r_percentual`
+      em Dados fiscais) foi removido da tela, ficou obsoleto
+- [x] Visão geral (Top 5 de imposto/alíquota e a tabela por empresa)
+      passou a usar esse mesmo cálculo dinâmico por empresa, em vez do
+      percentual fixo
+- [x] Testado ao vivo: empresa sem folha nenhuma informada cai no Anexo
+      V por padrão (regra oficial na ausência de Fator R); preenchendo a
+      folha de um mês do histórico (R$25.000, projetado x12 = R$300mil),
+      Fator R foi a 36,17% e o Anexo virou III — alíquota efetiva caiu de
+      18,44% pra 11,7% e o DAS de R$12.018,99 pra R$7.628,35, batendo
+      exato com o valor da planilha manual real já validado antes
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
