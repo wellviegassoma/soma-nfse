@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import requests
+from certificado import criar_sessao_mtls
 
 AMBIENTES = {
     "producao": "https://sefin.nfse.gov.br/SefinNacional",
@@ -72,18 +73,7 @@ class ClienteSefinNacional:
         self.max_tentativas_erro_temporario = max_tentativas_erro_temporario
         self._ultima_requisicao_em = 0.0
 
-        self._session = requests.Session()
-        self._session.cert = (cert_path, key_path)
-        # Mesmo motivo do nfse_client.py: evitar a identificação padrão
-        # do python-requests, que pode ser bloqueada/limitada em sites
-        # de governo de forma diferente de um navegador real.
-        self._session.headers.update({
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            ),
-            "Accept": "application/json, application/pdf, */*",
-        })
+        self._session = criar_sessao_mtls(cert_path, key_path)
 
     def fechar(self):
         self._session.close()

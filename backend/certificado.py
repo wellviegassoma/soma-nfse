@@ -11,10 +11,12 @@ relação ao original.
 from __future__ import annotations
 
 import os
+import ssl
 import tempfile
 import warnings
 from pathlib import Path
 
+import requests
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     NoEncryption,
@@ -22,6 +24,7 @@ from cryptography.hazmat.primitives.serialization import (
     pkcs12,
 )
 from cryptography.x509.oid import NameOID
+from requests.adapters import HTTPAdapter
 
 # Alguns certificados de ACs brasileiras geram .pfx em BER em vez de DER
 # estrito. A biblioteca 'cryptography' lê normalmente com fallback, mas
@@ -126,6 +129,57 @@ def carregar_certificado_pfx(caminho_pfx: str, senha: str) -> tuple[str, str]:
     os.chmod(key_path, 0o600)
 
     return cert_path, key_path
+
+
+class _AdaptadorTLS12(HTTPAdapter):
+    """
+    Força o teto de TLS 1.2 nas conexões HTTPS.
+
+    Bug real confirmado: adn.nfse.gov.br falha o handshake com TLS 1.3
+    vindo desse cliente (requests/OpenSSL) — SSLError RECORD_LAYER_FAILURE
+    logo na abertura da conexão, sempre, mesmo com o certificado correto e
+    válido. Reproduzido isolando a causa com um `ssl.SSLContext` puro:
+    TLS 1.3 falha 100% das vezes, TLS 1.2 funciona 100% das vezes, mesmo
+    certificado, mesma rede, mesma hora. É por isso que uma extensão de
+    navegador com o mesmo certificado funciona normalmente (o navegador
+    negocia/renegocia de um jeito que o servidor aceita) enquanto o
+    backend em Python vinha falhando.
+    """
+
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = ssl.create_default_context()
+        ctx.maximum_version = ssl.TLSVersion.TLSv1_2
+        kwargs["ssl_context"] = ctx
+        return super().init_poolmanager(*args, **kwargs)
+
+    def proxy_manager_for(self, *args, **kwargs):
+        ctx = ssl.create_default_context()
+        ctx.maximum_version = ssl.TLSVersion.TLSv1_2
+        kwargs["ssl_context"] = ctx
+        return super().proxy_manager_for(*args, **kwargs)
+
+
+def criar_sessao_mtls(cert_path: str, key_path: str) -> requests.Session:
+    """
+    Sessão `requests` padrão pra falar com os servidores do Sefin
+    Nacional/ADN: certificado cliente (mTLS) + teto de TLS 1.2 (ver
+    `_AdaptadorTLS12`) + User-Agent de navegador (esses servidores
+    tratam a identificação padrão do python-requests de forma diferente
+    de um navegador real).
+    """
+    sessao = requests.Session()
+    sessao.cert = (cert_path, key_path)
+    sessao.mount("https://", _AdaptadorTLS12())
+    sessao.headers.update(
+        {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, application/pdf, */*",
+        }
+    )
+    return sessao
 
 
 def limpar_certificado_temporario(cert_path: str, key_path: str) -> None:

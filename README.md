@@ -398,6 +398,27 @@ empresas via CNPJ/planilha) (concluída)**
       valor de referência com o faturamento real de agosto já no sistema
       — contas conferidas na mão, bateram exatas
 
+**Bug real corrigido — falha de mTLS na busca de notas era TLS 1.3, não o certificado**
+- [x] "Falha no handshake TLS com certificado do cliente (mTLS)" contra
+      `adn.nfse.gov.br` — o usuário relatou que uma extensão de navegador
+      com o **mesmo certificado** conseguia conectar normalmente,
+      confirmando que o certificado em si estava correto. Reproduzindo a
+      chamada isoladamente (fora da aplicação) com um `ssl.SSLContext`
+      puro: TLS 1.3 falha 100% das vezes com `SSLError:
+      RECORD_LAYER_FAILURE` logo na abertura da conexão; forçando o teto
+      em TLS 1.2, a mesma chamada funciona 100% das vezes — mesmo
+      certificado, mesma rede, mesma hora
+- [x] Novo `criar_sessao_mtls()` em `backend/certificado.py` — monta a
+      sessão `requests` com um `HTTPAdapter` customizado que trava o
+      `ssl.SSLContext.maximum_version` em TLS 1.2, usado tanto por
+      `nfse_client.py` (busca/distribuição) quanto por
+      `sefin_nacional_client.py` (emissão/cancelamento) — os dois clientes
+      que falam mTLS com o governo
+- [x] Testado ao vivo, de ponta a ponta pela aplicação real (não só o
+      script de diagnóstico): empresa que vinha falhando 100% das vezes
+      sincronizou com sucesso — 22 notas reais recuperadas
+      (R$ 96.250,43 em saídas)
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
