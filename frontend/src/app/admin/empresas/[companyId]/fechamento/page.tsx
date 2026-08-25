@@ -1,14 +1,14 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
-import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { BuscarAgoraButton } from "./BuscarAgoraButton";
 
-export const metadata = { title: "Fechamento — SOMA NFS-e" };
+export const metadata = { title: "Fechamento — Painel SOMA" };
+export const maxDuration = 300;
 
 function formatMoney(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -37,8 +37,8 @@ type NotaRow = {
   tomador_nome: string | null;
 };
 
-export default async function FechamentoPage(
-  props: PageProps<"/empresas/[companyId]/fechamento">,
+export default async function AdminFechamentoPage(
+  props: PageProps<"/admin/empresas/[companyId]/fechamento">,
 ) {
   const { companyId } = await props.params;
   const searchParams = await props.searchParams;
@@ -55,7 +55,7 @@ export default async function FechamentoPage(
     supabase
       .from("companies")
       .select(
-        "cnpj, legal_name, trade_name, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
+        "cnpj, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
       )
       .eq("id", companyId)
       .single(),
@@ -78,14 +78,6 @@ export default async function FechamentoPage(
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">Fechamento</h1>
-        <p className="text-sm text-foreground/60">
-          Notas sincronizadas do Sefin Nacional (emitidas e recebidas) — competência{" "}
-          {formatCompetencia(competencia)}.
-        </p>
-      </div>
-
       {company?.ultima_sincronizacao_status === "erro" && (
         <Alert tone="warning">
           Última sincronização falhou ({company.ultima_sincronizacao_em
@@ -102,24 +94,26 @@ export default async function FechamentoPage(
       )}
 
       <Card className="p-6">
-        <form className="flex flex-wrap items-end gap-3">
-          <div className="w-[160px]">
-            <Field label="Competência" htmlFor="competencia">
-              <Input id="competencia" name="competencia" type="month" defaultValue={competencia} />
-            </Field>
-          </div>
-          <Button type="submit">Aplicar</Button>
-          {company?.cnpj && (
-            <a
-              href={`/empresas/${companyId}/fechamento/relatorio?competencia=${competencia}`}
-              className="ml-auto"
-            >
-              <Button type="button" variant="secondary">
-                Baixar relatório PDF
-              </Button>
-            </a>
-          )}
-        </form>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <form className="flex flex-wrap items-end gap-3">
+            <div className="w-[160px]">
+              <Field label="Competência" htmlFor="competencia">
+                <Input id="competencia" name="competencia" type="month" defaultValue={competencia} />
+              </Field>
+            </div>
+            <Button type="submit">Aplicar</Button>
+            {company?.cnpj && (
+              <a
+                href={`/admin/empresas/${companyId}/fechamento/relatorio?competencia=${competencia}`}
+              >
+                <Button type="button" variant="secondary">
+                  Baixar relatório PDF
+                </Button>
+              </a>
+            )}
+          </form>
+          <BuscarAgoraButton companyId={companyId} />
+        </div>
       </Card>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -180,12 +174,6 @@ export default async function FechamentoPage(
           </div>
         )}
       </Card>
-
-      <p className="text-xs text-foreground/40">
-        <Link href={`/empresas/${companyId}`} className="hover:underline">
-          ← Voltar
-        </Link>
-      </p>
     </div>
   );
 }

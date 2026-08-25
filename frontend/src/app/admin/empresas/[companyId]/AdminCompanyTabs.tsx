@@ -9,6 +9,7 @@ const TABS = [
   { href: "certificado", label: "Certificado" },
   { href: "servicos", label: "Serviços" },
   { href: "usuarios", label: "Usuários" },
+  { href: "fechamento", label: "Fechamento" },
 ];
 
 export function AdminCompanyTabs({ companyId }: { companyId: string }) {

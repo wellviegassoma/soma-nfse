@@ -185,6 +185,30 @@ contábil (concluída)**
       Integrada): sincronização completa, PDF de 8 páginas gerado
       corretamente com dados reais
 
+**Ajustes na Fase I (concluídos)**
+- [x] Reprocessa **do zero (NSU 0)** toda vez, em vez de resumir do
+      checkpoint — a distribuição por NSU filtra localmente por (ano, mês)
+      e um documento fora do filtro não é revisitado numa próxima
+      execução, então resumir arriscava nunca pegar uma nota que apareceu
+      fora de ordem. `companies.ultimo_nsu_distribuicao` vira só
+      informativo. Trade-off assumido: fica mais caro (mais chamadas ao
+      Sefin Nacional) conforme o histórico da empresa cresce
+- [x] **Fechamento agora é exclusivo da SOMA** (SUPER_ADMIN/ADMIN_SOMA) —
+      removido da área do cliente, movido pra dentro do Painel SOMA
+      (`/admin/empresas/[id]/fechamento`). RLS de `notas_distribuidas`
+      também restringida (`is_soma_staff()`), não só a aba escondida —
+      testado com usuário ADMIN_CLIENTE confirmando redirecionamento
+- [x] `/admin/fechamento`: índice com todas as empresas, status da última
+      sincronização, botão **Buscar todas agora**, e **Baixar tudo
+      (ZIP)** — por empresa: XML + PDF (DANFSe) de cada nota da
+      competência, mais o relatório mensal consolidado
+- [x] Botão **Buscar agora** (sincronização sob demanda, sem esperar o
+      Cron) tanto na tela de uma empresa quanto na visão geral (todas de
+      uma vez) — reaproveita a mesma lógica do Cron via
+      `lib/sync-notas.ts`, que grava o resultado por empresa
+      imediatamente (progresso parcial não se perde se der timeout numa
+      leva grande)
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
