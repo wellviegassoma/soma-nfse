@@ -500,6 +500,44 @@ empresas via CNPJ/planilha) (concluída)**
       18,44% pra 11,7% e o DAS de R$12.018,99 pra R$7.628,35, batendo
       exato com o valor da planilha manual real já validado antes
 
+**Ajuste — Aba própria de Fator R + importar do PGDAS-D e da folha (concluído)**
+- [x] O preenchimento mensal de folha (feature anterior) morava dentro da
+      aba Impostos, um mês de cada vez — a pedido do usuário, virou uma
+      aba própria (`/admin/empresas/[id]/fator-r`) com todos os meses
+      numa tabela só (folha, FP12, RBT12, Fator R, Anexo lado a lado),
+      mais fácil de enxergar a evolução e de corrigir mês passado
+- [x] **Importar do PGDAS-D**: sobe o PDF da declaração
+      (PGDASD-DECLARACAO.pdf, gerado pelo programa da Receita Federal) e
+      o sistema lê a seção "2.3) Folha de Salários Anteriores" — até 12
+      meses de folha de uma vez, exatamente os valores que a Receita já
+      usa oficialmente no Fator R — mais o RBT12 da competência
+      declarada, com opção de já atualizar o RBT12 manual (Dados
+      fiscais) com esse valor. Fica numa tabela pra revisar/editar antes
+      de confirmar, nunca salva direto
+- [x] **Importar folha de pagamento**: sobe o PDF da folha analítica (do
+      sistema de folha da SOMA) e tenta achar o "Total Geral da Folha" do
+      mês — layout desse relatório não é padronizado como o do governo
+      (o extrator de texto do PDF não preserva a ordem visual da tabela
+      de totais), então só aceita o valor se reconhecer exatamente 22
+      números na posição esperada; se não bater, pede preenchimento
+      manual em vez de arriscar um número errado. Sempre mostra a
+      competência e o valor pra confirmar/editar antes de salvar
+- [x] `pdf-parse` (novo, `frontend/src/lib/pdf-import/`) faz a extração de
+      texto do PDF no servidor — precisou marcar como
+      `serverExternalPackages` no `next.config.ts` porque o worker do
+      pdf.js (arquivo `.mjs` carregado em tempo de execução) não
+      sobrevive ao empacotamento do Turbopack; como pacote externo, roda
+      via `require` normal do Node direto de `node_modules`
+- [x] `fator_r_percentual` (campo antigo, Dados fiscais) já tinha saído
+      de uso na feature anterior — a coluna do banco continua existindo,
+      só não é mais lida em lugar nenhum
+- [x] Testado ao vivo, ponta a ponta com os arquivos reais de um cliente
+      (PGDAS-D e folha analítica de julho/2026): os 12 meses de folha do
+      PGDAS-D bateram exatos com o PDF (conferido campo a campo), e o
+      Fator R recalculado (261.852,14 ÷ 848.848,74 = 30,85%) bateu exato
+      com a divisão manual; a folha analítica reconheceu o total certo
+      (R$14.152,61) e a competência (07/2026) direto do PDF
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

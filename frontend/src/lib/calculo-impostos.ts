@@ -28,6 +28,14 @@ export type ResultadoSimplesNacional = {
   };
 };
 
+// Não sujeito ao Fator R (ou sem % informado) cai direto no Anexo III —
+// é o caso normal da maioria dos prestadores de serviço. Sujeito ao
+// Fator R: >= 28% usa Anexo III (mais vantajoso quando a folha é alta),
+// abaixo disso usa Anexo V.
+export function decidirAnexoFatorR(sujeitoFatorR: boolean, fatorRPercentual: number | null): Anexo {
+  return !sujeitoFatorR || (fatorRPercentual ?? 1) >= 0.28 ? "III" : "V";
+}
+
 export function calcularSimplesNacional(params: {
   receitaMes: number;
   rbt12: number;
@@ -37,11 +45,7 @@ export function calcularSimplesNacional(params: {
 }): ResultadoSimplesNacional {
   const { receitaMes, rbt12, rbt12Estimado, sujeitoFatorR, fatorRPercentual } = params;
 
-  // Não sujeito ao Fator R (ou sem % informado) cai direto no Anexo III —
-  // é o caso normal da maioria dos prestadores de serviço. Sujeito ao
-  // Fator R: >= 28% usa Anexo III (mais vantajoso quando a folha é alta),
-  // abaixo disso usa Anexo V.
-  const anexo: Anexo = !sujeitoFatorR || (fatorRPercentual ?? 1) >= 0.28 ? "III" : "V";
+  const anexo: Anexo = decidirAnexoFatorR(sujeitoFatorR, fatorRPercentual);
 
   const faixaInfo = faixaPorRbt12(anexo, rbt12);
   const aliquotaEfetiva =
