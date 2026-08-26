@@ -43,6 +43,7 @@ export type Company = {
   trade_name: string | null;
   created_at: string;
   municipal_registration: string | null;
+  data_abertura: string | null;
   tax_regime: TaxRegime | null;
   cnae: string | null;
   municipality_ibge_code: string | null;

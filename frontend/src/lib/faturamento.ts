@@ -26,8 +26,8 @@ type NotaDistribuidaRow = {
 // já filtrada por empresa — uma nota emitida pelo próprio soma-nfse, uma
 // vez sincronizada do Sefin Nacional, também aparece em
 // notas_distribuidas (mesma chave_acesso), então precisa dedup.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function buscarFaturamentoMensal(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any, any, any>,
   companyId: string,
 ): Promise<NotaFaturamento[]> {
@@ -128,14 +128,31 @@ export type Rbt12Resolvido = {
   manualRolando: boolean;
   manualNaoAplicavel: boolean;
   mesesDisponiveis: number;
+  // true = RBT12 é a projeção proporcional oficial (empresa com menos de
+  // 12 meses de existência, não uma estimativa por falta de dado — ver
+  // resolverRbt12).
+  empresaNova: boolean;
 };
 
-// Resolve o RBT12 pra uma competência: usa o faturamento dos 12 meses
-// anteriores já registrado no sistema; se o histórico for insuficiente
-// (empresa nova no sistema, mesmo que já faturasse antes por fora),
-// combina o RBT12 manual configurado na empresa (informado uma vez, pra
-// uma competência de referência) com o faturamento real do sistema desde
-// então — sem precisar reinformar todo mês.
+// Resolve o RBT12 pra uma competência.
+//
+// Primeiro verifica se a empresa é realmente NOVA (menos de 12 meses de
+// existência, pela data de abertura do CNPJ): nesse caso, a regra
+// oficial do Simples Nacional é projetar proporcionalmente o
+// faturamento real desde a abertura (RBT12 = média mensal × 12) — não é
+// uma estimativa por falta de dado, é a fórmula certa por lei, e nem
+// olha pro RBT12 manual (não faz sentido informar um "histórico" pra
+// uma empresa que comprovadamente não existia há 12 meses).
+//
+// Se a empresa NÃO é nova (data de abertura desconhecida, ou já tem 12+
+// meses), usa o faturamento dos 12 meses anteriores já registrado no
+// sistema; se o histórico do SISTEMA for insuficiente (empresa antiga
+// que só entrou recentemente no soma-nfse, por exemplo), combina o
+// RBT12 manual configurado na empresa (informado uma vez, pra uma
+// competência de referência) com o faturamento real do sistema desde
+// então — sem precisar reinformar todo mês. Nunca projeta
+// proporcionalmente nesse caso (seria a fórmula errada pra uma empresa
+// que não é nova).
 //
 // RBT12 é uma janela móvel de 12 meses. Informado o valor pra uma
 // competência de referência R, pra qualquer competência X depois de R o
@@ -152,8 +169,43 @@ export function resolverRbt12(params: {
   mesesComDados: Set<string>;
   rbt12Manual: number | null;
   rbt12ManualCompetencia: string | null;
+  dataAbertura: string | null; // "YYYY-MM-DD"
 }): Rbt12Resolvido {
-  const meses12 = competenciasRbt12(params.competencia);
+  const meses12 = competenciasRbt12(params.competencia); // mais recente primeiro
+
+  if (params.dataAbertura) {
+    const competenciaAbertura = params.dataAbertura.slice(0, 7);
+    const mesesDeExistencia = Math.max(0, diferencaEmMeses(competenciaAbertura, params.competencia));
+    if (mesesDeExistencia < 12) {
+      if (mesesDeExistencia === 0) {
+        // Abertura é no próprio mês da competência — não tem "mês
+        // anterior" nenhum ainda; usa a receita do próprio mês como
+        // única base disponível pra projeção.
+        const receitaMes = params.receitaPorMes(params.competencia);
+        return {
+          rbt12: receitaMes * 12,
+          estimado: true,
+          usandoManual: false,
+          manualRolando: false,
+          manualNaoAplicavel: false,
+          mesesDisponiveis: 0,
+          empresaNova: true,
+        };
+      }
+      const mesesConsiderados = meses12.slice(0, mesesDeExistencia);
+      const receitaDesdeAbertura = mesesConsiderados.reduce((acc, m) => acc + params.receitaPorMes(m), 0);
+      return {
+        rbt12: (receitaDesdeAbertura / mesesDeExistencia) * 12,
+        estimado: true,
+        usandoManual: false,
+        manualRolando: false,
+        manualNaoAplicavel: false,
+        mesesDisponiveis: mesesDeExistencia,
+        empresaNova: true,
+      };
+    }
+  }
+
   const mesesDisponiveis = meses12.filter((m) => params.mesesComDados.has(m)).length;
   const historicoInsuficiente = mesesDisponiveis < 12;
   const rbt12Bruto = meses12.reduce((acc, m) => acc + params.receitaPorMes(m), 0);
@@ -181,6 +233,7 @@ export function resolverRbt12(params: {
       manualRolando: n > 0,
       manualNaoAplicavel: false,
       mesesDisponiveis,
+      empresaNova: false,
     };
   }
 
@@ -192,5 +245,6 @@ export function resolverRbt12(params: {
     manualRolando: false,
     manualNaoAplicavel,
     mesesDisponiveis,
+    empresaNova: false,
   };
 }

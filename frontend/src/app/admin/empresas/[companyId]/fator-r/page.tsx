@@ -46,7 +46,7 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
   const supabase = await createClient();
   const { data: company } = await supabase
     .from("companies")
-    .select("id, tax_regime, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia")
+    .select("id, data_abertura, tax_regime, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia")
     .eq("id", companyId)
     .single();
   if (!company) notFound();
@@ -104,6 +104,7 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
       mesesComDados: mesesComDadosReceita,
       rbt12Manual: company.rbt12_manual,
       rbt12ManualCompetencia: company.rbt12_manual_competencia,
+      dataAbertura: company.data_abertura,
     });
     const { fp12, estimado } = resolverFp12({
       competencia: mes,

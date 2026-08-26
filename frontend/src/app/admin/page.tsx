@@ -116,7 +116,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       supabase
         .from("companies")
         .select(
-          "id, legal_name, trade_name, created_at, tax_regime, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+          "id, legal_name, trade_name, created_at, data_abertura, tax_regime, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
         )
         .order("legal_name", { ascending: true }),
       supabase
@@ -230,6 +230,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       mesesComDados: new Set(porMes?.keys() ?? []),
       rbt12Manual: empresa.rbt12_manual,
       rbt12ManualCompetencia: empresa.rbt12_manual_competencia,
+      dataAbertura: empresa.data_abertura,
     });
     let fatorRPercentual: number | null = null;
     if (empresa.sujeito_fator_r) {

@@ -391,6 +391,7 @@ const percentualParaFracao = (v: string | undefined) =>
 const updateFiscalSchema = z.object({
   companyId: uuidLike,
   municipalRegistration: z.string().trim().optional(),
+  dataAbertura: z.string().trim().optional(),
   taxRegime: z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL"]).optional(),
   cnae: z.string().trim().optional(),
   municipalityIbgeCode: z.string().trim().optional(),
@@ -418,6 +419,7 @@ export async function updateCompanyFiscal(
   const parsed = updateFiscalSchema.safeParse({
     companyId: formData.get("companyId"),
     municipalRegistration: formData.get("municipalRegistration") || undefined,
+    dataAbertura: formData.get("dataAbertura") || undefined,
     taxRegime: formData.get("taxRegime") || undefined,
     cnae: formData.get("cnae") || undefined,
     municipalityIbgeCode: formData.get("municipalityIbgeCode") || undefined,
@@ -442,13 +444,14 @@ export async function updateCompanyFiscal(
   const { data: before } = await supabase
     .from("companies")
     .select(
-      "municipal_registration, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+      "municipal_registration, data_abertura, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
     )
     .eq("id", companyId)
     .single();
 
   const newValue = {
     municipal_registration: rest.municipalRegistration || null,
+    data_abertura: rest.dataAbertura || null,
     tax_regime: rest.taxRegime || null,
     cnae: rest.cnae || null,
     municipality_ibge_code: rest.municipalityIbgeCode || null,

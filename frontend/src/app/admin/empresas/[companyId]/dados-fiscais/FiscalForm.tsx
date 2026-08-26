@@ -37,6 +37,18 @@ export function FiscalForm({ company }: { company: Company }) {
               defaultValue={company.municipal_registration ?? ""}
             />
           </Field>
+          <Field
+            label="Data de abertura"
+            htmlFor="dataAbertura"
+            hint="Usada pra saber se a empresa tem menos de 12 meses (RBT12 projetado proporcionalmente, regra oficial)"
+          >
+            <Input
+              id="dataAbertura"
+              name="dataAbertura"
+              type="date"
+              defaultValue={company.data_abertura ?? ""}
+            />
+          </Field>
           <Field label="Regime tributário" htmlFor="taxRegime">
             <Select
               id="taxRegime"

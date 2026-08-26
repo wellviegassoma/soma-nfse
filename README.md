@@ -666,6 +666,44 @@ empresas via CNPJ/planilha) (concluída)**
       cadastrado, pra recuperar qualquer nota que tenha caído numa
       fronteira de página no passado
 
+**Ajuste — RBT12 projetado proporcionalmente pra empresa recém-aberta (concluído)**
+- [x] O usuário identificou uma confusão conceitual: `resolverRbt12`
+      tratava "empresa recém-aberta" (menos de 12 meses de existência,
+      caso em que a regra oficial do Simples Nacional é projetar o RBT12
+      proporcionalmente ao faturamento real desde a abertura — ex.:
+      faturou R$50mil no único mês que existe, projeta R$50mil × 12)
+      exatamente igual a "empresa antiga com histórico insuficiente NO
+      SISTEMA" (que já existia há anos, só entrou recentemente no
+      soma-nfse). São duas situações diferentes com base legal diferente:
+      a primeira é uma fórmula fixa por lei; a segunda depende do que a
+      empresa já faturava antes de existir no sistema, e por isso usa o
+      RBT12 manual informado em Dados fiscais (com decaimento — ver ajuste
+      anterior "RBT12 manual rolando automaticamente")
+- [x] Nova coluna `companies.data_abertura` (migration
+      [`20260826130000_fase_n_data_abertura_rbt12.sql`](supabase/migrations/20260826130000_fase_n_data_abertura_rbt12.sql)),
+      editável em Dados fiscais. `resolverRbt12` (`lib/faturamento.ts`)
+      agora calcula meses de existência a partir dela; se for menor que
+      12, ignora completamente o RBT12 manual (não faz sentido pra uma
+      empresa que comprovadamente não existia há 12 meses) e projeta:
+      média do faturamento real desde a abertura × 12. Cobre o caso
+      extremo do mês de abertura (zero meses anteriores) usando a
+      receita do próprio mês como base
+- [x] Empresa com 12+ meses de existência continua no fluxo antigo
+      (RBT12 real dos 12 meses, ou blend com o manual se o histórico do
+      sistema for insuficiente) — a `data_abertura` só muda o resultado
+      pra quem é genuinamente novo. Deixando `data_abertura` em branco
+      preserva o comportamento anterior por completo
+- [x] Novo alerta específico em Impostos quando o RBT12 é a projeção
+      proporcional oficial, distinto do alerta genérico de "histórico
+      insuficiente"
+- [x] Validado com 14 casos de teste cobrindo cada ramo (abertura no mês
+      corrente, 3 meses de existência ignorando o manual, empresa antiga
+      com histórico insuficiente ainda usando o manual, sem
+      `data_abertura` preservando o comportamento antigo, exatamente 12
+      meses deixando de ser "nova") e conferido que nenhuma empresa real
+      tem `data_abertura` preenchida hoje — a mudança é inerte até o
+      campo ser configurado por empresa, sem impacto retroativo
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

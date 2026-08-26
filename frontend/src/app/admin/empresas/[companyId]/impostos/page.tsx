@@ -49,7 +49,7 @@ export default async function ImpostosPage(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, tax_regime, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+      "id, data_abertura, tax_regime, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
     )
     .eq("id", companyId)
     .single();
@@ -107,12 +107,14 @@ export default async function ImpostosPage(
       manualRolando: rbt12ManualRolando,
       manualNaoAplicavel: rbt12ManualNaoAplicavel,
       mesesDisponiveis,
+      empresaNova,
     } = resolverRbt12({
       competencia,
       receitaPorMes: (mes) => somarFaturamento(notas, [mes]),
       mesesComDados,
       rbt12Manual: company.rbt12_manual,
       rbt12ManualCompetencia: company.rbt12_manual_competencia,
+      dataAbertura: company.data_abertura,
     });
 
     let fatorRPercentual: number | null = null;
@@ -173,6 +175,14 @@ export default async function ImpostosPage(
           </Card>
         </div>
 
+        {empresaNova && (
+          <Alert tone="warning">
+            Empresa com menos de 12 meses de existência ({mesesDisponiveis}{" "}
+            {mesesDisponiveis === 1 ? "mês" : "meses"} desde a abertura) — RBT12 projetado
+            proporcionalmente a partir do faturamento real desde a abertura (regra oficial do
+            Simples Nacional), sem depender do RBT12 manual.
+          </Alert>
+        )}
         {rbt12ManualNaoAplicavel && (
           <Alert tone="warning">
             O RBT12 manual configurado em Dados fiscais é referente a uma competência posterior a
@@ -195,7 +205,11 @@ export default async function ImpostosPage(
             informado manualmente em Dados fiscais pra essa competência.
           </Alert>
         )}
-        {resultado.rbt12Estimado && !rbt12ManualNaoAplicavel && !rbt12ManualRolando && !usandoRbt12Manual && (
+        {resultado.rbt12Estimado &&
+          !empresaNova &&
+          !rbt12ManualNaoAplicavel &&
+          !rbt12ManualRolando &&
+          !usandoRbt12Manual && (
           <Alert tone="warning">
             {mesesDisponiveis > 0
               ? `Menos de 12 meses de histórico no sistema (${mesesDisponiveis} mês(es)) — RBT12 projetado proporcionalmente.`
