@@ -273,7 +273,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       apuracaoMensal: empresa.irpj_csll_apuracao_mensal,
       aliquotaIss: empresa.iss_aliquota_padrao,
     });
-    return { empresa, agr, imposto };
+    return { empresa, agr, imposto, fatorRPercentual };
   });
 
   const porFaturamento = [...linhas]
@@ -524,12 +524,13 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
             <div className="flex items-center gap-4 border-b border-border px-5 py-2 text-xs font-medium text-foreground/40">
               <div className="min-w-0 flex-1">Empresa</div>
               <div className="w-12 shrink-0 text-right">Regime</div>
+              <div className="w-16 shrink-0 text-right">Fator R</div>
               <div className="w-16 shrink-0 text-right">Alíquota</div>
               <div className="w-28 shrink-0 text-right">Imposto do mês</div>
               <div className="w-28 shrink-0 text-right">Faturamento</div>
             </div>
             <div className="divide-y divide-border">
-              {linhasOrdenadas.map(({ empresa, agr, imposto }) => (
+              {linhasOrdenadas.map(({ empresa, agr, imposto, fatorRPercentual }) => (
                 <div key={empresa.id} className="flex items-center gap-4 px-5 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-foreground">
@@ -541,6 +542,13 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
                   </div>
                   <div className="w-12 shrink-0 text-right text-sm text-foreground/70">
                     {empresa.tax_regime ? SIGLA_REGIME[empresa.tax_regime] : "—"}
+                  </div>
+                  <div className="w-16 shrink-0 text-right text-sm text-foreground/70">
+                    {empresa.tax_regime === "SIMPLES_NACIONAL" && empresa.sujeito_fator_r
+                      ? fatorRPercentual != null
+                        ? formatPercent(fatorRPercentual)
+                        : "—"
+                      : "—"}
                   </div>
                   <div className="w-16 shrink-0 text-right text-sm text-foreground/70">
                     {imposto ? formatPercent(imposto.aliquotaEfetiva) : "—"}

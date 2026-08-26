@@ -819,6 +819,17 @@ empresas via CNPJ/planilha) (concluída)**
       "Importar do PGDAS-D" na aba RBT12 dela resolve tanto os 4 meses
       sem dado quanto as divergências encontradas
 
+**Ajuste — coluna de Fator R na Visão geral (concluído)**
+- [x] A tabela "Faturamento por empresa" da Visão geral (`admin/page.tsx`)
+      já calculava `fatorRPercentual` internamente (usado só pro cálculo
+      de imposto), mas não mostrava esse número. Nova coluna "Fator R"
+      entre Regime e Alíquota, com o percentual pra empresas do Simples
+      Nacional marcadas como sujeitas ao Fator R — "—" pra quem não é SN
+      ou não é sujeito ao Fator R
+- [x] Testado ao vivo: coluna mostra "—" pra LP e pra SN sem Fator R
+      configurado, e o percentual real (ex.: 11,7% Ana Roenick, 30,47%
+      Wogel) pras empresas que têm
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
