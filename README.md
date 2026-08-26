@@ -736,6 +736,47 @@ empresas via CNPJ/planilha) (concluída)**
       Impostos mostrou o RBT12 exatamente igual ao manual configurado,
       não misturado com os 8 meses de faturamento real já existentes
 
+**Correção — RBT12 manual passa a ser mês a mês, não mais um total único (concluído)**
+- [x] O usuário identificou o defeito estrutural do ajuste anterior: um
+      valor único (mesmo "cheio", sem decaimento) não sabe QUAL mês
+      específico sai da janela de 12 meses quando o tempo passa — mês
+      após mês, o sistema continuava usando o mesmo total, sem excluir a
+      competência mais antiga nem somar a nova, exatamente como o
+      RBT12 real é uma janela MÓVEL, não um número fixo
+- [x] Resolvido trazendo o faturamento histórico por competência,
+      informado manualmente só pras competências anteriores à empresa
+      existir no sistema — mesmo padrão já usado em `folha_mensal` pra
+      folha de pagamento, que também não tem fonte automática nenhuma.
+      Nova tabela `receita_mensal_manual` (migration
+      [`20260826140000_fase_n_receita_mensal_manual.sql`](supabase/migrations/20260826140000_fase_n_receita_mensal_manual.sql)),
+      nova aba **RBT12** por empresa (`empresas/[id]/rbt12`) com uma
+      linha editável pra cada mês sem nota no sistema
+- [x] Com o dado por mês, a janela de 12 meses rola sozinha por
+      construção — sem decaimento, sem "competência de referência",
+      sem transição especial nenhuma: `resolverRbt12` (`lib/faturamento.ts`)
+      simplesmente soma os últimos 12 meses, usando o real quando existe
+      nota (`receitaComManual` prioriza sempre o real) e o manual só
+      pros meses sem nenhuma nota. `companies.rbt12_manual`/
+      `rbt12_manual_competencia` ficam sem uso a partir daqui (mesmo
+      precedente de `fator_r_percentual` — coluna não removida, só não
+      lida mais pelo cálculo); os dois campos saíram do formulário de
+      Dados fiscais
+- [x] Validado com 12 casos de teste, incluindo o cenário exato
+      relatado pelo usuário: 12 meses manuais preenchidos pra uma
+      janela, no mês seguinte a competência mais antiga (manual) sai e a
+      mais nova (que virou real nesse meio tempo) entra automaticamente
+      — sem nenhuma lógica dedicada pra isso, só a soma dos últimos 12
+      meses. Validado também ao vivo contra a WOGEL MEDICINA FUNCIONAL
+      real: preencheu 11/2025 manualmente pela nova aba, RBT12 recalculou
+      de R$842.402,76 pra R$775.469,12 (9 de 12 meses, 1 manual) —
+      conferido exato (soma dos 9 meses ÷ 9 × 12) — e apagou depois, sem
+      deixar dado de teste na empresa real
+- [x] WOGEL e SOMA CONTABILIDADE (as duas empresas que tinham o antigo
+      RBT12 manual configurado) precisam ter os meses histórico
+      re-preenchidos na nova aba RBT12 — o valor total antigo não foi
+      migrado automaticamente pra um mês só, porque isso reproduziria o
+      mesmo defeito que motivou essa correção
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

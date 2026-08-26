@@ -237,9 +237,6 @@ const salvarFolhaLoteSchema = z.object({
       return z.NEVER;
     }
   }),
-  atualizarRbt12: z.literal("on").optional(),
-  rbt12Competencia: z.string().regex(/^\d{4}-\d{2}$/).optional(),
-  rbt12Valor: z.coerce.number().optional(),
 });
 
 export type SalvarFolhaLoteState = { error?: string; success?: boolean; salvos?: number } | undefined;
@@ -253,14 +250,11 @@ export async function salvarFolhaMensalLote(
   const parsed = salvarFolhaLoteSchema.safeParse({
     companyId: formData.get("companyId"),
     linhas: formData.get("linhas"),
-    atualizarRbt12: formData.get("atualizarRbt12") || undefined,
-    rbt12Competencia: formData.get("rbt12Competencia") || undefined,
-    rbt12Valor: formData.get("rbt12Valor") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
-  const { companyId, linhas, atualizarRbt12, rbt12Competencia, rbt12Valor } = parsed.data;
+  const { companyId, linhas } = parsed.data;
   if (linhas.length === 0) return { error: "Nenhum mês pra salvar." };
 
   const supabase = await createClient();
@@ -271,13 +265,6 @@ export async function salvarFolhaMensalLote(
       { onConflict: "company_id,competencia" },
     );
   if (error) return { error: "Não foi possível salvar a folha importada." };
-
-  if (atualizarRbt12 === "on" && rbt12Competencia && rbt12Valor != null) {
-    await supabase
-      .from("companies")
-      .update({ rbt12_manual: rbt12Valor, rbt12_manual_competencia: rbt12Competencia })
-      .eq("id", companyId);
-  }
 
   revalidatePath(`/admin/empresas/${companyId}/fator-r`);
   revalidatePath(`/admin/empresas/${companyId}/impostos`);

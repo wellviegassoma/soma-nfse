@@ -12,6 +12,7 @@ const TABS = [
   { href: "fechamento", label: "Fechamento" },
   { href: "impostos", label: "Impostos" },
   { href: "fator-r", label: "Fator R" },
+  { href: "rbt12", label: "RBT12" },
 ];
 
 export function AdminCompanyTabs({ companyId }: { companyId: string }) {

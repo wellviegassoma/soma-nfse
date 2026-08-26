@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { importarPgdasd, salvarFolhaMensalLote } from "@/lib/actions/folha";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
@@ -17,7 +18,6 @@ function formatCompetencia(competencia: string) {
 export function ImportarPgdasdForm({ companyId }: { companyId: string }) {
   const [importState, importAction, importPending] = useActionState(importarPgdasd, undefined);
   const [linhas, setLinhas] = useState<{ competencia: string; valor: number }[] | null>(null);
-  const [atualizarRbt12, setAtualizarRbt12] = useState(true);
   const [saveState, saveAction, savePending] = useActionState(salvarFolhaMensalLote, undefined);
 
   // Ajusta o estado local (tabela de revisão) em resposta a um novo
@@ -63,21 +63,16 @@ export function ImportarPgdasdForm({ companyId }: { companyId: string }) {
           <input type="hidden" name="linhas" value={JSON.stringify(linhas)} />
 
           {resultado?.rbt12 != null && (
-            <label className="flex items-start gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                name="atualizarRbt12"
-                checked={atualizarRbt12}
-                onChange={(e) => setAtualizarRbt12(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
-              />
-              <span>
-                Atualizar também o RBT12 manual (Dados fiscais) para{" "}
-                {formatMoney(resultado.rbt12)}, referente a {formatCompetencia(resultado.competenciaPA)}
-              </span>
-              <input type="hidden" name="rbt12Competencia" value={resultado.competenciaPA} />
-              <input type="hidden" name="rbt12Valor" value={resultado.rbt12} />
-            </label>
+            <p className="text-xs text-foreground/50">
+              RBT12 declarado nessa competência ({formatCompetencia(resultado.competenciaPA)}):{" "}
+              {formatMoney(resultado.rbt12)}. O PGDAS-D não traz o faturamento mês a mês, então
+              esse total não é aplicado automaticamente — pra completar competências anteriores à
+              empresa no sistema, informe o faturamento de cada mês na aba{" "}
+              <Link href={`/admin/empresas/${companyId}/rbt12`} className="underline">
+                RBT12
+              </Link>
+              .
+            </p>
           )}
 
           <div className="overflow-hidden rounded border border-border">

@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
-import { buscarFaturamentoMensal, resolverRbt12, somarFaturamento } from "@/lib/faturamento";
+import { buscarFaturamentoMensal, buscarReceitaManual, receitaComManual, resolverRbt12 } from "@/lib/faturamento";
 import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { decidirAnexoFatorR } from "@/lib/calculo-impostos";
 import { FolhaMensalInlineForm } from "./FolhaMensalInlineForm";
@@ -46,7 +46,7 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
   const supabase = await createClient();
   const { data: company } = await supabase
     .from("companies")
-    .select("id, data_abertura, tax_regime, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia")
+    .select("id, data_abertura, tax_regime, sujeito_fator_r")
     .eq("id", companyId)
     .single();
   if (!company) notFound();
@@ -80,12 +80,16 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
     );
   }
 
-  const [notas, folhaMensal] = await Promise.all([
+  const [notas, receitaManualPorMes, folhaMensal] = await Promise.all([
     buscarFaturamentoMensal(supabase, companyId),
+    buscarReceitaManual(supabase, companyId),
     buscarFolhaMensal(supabase, companyId),
   ]);
 
-  const mesesComDadosReceita = new Set(notas.filter((n) => !n.cancelada).map((n) => n.competencia));
+  const { receitaPorMes, mesesComDados: mesesComDadosReceita } = receitaComManual(
+    notas,
+    receitaManualPorMes,
+  );
   const folhaPorMes = new Map(folhaMensal.map((f) => [f.competencia, f.valor]));
   const proLaborePorMes = new Map(folhaMensal.map((f) => [f.competencia, f.proLabore]));
   const fgtsPorMes = new Map(folhaMensal.map((f) => [f.competencia, f.fgts]));
@@ -100,10 +104,8 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
   const linhas = meses.map((mes) => {
     const { rbt12 } = resolverRbt12({
       competencia: mes,
-      receitaPorMes: (m) => somarFaturamento(notas, [m]),
+      receitaPorMes,
       mesesComDados: mesesComDadosReceita,
-      rbt12Manual: company.rbt12_manual,
-      rbt12ManualCompetencia: company.rbt12_manual_competencia,
       dataAbertura: company.data_abertura,
     });
     const { fp12, estimado } = resolverFp12({
@@ -132,7 +134,11 @@ export default async function FatorRPage(props: PageProps<"/admin/empresas/[comp
         <h1 className="text-xl font-semibold text-foreground">Fator R</h1>
         <p className="text-sm text-foreground/60">
           Folha ÷ RBT12 de cada mês — decide Anexo III (≥28%) ou Anexo V (abaixo de 28%) no
-          Simples Nacional.
+          Simples Nacional. Faturamento histórico anterior à empresa no sistema se preenche na aba{" "}
+          <Link href={`/admin/empresas/${companyId}/rbt12`} className="underline">
+            RBT12
+          </Link>
+          .
         </p>
       </div>
 

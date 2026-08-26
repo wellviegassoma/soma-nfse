@@ -111,12 +111,12 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   // Escala atual do produto é pequena (poucas empresas/notas) — busca
   // tudo e agrega em JS. Se crescer muito, trocar por uma agregação SQL
   // (RPC) em vez de trazer toda a tabela `dps` pro servidor Next.js.
-  const [{ data: companies }, { data: notas }, { data: distribuidas }, { data: folhas }] =
+  const [{ data: companies }, { data: notas }, { data: distribuidas }, { data: folhas }, { data: receitasManuais }] =
     await Promise.all([
       supabase
         .from("companies")
         .select(
-          "id, legal_name, trade_name, created_at, data_abertura, tax_regime, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+          "id, legal_name, trade_name, created_at, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
         )
         .order("legal_name", { ascending: true }),
       supabase
@@ -128,6 +128,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
         .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao")
         .eq("direcao", "saida"),
       supabase.from("folha_mensal").select("company_id, competencia, valor, pro_labore, fgts"),
+      supabase.from("receita_mensal_manual").select("company_id, competencia, valor"),
     ]);
 
   const empresas = companies ?? [];
@@ -217,6 +218,13 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
     porMes.set(nota.competencia, (porMes.get(nota.competencia) ?? 0) + nota.valor);
     porEmpresaPorMes.set(nota.companyId, porMes);
   }
+  const porEmpresaPorMesManual = new Map<string, Map<string, number>>();
+  for (const r of receitasManuais ?? []) {
+    const porMes = porEmpresaPorMesManual.get(r.company_id) ?? new Map<string, number>();
+    porMes.set(r.competencia, Number(r.valor));
+    porEmpresaPorMesManual.set(r.company_id, porMes);
+  }
+
   const mesesTrimestre = competenciasTrimestre(competencia);
   const ehUltimoMesDoTrimestre = competencia === mesesTrimestre[2];
 
@@ -224,12 +232,24 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
     const agr = porEmpresa.get(empresa.id) ?? vazio();
     const porMes = porEmpresaPorMes.get(empresa.id);
     const receitaPorMes = (mes: string) => porMes?.get(mes) ?? 0;
+
+    // RBT12 usa faturamento manual (informado pra competências
+    // anteriores à empresa no sistema) só pros meses sem nenhuma nota
+    // real — real sempre tem prioridade.
+    const porMesManual = porEmpresaPorMesManual.get(empresa.id);
+    const mesesComDadosReal = new Set(porMes?.keys() ?? []);
+    const mesesManuaisRbt12 = new Set(
+      [...(porMesManual?.keys() ?? [])].filter((m) => !mesesComDadosReal.has(m)),
+    );
+    const mesesComDadosRbt12 = new Set([...mesesComDadosReal, ...mesesManuaisRbt12]);
+    const receitaPorMesRbt12 = (mes: string) =>
+      mesesComDadosReal.has(mes) ? (porMes?.get(mes) ?? 0) : (porMesManual?.get(mes) ?? 0);
+
     const { rbt12 } = resolverRbt12({
       competencia,
-      receitaPorMes,
-      mesesComDados: new Set(porMes?.keys() ?? []),
-      rbt12Manual: empresa.rbt12_manual,
-      rbt12ManualCompetencia: empresa.rbt12_manual_competencia,
+      receitaPorMes: receitaPorMesRbt12,
+      mesesComDados: mesesComDadosRbt12,
+      mesesManuais: mesesManuaisRbt12,
       dataAbertura: empresa.data_abertura,
     });
     let fatorRPercentual: number | null = null;

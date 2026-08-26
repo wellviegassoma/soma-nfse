@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { updateCompanyFiscal } from "@/lib/actions/empresas";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -173,34 +174,18 @@ export function FiscalForm({ company }: { company: Company }) {
               </span>
             </span>
           </label>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field
-              label="RBT12 manual (R$)"
-              htmlFor="rbt12Manual"
-              hint="Só preencha se a empresa já faturava antes de entrar no sistema"
+          <p className="text-xs text-foreground/50">
+            Se a empresa já faturava antes de entrar no sistema, informe o faturamento
+            histórico mês a mês na aba{" "}
+            <Link
+              href={`/admin/empresas/${company.id}/rbt12`}
+              className="text-brand underline"
             >
-              <Input
-                id="rbt12Manual"
-                name="rbt12Manual"
-                type="number"
-                step="0.01"
-                min={0}
-                defaultValue={company.rbt12_manual ?? ""}
-              />
-            </Field>
-            <Field
-              label="Competência de referência"
-              htmlFor="rbt12ManualCompetencia"
-              hint="RBT12 é uma janela de 12 meses que muda todo mês — esse valor só é usado quando bater exatamente com o mês sendo calculado. Atualize aqui todo mês pra manter válido."
-            >
-              <Input
-                id="rbt12ManualCompetencia"
-                name="rbt12ManualCompetencia"
-                type="month"
-                defaultValue={company.rbt12_manual_competencia ?? ""}
-              />
-            </Field>
-          </div>
+              RBT12
+            </Link>{" "}
+            — o cálculo usa o real quando existe nota emitida aqui, e o manual só pros meses
+            que faltam.
+          </p>
         </div>
 
         <div className="flex flex-col gap-3 rounded-lg border border-border p-4">

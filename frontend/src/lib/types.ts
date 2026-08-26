@@ -53,8 +53,6 @@ export type Company = {
   regime_especial_tributacao: number;
   allow_retroactive_emission: boolean;
   sujeito_fator_r: boolean;
-  rbt12_manual: number | null;
-  rbt12_manual_competencia: string | null;
   irpj_csll_apuracao_mensal: boolean;
   iss_aliquota_padrao: number | null;
 };

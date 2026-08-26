@@ -9,7 +9,9 @@ import { Alert } from "@/components/ui/Alert";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import {
   buscarFaturamentoMensal,
+  buscarReceitaManual,
   competenciasTrimestre,
+  receitaComManual,
   resolverRbt12,
   somarFaturamento,
 } from "@/lib/faturamento";
@@ -49,7 +51,7 @@ export default async function ImpostosPage(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, data_abertura, tax_regime, sujeito_fator_r, rbt12_manual, rbt12_manual_competencia, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+      "id, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
     )
     .eq("id", companyId)
     .single();
@@ -99,20 +101,19 @@ export default async function ImpostosPage(
   }
 
   if (company.tax_regime === "SIMPLES_NACIONAL") {
-    const mesesComDados = new Set(notas.filter((n) => !n.cancelada).map((n) => n.competencia));
+    const receitaManualPorMes = await buscarReceitaManual(supabase, companyId);
+    const { receitaPorMes, mesesComDados, mesesManuais } = receitaComManual(notas, receitaManualPorMes);
     const {
       rbt12,
       estimado: rbt12Estimado,
-      usandoManual: usandoRbt12Manual,
-      manualNaoAplicavel: rbt12ManualNaoAplicavel,
       mesesDisponiveis,
+      mesesManuais: rbt12MesesManuais,
       empresaNova,
     } = resolverRbt12({
       competencia,
-      receitaPorMes: (mes) => somarFaturamento(notas, [mes]),
+      receitaPorMes,
       mesesComDados,
-      rbt12Manual: company.rbt12_manual,
-      rbt12ManualCompetencia: company.rbt12_manual_competencia,
+      mesesManuais,
       dataAbertura: company.data_abertura,
     });
 
@@ -179,35 +180,32 @@ export default async function ImpostosPage(
             Empresa com menos de 12 meses de existência ({mesesDisponiveis}{" "}
             {mesesDisponiveis === 1 ? "mês" : "meses"} desde a abertura) — RBT12 projetado
             proporcionalmente a partir do faturamento real desde a abertura (regra oficial do
-            Simples Nacional), sem depender do RBT12 manual.
+            Simples Nacional).
           </Alert>
         )}
-        {rbt12ManualNaoAplicavel && (
+        {!empresaNova && rbt12MesesManuais > 0 && (
           <Alert tone="warning">
-            O RBT12 manual configurado em Dados fiscais é referente a uma competência posterior a
-            essa — não se aplica aqui. RBT12 abaixo{" "}
-            {mesesDisponiveis > 0 ? "foi projetado a partir do histórico no sistema" : "ficou zerado por falta de histórico"}
+            RBT12 usa {rbt12MesesManuais} {rbt12MesesManuais === 1 ? "mês" : "meses"} de
+            faturamento informado manualmente (competências anteriores à empresa no sistema)
+            {resultado.rbt12Estimado
+              ? ` — ainda faltam ${12 - mesesDisponiveis} mês(es) sem nenhum dado (nem nota, nem manual), então o RBT12 abaixo está projetado proporcionalmente pelos ${mesesDisponiveis} que já têm`
+              : ""}
+            . Confira ou complete na aba{" "}
+            <Link href={`/admin/empresas/${companyId}/rbt12`} className="underline">
+              RBT12
+            </Link>
             .
           </Alert>
         )}
-        {usandoRbt12Manual && (
-          <Alert tone="warning">
-            Histórico no sistema insuficiente ({mesesDisponiveis} de 12 meses) — usando o RBT12
-            informado manualmente em Dados fiscais, cheio (sem misturar com o faturamento
-            parcial já registrado), até o sistema completar os 12 meses reais.
-          </Alert>
-        )}
-        {resultado.rbt12Estimado &&
-          !empresaNova &&
-          !rbt12ManualNaoAplicavel &&
-          !usandoRbt12Manual && (
+        {resultado.rbt12Estimado && !empresaNova && rbt12MesesManuais === 0 && (
           <Alert tone="warning">
             {mesesDisponiveis > 0
               ? `Menos de 12 meses de histórico no sistema (${mesesDisponiveis} mês(es)) — RBT12 projetado proporcionalmente.`
               : "Sem histórico de faturamento no sistema antes dessa competência — RBT12 zerado."}{" "}
-            Se a empresa já faturava antes de entrar no sistema, informe o RBT12 real em{" "}
-            <Link href={`/admin/empresas/${companyId}/dados-fiscais`} className="underline">
-              Dados fiscais
+            Se a empresa já faturava antes de entrar no sistema, informe o faturamento mensal
+            histórico na aba{" "}
+            <Link href={`/admin/empresas/${companyId}/rbt12`} className="underline">
+              RBT12
             </Link>
             .
           </Alert>
