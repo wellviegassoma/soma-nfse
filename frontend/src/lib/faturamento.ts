@@ -72,12 +72,15 @@ export async function buscarFaturamentoMensal(
   return unificadas;
 }
 
-// Faturamento manual, informado mês a mês só pras competências
+// Faturamento manual, informado mês a mês — normalmente pra competências
 // anteriores à empresa existir no sistema (sem nota emitida/distribuída
-// aqui) — mesmo padrão de `buscarFolhaMensal`, mas pra receita. Usado
-// pra completar a janela de 12 meses do RBT12 quando o sistema não tem
-// o mês (`resolverRbt12` sempre prioriza o faturamento REAL das notas
-// quando ele existe pra aquele mês).
+// aqui), mas também serve como CORREÇÃO/override de um mês que já tem
+// nota: a distribuição de notas do Sefin Nacional só passou a funcionar
+// de forma confiável a partir de dezembro/2025, então meses reais
+// anteriores a isso podem estar incompletos mesmo com nota "encontrada"
+// no sistema. Quando informado, o manual sempre tem prioridade sobre o
+// real (ver `receitaComManual`) — mesmo padrão de `buscarFolhaMensal`,
+// mas pra receita.
 export async function buscarReceitaManual(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any, any, any>,
@@ -98,19 +101,21 @@ export function somarFaturamento(notas: NotaFaturamento[], competencias: string[
 }
 
 // Combina o faturamento real (notas) com o manual (`buscarReceitaManual`)
-// numa única fonte pra `resolverRbt12`: real sempre tem prioridade — o
-// manual só preenche competências onde não existe nenhuma nota.
+// numa única fonte pra `resolverRbt12`: o manual, quando informado,
+// SEMPRE tem prioridade sobre o real — normalmente preenche competências
+// sem nenhuma nota, mas também serve pra corrigir um mês que já tem nota
+// (útil pra competências anteriores a dezembro/2025, quando a
+// distribuição de notas do Sefin Nacional ainda era parcial e pode ter
+// ficado incompleta mesmo tendo "encontrado" alguma nota).
 export function receitaComManual(
   notas: NotaFaturamento[],
   receitaManualPorMes: Map<string, number>,
 ): { receitaPorMes: (mes: string) => number; mesesComDados: Set<string>; mesesManuais: Set<string> } {
   const mesesComDadosReal = new Set(notas.filter((n) => !n.cancelada).map((n) => n.competencia));
-  const mesesManuais = new Set(
-    [...receitaManualPorMes.keys()].filter((m) => !mesesComDadosReal.has(m)),
-  );
+  const mesesManuais = new Set(receitaManualPorMes.keys());
   const mesesComDados = new Set([...mesesComDadosReal, ...mesesManuais]);
   const receitaPorMes = (mes: string) =>
-    mesesComDadosReal.has(mes) ? somarFaturamento(notas, [mes]) : (receitaManualPorMes.get(mes) ?? 0);
+    receitaManualPorMes.has(mes) ? receitaManualPorMes.get(mes)! : somarFaturamento(notas, [mes]);
   return { receitaPorMes, mesesComDados, mesesManuais };
 }
 

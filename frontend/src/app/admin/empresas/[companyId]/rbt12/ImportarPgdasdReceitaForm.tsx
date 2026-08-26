@@ -1,24 +1,20 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import Link from "next/link";
-import { importarPgdasd, salvarFolhaMensalLote } from "@/lib/actions/folha";
+import { importarPgdasd } from "@/lib/actions/folha";
+import { salvarReceitaManualLote } from "@/lib/actions/faturamento";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
-
-function formatMoney(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 function formatCompetencia(competencia: string) {
   const [ano, mes] = competencia.split("-");
   return `${mes}/${ano}`;
 }
 
-export function ImportarPgdasdForm({ companyId }: { companyId: string }) {
+export function ImportarPgdasdReceitaForm({ companyId }: { companyId: string }) {
   const [importState, importAction, importPending] = useActionState(importarPgdasd, undefined);
   const [linhas, setLinhas] = useState<{ competencia: string; valor: number }[] | null>(null);
-  const [saveState, saveAction, savePending] = useActionState(salvarFolhaMensalLote, undefined);
+  const [saveState, saveAction, savePending] = useActionState(salvarReceitaManualLote, undefined);
 
   // Ajusta o estado local (tabela de revisão) em resposta a um novo
   // resultado de action, direto durante o render — evita o
@@ -26,7 +22,7 @@ export function ImportarPgdasdForm({ companyId }: { companyId: string }) {
   const [importStateVisto, setImportStateVisto] = useState(importState);
   if (importState !== importStateVisto) {
     setImportStateVisto(importState);
-    if (importState?.resultado) setLinhas(importState.resultado.folhaMensal);
+    if (importState?.resultado) setLinhas(importState.resultado.receitaMensal);
   }
   const [saveStateVisto, setSaveStateVisto] = useState(saveState);
   if (saveState !== saveStateVisto) {
@@ -34,15 +30,15 @@ export function ImportarPgdasdForm({ companyId }: { companyId: string }) {
     if (saveState?.success) setLinhas(null);
   }
 
-  const resultado = importState?.resultado;
-
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-border p-4">
       <div>
         <div className="text-sm font-semibold text-foreground/70">Importar do PGDAS-D</div>
         <p className="text-xs text-foreground/50">
-          Sobe o PDF da declaração (PGDASD-DECLARACAO.pdf) — traz até 12 meses de folha de uma vez,
-          direto da seção oficial usada no cálculo do Fator R.
+          Sobe o PDF da declaração (PGDASD-DECLARACAO.pdf) — traz até 18 meses de faturamento
+          histórico de uma vez, direto da seção oficial da declaração (não depende do sync do
+          Sefin Nacional). Sobrescreve o valor de cada mês trazido, mesmo que já exista um manual
+          salvo antes.
         </p>
       </div>
 
@@ -56,30 +52,24 @@ export function ImportarPgdasdForm({ companyId }: { companyId: string }) {
         </form>
       )}
       {importState?.error && <Alert tone="danger">{importState.error}</Alert>}
+      {importState?.resultado && linhas != null && linhas.length === 0 && (
+        <Alert tone="warning">
+          Esse PDF não trouxe a seção de faturamento mensal (2.2) — só declarações do PGDAS-D têm
+          essa seção.
+        </Alert>
+      )}
 
-      {linhas && (
+      {linhas && linhas.length > 0 && (
         <form action={saveAction} className="flex flex-col gap-3">
           <input type="hidden" name="companyId" value={companyId} />
           <input type="hidden" name="linhas" value={JSON.stringify(linhas)} />
-
-          {resultado?.rbt12 != null && (
-            <p className="text-xs text-foreground/50">
-              RBT12 declarado nessa competência ({formatCompetencia(resultado.competenciaPA)}):{" "}
-              {formatMoney(resultado.rbt12)}. O faturamento mês a mês (seção 2.2 do PGDAS-D)
-              também vem nesse PDF — importe na aba{" "}
-              <Link href={`/admin/empresas/${companyId}/rbt12`} className="underline">
-                RBT12
-              </Link>{" "}
-              pra completar competências anteriores à empresa no sistema.
-            </p>
-          )}
 
           <div className="overflow-hidden rounded border border-border">
             <table className="w-full text-sm">
               <thead className="bg-surface-muted text-xs text-foreground/50">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Competência</th>
-                  <th className="px-3 py-2 text-left font-medium">Folha (R$)</th>
+                  <th className="px-3 py-2 text-left font-medium">Faturamento (R$)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -119,7 +109,7 @@ export function ImportarPgdasdForm({ companyId }: { companyId: string }) {
         </form>
       )}
       {saveState?.success && (
-        <Alert tone="success">{saveState.salvos} mês(es) de folha salvos.</Alert>
+        <Alert tone="success">{saveState.salvos} mês(es) de faturamento salvos.</Alert>
       )}
     </div>
   );

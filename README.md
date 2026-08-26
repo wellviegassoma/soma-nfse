@@ -777,6 +777,48 @@ empresas via CNPJ/planilha) (concluída)**
       migrado automaticamente pra um mês só, porque isso reproduziria o
       mesmo defeito que motivou essa correção
 
+**Ajuste — importar receita mensal do PGDAS-D + corrigir mês com nota incompleta (concluído)**
+- [x] Duas necessidades do usuário: (1) editar manualmente um mês que já
+      tem nota (não só os "sem dado") — a distribuição de notas do Sefin
+      Nacional só passou a funcionar de forma parcial a partir de
+      dezembro/2025, então um mês pode aparecer com nota no sistema e
+      ainda assim estar incompleto; (2) importar o faturamento
+      histórico do PGDAS-D em vez de digitar mês a mês
+- [x] Descoberta ao analisar um PGDAS-D real da WOGEL: a seção "2.2)
+      Receitas Brutas Anteriores" já traz o faturamento de até 18 meses
+      anteriores, mês a mês (Mercado Interno + Mercado Externo) —
+      informação que o parser (`lib/pdf-import/pgdasd.ts`) não extraía
+      ainda (só pegava o RBT12 total e a folha). Adicionado
+      `receitaMensal` ao resultado do parse, testado com o PDF real via
+      `pdf-parse` (a mesma lib usada em produção): os 18 meses bateram
+      exatos com o que aparece na declaração
+- [x] Nova aba RBT12 ganhou "Importar do PGDAS-D" (`ImportarPgdasdReceitaForm.tsx`
+      + `salvarReceitaManualLote` em `actions/faturamento.ts`), mesmo
+      padrão de tela de revisão editável antes de confirmar já usado pra
+      importar folha
+- [x] `receitaComManual` (`lib/faturamento.ts`) mudou de "manual só
+      preenche mês sem nota" pra "manual sempre tem prioridade sobre a
+      nota, quando informado" — cobre tanto completar um mês vazio
+      quanto corrigir um mês que já tem nota. A tabela da aba RBT12
+      agora é sempre editável (mesmo em mês com nota), mostrando o valor
+      da nota ao lado como referência, com selo "Manual (sobrepõe
+      nota)" quando há um override ativo
+- [x] Validado ao vivo: reproduziu exatamente o parse do PDF real da
+      WOGEL (18 meses via `pdf-parse`) e simulou o upsert que
+      `salvarReceitaManualLote` faz — RBT12 de agosto/2026 foi de
+      R$842.402,76 (estimado, 8/12 meses) pra R$922.898,84 (12/12 meses,
+      exato — conferido somando os 12 valores manuais/override, bate
+      com o valor mostrado). O teste também EXPÔS divergências reais
+      entre o que o PGDAS-D declarou e o que o sistema tinha como nota
+      (ex.: 12/2025 nota = R$24.280,00 vs PGDAS-D = R$118.610,00;
+      02/2026 nota = R$51.974,00 vs PGDAS-D = R$23.564,00) — exatamente
+      o cenário que motivou o pedido de override. Dados de teste
+      revertidos depois, sem deixar nada na empresa real
+- [x] WOGEL ainda não teve o PGDAS-D importado de verdade (o teste foi
+      só da lógica, via script, não pelo botão da tela) — usar
+      "Importar do PGDAS-D" na aba RBT12 dela resolve tanto os 4 meses
+      sem dado quanto as divergências encontradas
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

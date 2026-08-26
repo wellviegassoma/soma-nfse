@@ -233,17 +233,17 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
     const porMes = porEmpresaPorMes.get(empresa.id);
     const receitaPorMes = (mes: string) => porMes?.get(mes) ?? 0;
 
-    // RBT12 usa faturamento manual (informado pra competências
-    // anteriores à empresa no sistema) só pros meses sem nenhuma nota
-    // real — real sempre tem prioridade.
+    // RBT12 usa faturamento manual quando informado — tem prioridade
+    // sobre o real, tanto pra preencher meses sem nota quanto pra
+    // corrigir um mês que já tem nota (útil pra competências anteriores
+    // a dezembro/2025, quando a distribuição de notas do Sefin Nacional
+    // ainda era parcial).
     const porMesManual = porEmpresaPorMesManual.get(empresa.id);
     const mesesComDadosReal = new Set(porMes?.keys() ?? []);
-    const mesesManuaisRbt12 = new Set(
-      [...(porMesManual?.keys() ?? [])].filter((m) => !mesesComDadosReal.has(m)),
-    );
+    const mesesManuaisRbt12 = new Set(porMesManual?.keys() ?? []);
     const mesesComDadosRbt12 = new Set([...mesesComDadosReal, ...mesesManuaisRbt12]);
     const receitaPorMesRbt12 = (mes: string) =>
-      mesesComDadosReal.has(mes) ? (porMes?.get(mes) ?? 0) : (porMesManual?.get(mes) ?? 0);
+      porMesManual?.has(mes) ? porMesManual.get(mes)! : (porMes?.get(mes) ?? 0);
 
     const { rbt12 } = resolverRbt12({
       competencia,

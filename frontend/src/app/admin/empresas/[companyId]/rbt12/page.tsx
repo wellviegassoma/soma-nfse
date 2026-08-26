@@ -10,8 +10,10 @@ import {
   competenciasRbt12,
   receitaComManual,
   resolverRbt12,
+  somarFaturamento,
 } from "@/lib/faturamento";
 import { ReceitaManualInlineForm } from "./ReceitaManualInlineForm";
+import { ImportarPgdasdReceitaForm } from "./ImportarPgdasdReceitaForm";
 
 export const metadata = { title: "RBT12 — Painel SOMA" };
 
@@ -54,7 +56,10 @@ export default async function Rbt12Page(props: PageProps<"/admin/empresas/[compa
     buscarReceitaManual(supabase, companyId),
   ]);
 
-  const { receitaPorMes, mesesComDados } = receitaComManual(notas, receitaManualPorMes);
+  const { receitaPorMes, mesesComDados, mesesManuais: mesesManuaisSet } = receitaComManual(
+    notas,
+    receitaManualPorMes,
+  );
   const mesesComDadosReal = new Set(notas.filter((n) => !n.cancelada).map((n) => n.competencia));
 
   const competenciaAtual = mesCorrenteBrasilia();
@@ -64,9 +69,7 @@ export default async function Rbt12Page(props: PageProps<"/admin/empresas/[compa
     competencia: competenciaAtual,
     receitaPorMes,
     mesesComDados,
-    mesesManuais: new Set(
-      [...receitaManualPorMes.keys()].filter((m) => !mesesComDadosReal.has(m)),
-    ),
+    mesesManuais: mesesManuaisSet,
     dataAbertura: company.data_abertura,
   });
 
@@ -75,12 +78,15 @@ export default async function Rbt12Page(props: PageProps<"/admin/empresas/[compa
       <div>
         <h1 className="text-xl font-semibold text-foreground">RBT12</h1>
         <p className="text-sm text-foreground/60">
-          Receita bruta acumulada nos 12 meses anteriores — base do Simples Nacional. Pra
-          competências antes da empresa existir no sistema (sem nota emitida/distribuída aqui),
-          informe o faturamento real mês a mês abaixo: o cálculo usa a nota quando existe, e o
-          valor manual só pra completar o que falta.
+          Receita bruta acumulada nos 12 meses anteriores — base do Simples Nacional. Preencha
+          competências sem nota (antes da empresa existir no sistema) ou corrija um mês que já tem
+          nota, mas cuja distribuição pode estar incompleta — a distribuição de notas do Sefin
+          Nacional só passou a funcionar de forma confiável a partir de dezembro/2025. Quando
+          informado, o valor manual sempre tem prioridade sobre a nota.
         </p>
       </div>
+
+      <ImportarPgdasdReceitaForm companyId={companyId} />
 
       {empresaNova && (
         <Alert tone="warning">
@@ -125,6 +131,7 @@ export default async function Rbt12Page(props: PageProps<"/admin/empresas/[compa
             <tbody className="divide-y divide-border">
               {meses.map((mes) => {
                 const temReal = mesesComDadosReal.has(mes);
+                const valorReal = temReal ? somarFaturamento(notas, [mes]) : null;
                 const valorManual = receitaManualPorMes.get(mes) ?? null;
                 return (
                   <tr key={mes}>
@@ -132,28 +139,31 @@ export default async function Rbt12Page(props: PageProps<"/admin/empresas/[compa
                       {formatCompetencia(mes)}
                     </td>
                     <td className="px-4 py-3 text-foreground/70">
-                      {temReal ? (
+                      {valorManual != null ? (
+                        <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-medium">
+                          {temReal ? "Manual (sobrepõe nota)" : "Manual"}
+                        </span>
+                      ) : temReal ? (
                         <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-medium">
                           Nota emitida
-                        </span>
-                      ) : valorManual != null ? (
-                        <span className="rounded-full bg-surface-muted px-2 py-1 text-xs font-medium">
-                          Manual
                         </span>
                       ) : (
                         <span className="text-xs text-foreground/40">Sem dado</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {temReal ? (
-                        <span className="text-foreground/70">{formatMoney(receitaPorMes(mes))}</span>
-                      ) : (
+                      <div className="flex flex-col gap-1">
+                        {valorReal != null && (
+                          <span className="text-xs text-foreground/40">
+                            Nota emitida: {formatMoney(valorReal)}
+                          </span>
+                        )}
                         <ReceitaManualInlineForm
                           companyId={companyId}
                           competencia={mes}
                           valorAtual={valorManual}
                         />
-                      )}
+                      </div>
                     </td>
                   </tr>
                 );
