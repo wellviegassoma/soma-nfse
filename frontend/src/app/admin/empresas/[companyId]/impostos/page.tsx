@@ -104,7 +104,6 @@ export default async function ImpostosPage(
       rbt12,
       estimado: rbt12Estimado,
       usandoManual: usandoRbt12Manual,
-      manualRolando: rbt12ManualRolando,
       manualNaoAplicavel: rbt12ManualNaoAplicavel,
       mesesDisponiveis,
       empresaNova,
@@ -191,24 +190,16 @@ export default async function ImpostosPage(
             .
           </Alert>
         )}
-        {rbt12ManualRolando && (
-          <Alert tone="warning">
-            Histórico no sistema insuficiente — RBT12 combina o valor de referência informado em
-            Dados fiscais (perdendo peso gradualmente) com o faturamento real já registrado no
-            sistema desde então. Em pouco tempo o sistema terá 12 meses próprios e não vai
-            depender mais desse valor.
-          </Alert>
-        )}
         {usandoRbt12Manual && (
           <Alert tone="warning">
             Histórico no sistema insuficiente ({mesesDisponiveis} de 12 meses) — usando o RBT12
-            informado manualmente em Dados fiscais pra essa competência.
+            informado manualmente em Dados fiscais, cheio (sem misturar com o faturamento
+            parcial já registrado), até o sistema completar os 12 meses reais.
           </Alert>
         )}
         {resultado.rbt12Estimado &&
           !empresaNova &&
           !rbt12ManualNaoAplicavel &&
-          !rbt12ManualRolando &&
           !usandoRbt12Manual && (
           <Alert tone="warning">
             {mesesDisponiveis > 0

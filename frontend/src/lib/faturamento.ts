@@ -108,24 +108,10 @@ function diferencaEmMeses(a: string, b: string): number {
   return (anoB - anoA) * 12 + (mesB - mesA);
 }
 
-// "YYYY-MM" de todo mês entre `inicio` (incluso) e `fimExclusivo` (não
-// incluso), assumindo fimExclusivo >= inicio.
-function mesesEntre(inicio: string, fimExclusivo: string): string[] {
-  const n = diferencaEmMeses(inicio, fimExclusivo);
-  const [ano, mes] = inicio.split("-").map(Number);
-  const out: string[] = [];
-  for (let i = 0; i < n; i++) {
-    const d = new Date(Date.UTC(ano, mes - 1 + i, 1));
-    out.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
-  }
-  return out;
-}
-
 export type Rbt12Resolvido = {
   rbt12: number;
   estimado: boolean;
   usandoManual: boolean;
-  manualRolando: boolean;
   manualNaoAplicavel: boolean;
   mesesDisponiveis: number;
   // true = RBT12 é a projeção proporcional oficial (empresa com menos de
@@ -147,22 +133,20 @@ export type Rbt12Resolvido = {
 // Se a empresa NÃO é nova (data de abertura desconhecida, ou já tem 12+
 // meses), usa o faturamento dos 12 meses anteriores já registrado no
 // sistema; se o histórico do SISTEMA for insuficiente (empresa antiga
-// que só entrou recentemente no soma-nfse, por exemplo), combina o
-// RBT12 manual configurado na empresa (informado uma vez, pra uma
-// competência de referência) com o faturamento real do sistema desde
-// então — sem precisar reinformar todo mês. Nunca projeta
+// que só entrou recentemente no soma-nfse, por exemplo), usa o RBT12
+// manual configurado na empresa (informado uma vez, pra uma competência
+// de referência) CHEIO, sem misturar com o faturamento real do sistema —
+// misturar deixaria o RBT12 artificialmente baixo enquanto o sistema
+// ainda não tem os 12 meses completos (a pedido do usuário: usar sempre
+// o valor manual cheio nesses meses de transição, nunca um blend).
+// Assim que o sistema acumular os 12 meses reais, passa a usar só a
+// própria história, sem depender mais do manual. Nunca projeta
 // proporcionalmente nesse caso (seria a fórmula errada pra uma empresa
 // que não é nova).
 //
-// RBT12 é uma janela móvel de 12 meses. Informado o valor pra uma
-// competência de referência R, pra qualquer competência X depois de R o
-// valor de R vai "saindo" da janela gradualmente (perde 1/12 do peso por
-// mês) enquanto o faturamento real dos meses entre R e X (esse sim,
-// exato, vindo do sistema) vai entrando — depois de 12 meses o valor de
-// R já não pesa nada e o sistema passa a usar só a própria história, sem
-// precisar mais do manual. Pra competência igual à referência, usa o
-// valor manual direto; pra competência ANTES da referência, o manual não
-// se aplica (não tem como "voltar no tempo").
+// O manual só se aplica da competência de referência R em diante — pra
+// competência ANTES de R, não tem como "voltar no tempo" e ele não é
+// usado.
 export function resolverRbt12(params: {
   competencia: string;
   receitaPorMes: (mes: string) => number;
@@ -186,7 +170,6 @@ export function resolverRbt12(params: {
           rbt12: receitaMes * 12,
           estimado: true,
           usandoManual: false,
-          manualRolando: false,
           manualNaoAplicavel: false,
           mesesDisponiveis: 0,
           empresaNova: true,
@@ -198,7 +181,6 @@ export function resolverRbt12(params: {
         rbt12: (receitaDesdeAbertura / mesesDeExistencia) * 12,
         estimado: true,
         usandoManual: false,
-        manualRolando: false,
         manualNaoAplicavel: false,
         mesesDisponiveis: mesesDeExistencia,
         empresaNova: true,
@@ -217,20 +199,17 @@ export function resolverRbt12(params: {
     ? diferencaEmMeses(params.rbt12ManualCompetencia!, params.competencia)
     : null;
 
-  // n === 0: competência de referência exata. 1..11: janela rolando
-  // (mistura manual decrescente + real crescente). >=12: manual já saiu
-  // 100% da janela, não pesa mais nada. <0: competência é antes da
-  // referência, não dá pra aplicar.
+  // n entre 0 e 11: dentro da janela de transição desde a competência de
+  // referência — usa o manual cheio. >=12: já deu tempo de sobra pro
+  // sistema ter os 12 meses reais (se ainda não tem, é porque faltam
+  // meses sem faturamento mesmo, não porque a empresa é nova aqui — cai
+  // no fallback abaixo). <0: competência é antes da referência, não dá
+  // pra aplicar.
   if (historicoInsuficiente && temManual && n !== null && n >= 0 && n < 12) {
-    const pesoManual = (12 - n) / 12;
-    const mesesReais = n === 0 ? [] : mesesEntre(params.rbt12ManualCompetencia!, params.competencia);
-    const receitaReal = mesesReais.reduce((acc, m) => acc + params.receitaPorMes(m), 0);
-    const rbt12 = params.rbt12Manual! * pesoManual + receitaReal;
     return {
-      rbt12,
+      rbt12: params.rbt12Manual!,
       estimado: false,
-      usandoManual: n === 0,
-      manualRolando: n > 0,
+      usandoManual: true,
       manualNaoAplicavel: false,
       mesesDisponiveis,
       empresaNova: false,
@@ -242,7 +221,6 @@ export function resolverRbt12(params: {
     rbt12: rbt12EstimadoPeloSistema,
     estimado: historicoInsuficiente,
     usandoManual: false,
-    manualRolando: false,
     manualNaoAplicavel,
     mesesDisponiveis,
     empresaNova: false,

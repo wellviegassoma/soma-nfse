@@ -677,8 +677,10 @@ empresas via CNPJ/planilha) (concluída)**
       soma-nfse). São duas situações diferentes com base legal diferente:
       a primeira é uma fórmula fixa por lei; a segunda depende do que a
       empresa já faturava antes de existir no sistema, e por isso usa o
-      RBT12 manual informado em Dados fiscais (com decaimento — ver ajuste
-      anterior "RBT12 manual rolando automaticamente")
+      RBT12 manual informado em Dados fiscais (ver ajuste logo abaixo,
+      "RBT12 manual cheio nos meses de transição", que substituiu o
+      decaimento gradual do ajuste anterior "RBT12 manual rolando
+      automaticamente")
 - [x] Nova coluna `companies.data_abertura` (migration
       [`20260826130000_fase_n_data_abertura_rbt12.sql`](supabase/migrations/20260826130000_fase_n_data_abertura_rbt12.sql)),
       editável em Dados fiscais. `resolverRbt12` (`lib/faturamento.ts`)
@@ -689,10 +691,11 @@ empresas via CNPJ/planilha) (concluída)**
       extremo do mês de abertura (zero meses anteriores) usando a
       receita do próprio mês como base
 - [x] Empresa com 12+ meses de existência continua no fluxo antigo
-      (RBT12 real dos 12 meses, ou blend com o manual se o histórico do
-      sistema for insuficiente) — a `data_abertura` só muda o resultado
-      pra quem é genuinamente novo. Deixando `data_abertura` em branco
-      preserva o comportamento anterior por completo
+      (RBT12 real dos 12 meses, ou o manual configurado se o histórico do
+      sistema for insuficiente — ver ajuste seguinte) — a `data_abertura`
+      só muda o resultado pra quem é genuinamente novo. Deixando
+      `data_abertura` em branco preserva o comportamento anterior por
+      completo
 - [x] Novo alerta específico em Impostos quando o RBT12 é a projeção
       proporcional oficial, distinto do alerta genérico de "histórico
       insuficiente"
@@ -703,6 +706,35 @@ empresas via CNPJ/planilha) (concluída)**
       meses deixando de ser "nova") e conferido que nenhuma empresa real
       tem `data_abertura` preenchida hoje — a mudança é inerte até o
       campo ser configurado por empresa, sem impacto retroativo
+
+**Correção — RBT12 manual cheio nos meses de transição, sem decaimento (concluído)**
+- [x] O usuário corrigiu o comportamento do ajuste anterior ("RBT12
+      manual rolando automaticamente"): pra empresa antiga com histórico
+      insuficiente NO SISTEMA (não confundir com empresa nova — ver
+      ajuste acima), o RBT12 manual configurado em Dados fiscais deve ser
+      usado CHEIO em todo mês de transição, sem misturar/decair com o
+      faturamento parcial já registrado no sistema — misturar deixava o
+      RBT12 artificialmente baixo enquanto o sistema não tem os 12 meses
+      completos, o que pode subestimar o Fator R e o Anexo errado
+- [x] Removido o decaimento gradual (peso do manual caindo 1/12 por mês
+      enquanto soma a receita real dos meses intermediários). Agora, da
+      competência de referência até 11 meses depois — enquanto o sistema
+      não completar os 12 meses reais de faturamento —, `resolverRbt12`
+      (`lib/faturamento.ts`) devolve o valor manual sem nenhum ajuste.
+      Assim que o sistema acumula os 12 meses reais, passa a usar só a
+      própria história, como antes
+- [x] Simplificação: os campos `manualRolando` e a função auxiliar
+      `mesesEntre` (só existiam pra sustentar o blend) foram removidos;
+      `usandoManual` agora cobre toda a janela de transição, não só a
+      competência de referência exata
+- [x] Testado com 7 casos de teste (competência de referência exata,
+      meio da janela, última competência antes de completar 12 meses,
+      12 meses reais completos voltando a ignorar o manual, competência
+      antes da referência, e o caso empresaNova do ajuste anterior
+      intacto) e validado ao vivo contra a WOGEL MEDICINA FUNCIONAL real
+      (RBT12 manual R$872.585,68, 8 de 12 meses no sistema): a tela de
+      Impostos mostrou o RBT12 exatamente igual ao manual configurado,
+      não misturado com os 8 meses de faturamento real já existentes
 
 ## Setup do zero
 
