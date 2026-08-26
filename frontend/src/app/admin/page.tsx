@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { Card } from "@/components/ui/Card";
@@ -23,6 +24,10 @@ function formatCompetencia(competencia: string) {
 
 function formatPercent(value: number) {
   return `${(value * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+}
+
+function diasAteVencer(expiresAt: string): number {
+  return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000);
 }
 
 const SIGLA_REGIME: Record<string, string> = {
@@ -116,8 +121,14 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   // porque já cruzaram o limite padrão de 1000 linhas por requisição do
   // PostgREST — sem isso, empresas com nota mais recente ficavam de fora
   // silenciosamente assim que a tabela passava desse tamanho.
-  const [{ data: companies }, todasNotas, todasDistribuidas, { data: folhas }, { data: receitasManuais }] =
-    await Promise.all([
+  const [
+    { data: companies },
+    todasNotas,
+    todasDistribuidas,
+    { data: folhas },
+    { data: receitasManuais },
+    { data: certificadosRaw },
+  ] = await Promise.all([
       supabase
         .from("companies")
         .select(
@@ -139,10 +150,28 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       ),
       supabase.from("folha_mensal").select("company_id, competencia, valor, pro_labore, fgts"),
       supabase.from("receita_mensal_manual").select("company_id, competencia, valor"),
+      supabase.from("certificates").select("company_id, expires_at"),
     ]);
 
   const empresas = companies ?? [];
   const notasUnificadas = unificarNotasDeSaida(todasNotas, todasDistribuidas);
+
+  // Controle de certificado digital — vencidos ou vencendo nos próximos 45
+  // dias, pra equipe não deixar passar a renovação (bloqueia emissão de
+  // nota assim que vence).
+  const DIAS_LIMITE_CERTIFICADO = 45;
+  const empresaPorId = new Map(empresas.map((e) => [e.id, e]));
+  const certificadosVencendo = (certificadosRaw ?? [])
+    .map((c) => ({
+      empresa: empresaPorId.get(c.company_id),
+      dias: diasAteVencer(c.expires_at),
+      expiresAt: c.expires_at,
+    }))
+    .filter((c): c is typeof c & { empresa: NonNullable<typeof c.empresa> } =>
+      Boolean(c.empresa) && c.dias <= DIAS_LIMITE_CERTIFICADO,
+    )
+    .sort((a, b) => a.dias - b.dias);
+  const empresasSemCertificado = empresas.length - (certificadosRaw ?? []).length;
 
   // Fator R oficial é sobre a "folha de salários, incluídos encargos" —
   // salários + pró-labore + FGTS do mês, não só o bruto.
@@ -406,6 +435,48 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
           </div>
         </Card>
       </div>
+
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <div className="text-sm font-semibold text-foreground/70">
+            Certificado digital — vencidos ou vencendo em até {DIAS_LIMITE_CERTIFICADO} dias
+          </div>
+          <Link href="/admin/certificados" className="text-xs text-brand underline">
+            {empresasSemCertificado} empresa(s) sem certificado — ver todos
+          </Link>
+        </div>
+        {certificadosVencendo.length === 0 ? (
+          <div className="p-6 text-center text-sm text-foreground/50">
+            Nenhum certificado vencido ou vencendo nos próximos {DIAS_LIMITE_CERTIFICADO} dias.
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {certificadosVencendo.map(({ empresa, dias, expiresAt }) => (
+              <Link
+                key={empresa.id}
+                href={`/admin/empresas/${empresa.id}/certificado`}
+                className="flex items-center justify-between gap-4 px-5 py-3 transition-colors hover:bg-surface-muted"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-foreground">
+                    {empresa.trade_name || empresa.legal_name}
+                  </div>
+                  <div className="truncate text-xs text-foreground/50">
+                    Vence em {new Date(expiresAt).toLocaleDateString("pt-BR")}
+                  </div>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${
+                    dias < 0 ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"
+                  }`}
+                >
+                  {dias < 0 ? `Vencido há ${Math.abs(dias)} dia(s)` : `Vence em ${dias} dia(s)`}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card className="overflow-hidden">

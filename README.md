@@ -868,6 +868,33 @@ empresas via CNPJ/planilha) (concluída)**
       (maior empresa vista tem 90 notas num mês), mas vale ficar de
       olho se algum mês de alguma empresa crescer muito
 
+**Ajuste — controle de certificado digital (concluído)**
+- [x] Usuário pediu duas coisas: (1) na Visão geral, uma tabela de
+      certificados vencidos ou vencendo nos próximos 45 dias; (2) um
+      lugar pra consultar quais empresas ainda não têm certificado
+      cadastrado — a base já tinha `certificates.expires_at` por
+      empresa (Fase B), só faltava a visão consolidada entre empresas
+- [x] Nova aba **Certificados** no menu principal do painel
+      (`admin/certificados`), ao lado de Empresas/Fechamento/Erros/Logs:
+      cards de resumo (total de empresas, com/sem certificado, vencidos
+      ou vencendo em 45 dias), tabela dos vencimentos próximos com link
+      direto pra aba de certificado da empresa, e lista buscável das
+      empresas sem certificado (196 das 206 hoje)
+- [x] Visão geral ganhou um card compacto na mesma lógica (vencidos ou
+      vencendo em 45 dias) logo abaixo dos indicadores do topo, com link
+      pra "N empresa(s) sem certificado — ver todos" apontando pra aba
+      nova, sem duplicar a lista inteira ali
+- [x] Bug pego e corrigido antes de ir pro ar: a relação
+      `companies → certificates` é 1:1 (`certificates.company_id` é
+      `unique`), então o PostgREST embute como OBJETO único, não array
+      — o código inicial tratava como array (`certificates[0]`), o que
+      fazia toda empresa cair em "sem certificado" mesmo tendo um
+      cadastrado. Achado testando ao vivo (a Visão geral, que usa uma
+      query separada e não embutida, mostrava 2 vencendo; a aba nova
+      mostrava 0 com certificado) — corrigido tipando como objeto único
+      e validado de novo: 10 com certificado, 196 sem, 2 vencendo (bate
+      com a Visão geral)
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
