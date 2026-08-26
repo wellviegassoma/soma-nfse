@@ -830,6 +830,44 @@ empresas via CNPJ/planilha) (concluída)**
       configurado, e o percentual real (ex.: 11,7% Ana Roenick, 30,47%
       Wogel) pras empresas que têm
 
+**Bug real corrigido — Visão geral perdia notas silenciosamente acima de 1000 linhas na tabela (concluído)**
+- [x] Usuário reportou que a TECHBONE não atualizava na Visão geral
+      mesmo depois de sincronizar as notas. Investigando, a competência
+      corrente da empresa aparecia com 0 notas mesmo tendo 11 notas reais
+      de agosto/2026 no banco
+- [x] Causa raiz: `admin/page.tsx` busca `dps` e `notas_distribuidas`
+      inteiras (todas as empresas, sem paginação) pra agregar em JS —
+      exatamente o padrão que o próprio comentário no código já avisava
+      que precisaria mudar "se crescer muito". `notas_distribuidas` já
+      tinha passado de 1000 linhas (1042 no momento do bug), e o
+      PostgREST (por trás do Supabase) limita qualquer select sem
+      `.range()`/`.limit()` a 1000 linhas por requisição — SEM erro
+      nenhum, só devolve menos linhas do que existem. As ~42 linhas que
+      ficaram de fora incluíam boa parte das notas mais recentes de
+      agosto/2026 de várias empresas, não só a Techbone
+- [x] Corrigido com uma função de paginação genérica
+      (`buscarTudoPaginado`, `lib/supabase/paginacao.ts`) que busca em
+      blocos de 1000 até a página vir mais curta que o pedido — garante
+      que a query nunca perde linha independente do tamanho da tabela.
+      Aplicada nas duas queries de `admin/page.tsx` (`dps` e
+      `notas_distribuidas`); as outras buscas em massa da mesma página
+      (`companies`, `folha_mensal`, `receita_mensal_manual`) ainda estão
+      bem abaixo de 1000 linhas, não precisavam ainda
+- [x] Validado ao vivo: antes da correção, "Faturamento" geral da Visão
+      geral (todas as empresas, agosto/2026) mostrava R$194.207,26 com
+      99 notas; depois, R$449.327,90 com 110 notas — a diferença era
+      faturamento real que estava sendo perdido silenciosamente em
+      várias empresas, não só na Techbone (que sozinha tinha R$255.120,64
+      faltando). Confirmado buscando as 1042 linhas reais de
+      `notas_distribuidas` com paginação manual antes de aplicar a
+      correção, comparando com o corte de 1000 que o código antigo
+      trazia
+- [x] Mesmo padrão de risco (query sem paginação que pode passar de
+      1000 linhas) ainda existe em queries por empresa/mês em
+      `admin/empresas/[id]/fechamento` — hoje muito longe do limite
+      (maior empresa vista tem 90 notas num mês), mas vale ficar de
+      olho se algum mês de alguma empresa crescer muito
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

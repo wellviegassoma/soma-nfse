@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
@@ -111,7 +112,11 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   // Escala atual do produto é pequena (poucas empresas/notas) — busca
   // tudo e agrega em JS. Se crescer muito, trocar por uma agregação SQL
   // (RPC) em vez de trazer toda a tabela `dps` pro servidor Next.js.
-  const [{ data: companies }, { data: notas }, { data: distribuidas }, { data: folhas }, { data: receitasManuais }] =
+  // `dps` e `notas_distribuidas` são paginadas (`buscarTudoPaginado`)
+  // porque já cruzaram o limite padrão de 1000 linhas por requisição do
+  // PostgREST — sem isso, empresas com nota mais recente ficavam de fora
+  // silenciosamente assim que a tabela passava desse tamanho.
+  const [{ data: companies }, todasNotas, todasDistribuidas, { data: folhas }, { data: receitasManuais }] =
     await Promise.all([
       supabase
         .from("companies")
@@ -119,21 +124,24 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
           "id, legal_name, trade_name, created_at, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
         )
         .order("legal_name", { ascending: true }),
-      supabase
-        .from("dps")
-        .select("company_id, valor, status, data_competencia, nfse(status, access_key)")
-        .order("data_competencia", { ascending: false }),
-      supabase
-        .from("notas_distribuidas")
-        .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao")
-        .eq("direcao", "saida"),
+      buscarTudoPaginado<DpsRow>((from, to) =>
+        supabase
+          .from("dps")
+          .select("company_id, valor, status, data_competencia, nfse(status, access_key)")
+          .range(from, to),
+      ),
+      buscarTudoPaginado<NotaDistribuidaRow>((from, to) =>
+        supabase
+          .from("notas_distribuidas")
+          .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao")
+          .eq("direcao", "saida")
+          .range(from, to),
+      ),
       supabase.from("folha_mensal").select("company_id, competencia, valor, pro_labore, fgts"),
       supabase.from("receita_mensal_manual").select("company_id, competencia, valor"),
     ]);
 
   const empresas = companies ?? [];
-  const todasNotas = (notas ?? []) as unknown as DpsRow[];
-  const todasDistribuidas = (distribuidas ?? []) as NotaDistribuidaRow[];
   const notasUnificadas = unificarNotasDeSaida(todasNotas, todasDistribuidas);
 
   // Fator R oficial é sobre a "folha de salários, incluídos encargos" —
