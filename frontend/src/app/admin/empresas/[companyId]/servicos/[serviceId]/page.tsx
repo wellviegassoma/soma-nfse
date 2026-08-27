@@ -17,7 +17,7 @@ export default async function EditServicePage(
     supabase
       .from("services")
       .select(
-        "id, company_id, name, description, national_tax_code, municipal_tax_code, nbs, iss_rate, percentual_total_tributos_federal, percentual_total_tributos_estadual, percentual_total_tributos_municipal, cst_pis_cofins, aliquota_pis, aliquota_cofins, retencao_pis_cofins_csll_aliquota, retencao_irrf_aliquota, tipo_retencao_issqn, active",
+        "id, company_id, name, description, national_tax_code, municipal_tax_code, nbs, iss_rate, percentual_total_tributos_federal, percentual_total_tributos_estadual, percentual_total_tributos_municipal, cst_pis_cofins, aliquota_pis, aliquota_cofins, retencao_pis_cofins_csll_aliquota, retencao_irrf_aliquota, tipo_retencao_issqn, active, atividade_simples_nacional",
       )
       .eq("id", serviceId)
       .single(),

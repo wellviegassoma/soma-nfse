@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { saveService } from "@/lib/actions/servicos";
 import { Button } from "@/components/ui/Button";
@@ -9,7 +9,25 @@ import { Select } from "@/components/ui/Select";
 import { Field } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Alert";
 import { RETENCAO_ISSQN_LABELS, type Service } from "@/lib/types";
+import {
+  ATIVIDADES_SIMPLES_NACIONAL,
+  buscarAtividade,
+  type TratamentoAtividade,
+} from "@/lib/simples-nacional-atividades";
+import { sugerirAtividade } from "@/lib/lc116-sugestao-atividade";
 import type { ServiceCodeSuggestions } from "./suggestions";
+
+const GRUPOS_TRATAMENTO: { tratamento: TratamentoAtividade; label: string }[] = [
+  { tratamento: "ANEXO_III_FIXO", label: "Sempre Anexo III" },
+  { tratamento: "FATOR_R", label: "Sujeita ao Fator R (≥28% = III, abaixo = V)" },
+  { tratamento: "ANEXO_IV_FIXO", label: "Sempre Anexo IV" },
+];
+
+const BADGE_POR_TRATAMENTO: Record<TratamentoAtividade, { label: string; className: string }> = {
+  ANEXO_III_FIXO: { label: "Anexo III fixo", className: "bg-green-100 text-green-900" },
+  FATOR_R: { label: "Sujeita ao Fator R", className: "bg-amber-100 text-amber-900" },
+  ANEXO_IV_FIXO: { label: "Anexo IV fixo", className: "bg-orange-100 text-orange-900" },
+};
 
 export function ServiceForm({
   companyId,
@@ -21,6 +39,12 @@ export function ServiceForm({
   suggestions?: ServiceCodeSuggestions;
 }) {
   const [state, formAction, pending] = useActionState(saveService, undefined);
+  const [atividadeId, setAtividadeId] = useState(service?.atividade_simples_nacional ?? "");
+  // Só auto-sugere se o campo nunca foi confirmado manualmente nem já
+  // veio preenchido do cadastro — evita sobrescrever uma escolha humana
+  // só porque o código tributário foi editado depois.
+  const [atividadeTocada, setAtividadeTocada] = useState(Boolean(service?.atividade_simples_nacional));
+  const atividadeSelecionada = buscarAtividade(atividadeId);
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
@@ -65,6 +89,11 @@ export function ServiceForm({
               name="nationalTaxCode"
               list="nationalTaxCodeOptions"
               defaultValue={service?.national_tax_code ?? ""}
+              onBlur={(e) => {
+                if (atividadeTocada) return;
+                const sugestao = sugerirAtividade(e.target.value);
+                if (sugestao) setAtividadeId(sugestao.id);
+              }}
             />
             <datalist id="nationalTaxCodeOptions">
               {suggestions?.nationalTaxCodes.map((code) => (
@@ -112,6 +141,41 @@ export function ServiceForm({
             </Select>
           </Field>
         </div>
+
+        <Field label="Atividade no Simples Nacional" htmlFor="atividadeSimplesNacional">
+          <Select
+            id="atividadeSimplesNacional"
+            name="atividadeSimplesNacional"
+            value={atividadeId}
+            onChange={(e) => {
+              setAtividadeId(e.target.value);
+              setAtividadeTocada(true);
+            }}
+          >
+            <option value="">Não classificado — escolher depois</option>
+            {GRUPOS_TRATAMENTO.map((grupo) => (
+              <optgroup key={grupo.tratamento} label={grupo.label}>
+                {ATIVIDADES_SIMPLES_NACIONAL.filter((a) => a.tratamento === grupo.tratamento).map(
+                  (atividade) => (
+                    <option key={atividade.id} value={atividade.id}>
+                      {atividade.descricao}
+                    </option>
+                  ),
+                )}
+              </optgroup>
+            ))}
+          </Select>
+          {atividadeSelecionada && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <span
+                className={`rounded px-2 py-0.5 font-medium ${BADGE_POR_TRATAMENTO[atividadeSelecionada.tratamento].className}`}
+              >
+                {BADGE_POR_TRATAMENTO[atividadeSelecionada.tratamento].label}
+              </span>
+              <span className="text-foreground/50">{atividadeSelecionada.citacao}</span>
+            </div>
+          )}
+        </Field>
       </div>
 
       <div className="flex flex-col gap-4 border-t border-border pt-5">

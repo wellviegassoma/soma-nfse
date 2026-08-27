@@ -8,6 +8,9 @@ import { requireSomaStaff } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import type { ActionState } from "@/lib/actions/auth";
+import { ATIVIDADES_SIMPLES_NACIONAL } from "@/lib/simples-nacional-atividades";
+
+const idsAtividadeValidos = new Set(ATIVIDADES_SIMPLES_NACIONAL.map((a) => a.id));
 
 const serviceSchema = z.object({
   serviceId: uuidLike.optional(),
@@ -52,6 +55,11 @@ const serviceSchema = z.object({
     .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
   tipoRetencaoIssqn: z.coerce.number().int().min(1).max(3),
   active: z.coerce.boolean(),
+  atividadeSimplesNacional: z
+    .string()
+    .trim()
+    .optional()
+    .refine((v) => !v || idsAtividadeValidos.has(v), "Atividade do Simples Nacional inválida."),
 });
 
 export async function saveService(
@@ -79,6 +87,7 @@ export async function saveService(
     retencaoPisCofinsCsllAliquota: formData.get("retencaoPisCofinsCsllAliquota") || undefined,
     tipoRetencaoIssqn: formData.get("tipoRetencaoIssqn"),
     active: formData.get("active") === "on",
+    atividadeSimplesNacional: formData.get("atividadeSimplesNacional") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -104,6 +113,7 @@ export async function saveService(
     retencao_pis_cofins_csll_aliquota: rest.retencaoPisCofinsCsllAliquota ?? null,
     tipo_retencao_issqn: rest.tipoRetencaoIssqn,
     active: rest.active,
+    atividade_simples_nacional: rest.atividadeSimplesNacional || null,
   };
 
   const { data: saved, error } = serviceId

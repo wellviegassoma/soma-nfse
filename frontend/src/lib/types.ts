@@ -155,6 +155,7 @@ export type Service = {
   retencao_irrf_aliquota: number | null;
   tipo_retencao_issqn: number;
   active: boolean;
+  atividade_simples_nacional: string | null;
 };
 
 // tpRetISSQN — domínio do layout NFS-e Nacional.

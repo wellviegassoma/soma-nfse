@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ActiveToggle } from "./ActiveToggle";
+import { buscarAtividade } from "@/lib/simples-nacional-atividades";
 
 export const metadata = { title: "Serviços — Painel SOMA" };
 
@@ -14,7 +15,7 @@ export default async function AdminCompanyServicesPage(
 
   const { data: services } = await supabase
     .from("services")
-    .select("id, name, national_tax_code, iss_rate, active")
+    .select("id, name, national_tax_code, iss_rate, active, atividade_simples_nacional")
     .eq("company_id", companyId)
     .order("name");
 
@@ -50,6 +51,16 @@ export default async function AdminCompanyServicesPage(
                   {service.iss_rate != null && ` · ISS ${service.iss_rate}%`}
                 </div>
               </div>
+              {!service.atividade_simples_nacional && (
+                <span className="whitespace-nowrap text-xs font-medium text-amber-700">
+                  Atividade não classificada
+                </span>
+              )}
+              {service.atividade_simples_nacional && (
+                <span className="whitespace-nowrap text-xs text-foreground/40">
+                  {buscarAtividade(service.atividade_simples_nacional)?.descricao.slice(0, 30)}
+                </span>
+              )}
               <ActiveToggle
                 companyId={companyId}
                 serviceId={service.id}
