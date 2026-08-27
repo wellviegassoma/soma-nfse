@@ -37,6 +37,25 @@ export default async function AdminCompanyIntegraContadorPage(
           </a>
         )}
       </Card>
+
+      <Card className="p-6">
+        <h2 className="mb-4 text-sm font-semibold text-foreground/70">Certidão Negativa de Débitos</h2>
+        <p className="mb-4 text-sm text-foreground/50">
+          Emite a CND (ou Positiva com efeitos de negativa) oficial — documento com código de
+          controle e validade de 180 dias, via API Consulta CND (produto separado do Integra
+          Contador). Se houver pendência que impeça a emissão, mostra o motivo em vez do PDF.
+        </p>
+
+        {!company?.cnpj ? (
+          <Alert tone="warning">
+            Essa empresa não tem CNPJ cadastrado — essa consulta só funciona pra CNPJ.
+          </Alert>
+        ) : (
+          <a href={`/admin/empresas/${companyId}/integra-contador/cnd`} target="_blank">
+            <Button>Emitir CND</Button>
+          </a>
+        )}
+      </Card>
     </div>
   );
 }
