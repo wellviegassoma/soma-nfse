@@ -1444,6 +1444,37 @@ categorias no Societário (concluído, 2026-08-27)**
       barrado da rota (redirecionado pro próprio módulo dele, não chega
       no `/admin`)
 
+**Ajuste — Cofre de senhas por empresa (concluído, 2026-08-27)**
+- [x] Credenciais reais que o cliente entrega (gov.br, portal do ISS
+      municipal, conselho profissional/Cremerge etc.) — cifradas em repouso
+      com o mesmo esquema AES-256-GCM já usado pro certificado digital
+      (`encryptSecret`/`decryptSecret`/`toBytea`/`fromBytea`, reaproveitados
+      de `lib/certificate.ts` sem alteração — já eram genéricos, não
+      específicos de certificado apesar do nome do arquivo)
+- [x] Modelo de acesso perguntado ao usuário antes de implementar, por ser
+      dado sensível de verdade: cadastrar/editar/apagar fica restrito à
+      SOMA completa (`/admin/empresas/{id}/cofre-senhas`, nova aba);
+      **consultar e revelar** (decifrar sob demanda) também é liberado pro
+      Analista de Legalização (`/legalizacao/empresas/{id}/cofre-senhas`,
+      somente leitura + botão "Revelar") — pedido explícito do usuário
+      ("consultar isso lá na legalização"), mas nenhum outro papel
+      (ex.: Analista Contábil) tem acesso a nenhuma das duas rotas
+- [x] Toda revelação de senha grava evento `REVEAL` em `audit_logs` (quem,
+      quando, qual serviço — nunca a senha em si), decisão confirmada com o
+      usuário antes de implementar. Criar/editar/apagar também logam
+      normalmente, sempre sem o valor da senha no log
+- [x] `RevelarSenhaButton` compartilhado entre as duas telas
+      (`components/RevelarSenhaButton.tsx`) — botão "Revelar" chama a
+      Server Action, mostra a senha em texto claro só depois do clique, com
+      "Esconder" pra voltar a ocultar
+- [x] Validado ao vivo com três usuários descartáveis: staff criou uma
+      senha, revelou (valor decifrado batendo exatamente com o que foi
+      digitado) e a revelação apareceu em `/admin/logs` com usuário, ação
+      `reveal` e empresa corretos; Analista de Legalização acessou a
+      consulta e revelou a mesma senha com sucesso; Analista Contábil
+      (papel do módulo Extratos, sem relação com Legalização) barrado da
+      rota, redirecionado pro próprio módulo dele
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:

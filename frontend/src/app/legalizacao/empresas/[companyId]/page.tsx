@@ -80,6 +80,9 @@ export default async function LegalizacaoEmpresaPage(
           <Link href={`/legalizacao/empresas/${companyId}/societario`}>
             <Button variant="primary">Societário</Button>
           </Link>
+          <Link href={`/legalizacao/empresas/${companyId}/cofre-senhas`}>
+            <Button variant="secondary">Cofre de senhas</Button>
+          </Link>
           <Link href={`/legalizacao/empresas/${companyId}/gerenciar`}>
             <Button variant="secondary">Gerenciar documentos</Button>
           </Link>
