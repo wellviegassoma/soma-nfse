@@ -31,3 +31,8 @@ class ChamarServicoOut(BaseModel):
     id_sistema: str
     id_servico: str
     resposta: dict
+
+
+class CndOut(BaseModel):
+    contribuinte_cnpj: str
+    resposta: dict

@@ -23,7 +23,8 @@ from fastapi import Depends, FastAPI, HTTPException
 import scheduler
 from auth import exigir_token_interno
 from catalogo import CATALOGO
-from schemas import ChamarServicoIn, ChamarServicoOut, DeclaracoesPeriodoOut, ExtratoDasOut, SituacaoFiscalOut
+from cnd import ErroCnd, consultar_cnd
+from schemas import CndOut, ChamarServicoIn, ChamarServicoOut, DeclaracoesPeriodoOut, ExtratoDasOut, SituacaoFiscalOut
 from serpro_client import ErroIntegraContador, chamar
 from sitfis import ErroSitfis, obter_situacao_fiscal
 
@@ -53,6 +54,26 @@ def listar_catalogo():
         }
         for s in CATALOGO.values()
     ]
+
+
+@app.get(
+    "/contribuintes/{cnpj}/cnd",
+    response_model=CndOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def consultar_certidao_negativa(cnpj: str, gerar_pdf: bool = True):
+    """
+    Emite a Certidão Negativa de Débitos (ou Positiva com efeitos de
+    negativa) — API Consulta CND, produto Serpro SEPARADO do Integra
+    Contador (contrato e credenciais próprios: CND_CONSUMER_KEY/SECRET).
+    Por padrão aponta pro ambiente de demonstração (grátis, CNPJ
+    fictício) até o contrato de produção ficar ativo — ver cnd.py.
+    """
+    try:
+        resposta = consultar_cnd(cnpj, gerar_pdf=gerar_pdf)
+    except ErroCnd as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return CndOut(contribuinte_cnpj=cnpj, resposta=resposta)
 
 
 @app.post(
