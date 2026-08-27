@@ -19,7 +19,7 @@ export function ImportCompaniesForm() {
         <Field
           label="Planilha (.xlsx, .xls ou .csv)"
           htmlFor="file"
-          hint='Colunas esperadas: "nome" (ou "razão social") e "cnpj" — nessa ordem ou não, tanto faz'
+          hint='Colunas esperadas: "nome" (ou "razão social") e "cnpj" OU "cpf" — nessa ordem ou não, tanto faz'
         >
           <Input id="file" name="file" type="file" accept=".xlsx,.xls,.csv" required />
         </Field>

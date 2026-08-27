@@ -1557,6 +1557,28 @@ autônomo) (concluído, 2026-08-27)**
       primeiro) assim que houver um certificado real de pessoa física
       disponível
 
+**Ajuste — Importação em lote de cliente Pessoa Física (concluído,
+2026-08-27)**
+- [x] Usuário testou a importação de planilha logo depois da Fase Q e viu
+      67 linhas rejeitadas com "Sem CNPJ preenchido" — eram clientes Pessoa
+      Física, que só tinham CPF na planilha. `importarEmpresasPlanilha`
+      (`lib/actions/empresas.ts`) passou a aceitar uma coluna `cpf` junto
+      da `cnpj` (cada linha usa uma ou outra, nunca as duas): valida o
+      checksum do CPF (`isCpfValido`), não tenta nenhuma busca automática
+      (não existe API pública de CPF por sigilo — por isso a coluna
+      "nome" é obrigatória só pra linha de CPF), e grava
+      `person_type: 'PF'` + `regime_especial_tributacao: 5` igual ao
+      cadastro manual da Fase Q
+- [x] Texto da tela de importação atualizado explicando as duas colunas
+      possíveis
+- [x] Validado contra o banco real (upload de arquivo não é automatizável
+      no navegador headless desta sessão, então a lógica foi replicada
+      linha a linha num script contra o Supabase de verdade — mesmas
+      chamadas, mesmas condições do código): CPF válido cria a empresa
+      corretamente com `person_type`/`cpf`/regime especial certos; CPF com
+      checksum inválido (`111.111.111-11`) rejeitado com a mensagem
+      esperada; linha sem CNPJ nem CPF rejeitada com a mensagem esperada
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:

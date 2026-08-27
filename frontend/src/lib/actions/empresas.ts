@@ -260,43 +260,61 @@ export async function importarEmpresasPlanilha(
 
     const nomeBruto = encontrarColuna(linha, ["nome", "empresa", "razao social", "razaosocial"]);
     const cnpjBruto = encontrarColuna(linha, ["cnpj"]);
+    const cpfBruto = encontrarColuna(linha, ["cpf"]);
     const nome = String(nomeBruto ?? "").trim();
     const cnpjDigits = String(cnpjBruto ?? "").replace(/\D/g, "");
+    const cpfDigits = String(cpfBruto ?? "").replace(/\D/g, "");
 
-    if (!cnpjDigits) {
-      erros.push({ linha: numeroLinha, motivo: "Sem CNPJ preenchido." });
+    if (!cnpjDigits && !cpfDigits) {
+      erros.push({ linha: numeroLinha, motivo: "Sem CNPJ nem CPF preenchido." });
       continue;
     }
-    if (cnpjDigits.length !== 14) {
+    if (cnpjDigits && cpfDigits) {
+      erros.push({ linha: numeroLinha, motivo: "Preencha só CNPJ ou só CPF, não os dois." });
+      continue;
+    }
+    if (cnpjDigits && cnpjDigits.length !== 14) {
       erros.push({ linha: numeroLinha, motivo: `CNPJ "${cnpjBruto}" inválido (precisa ter 14 dígitos).` });
       continue;
     }
-    if (vistosNoLote.has(cnpjDigits)) {
+    if (cpfDigits && !isCpfValido(cpfDigits)) {
+      erros.push({ linha: numeroLinha, motivo: `CPF "${cpfBruto}" inválido.` });
+      continue;
+    }
+
+    const documento = cnpjDigits || cpfDigits;
+    if (vistosNoLote.has(documento)) {
       ignoradas += 1;
       continue;
     }
-    vistosNoLote.add(cnpjDigits);
+    vistosNoLote.add(documento);
 
     const { data: existente } = await supabase
       .from("companies")
       .select("id")
-      .eq("cnpj", cnpjDigits)
+      .eq(cnpjDigits ? "cnpj" : "cpf", documento)
       .maybeSingle();
     if (existente) {
       ignoradas += 1;
       continue;
     }
 
-    const lookup = await buscarDadosCnpj(cnpjDigits);
-    await sleep(IMPORT_EMPRESAS_THROTTLE_MS);
-
-    const dados = "data" in lookup ? lookup.data : null;
-    const legalName = dados?.razaoSocial || nome;
-    if (!legalName) {
-      erros.push({
-        linha: numeroLinha,
-        motivo: "data" in lookup ? "Sem nome nem razão social." : lookup.error,
-      });
+    let legalName = nome;
+    let dados: DadosCnpj | null = null;
+    if (cnpjDigits) {
+      const lookup = await buscarDadosCnpj(cnpjDigits);
+      await sleep(IMPORT_EMPRESAS_THROTTLE_MS);
+      dados = "data" in lookup ? lookup.data : null;
+      legalName = dados?.razaoSocial || nome;
+      if (!legalName) {
+        erros.push({
+          linha: numeroLinha,
+          motivo: "data" in lookup ? "Sem nome nem razão social." : lookup.error,
+        });
+        continue;
+      }
+    } else if (!legalName) {
+      erros.push({ linha: numeroLinha, motivo: "Sem nome preenchido (obrigatório pra CPF — não há busca automática)." });
       continue;
     }
 
@@ -316,7 +334,9 @@ export async function importarEmpresasPlanilha(
         organization_id: org.id,
         legal_name: legalName,
         trade_name: dados?.nomeFantasia || null,
-        cnpj: cnpjDigits,
+        person_type: cpfDigits ? "PF" : "PJ",
+        cnpj: cnpjDigits || null,
+        cpf: cpfDigits || null,
         cnae: dados?.cnae || null,
         municipality_ibge_code: dados?.municipioIbge || null,
         municipality_name: dados?.municipio || null,
@@ -327,6 +347,7 @@ export async function importarEmpresasPlanilha(
         address_neighborhood: dados?.bairro || null,
         address_zip: dados?.cep || null,
         tax_regime: dados?.simplesNacional ? "SIMPLES_NACIONAL" : null,
+        regime_especial_tributacao: cpfDigits ? 5 : 0,
       })
       .select("id")
       .single();
@@ -335,7 +356,7 @@ export async function importarEmpresasPlanilha(
         linha: numeroLinha,
         motivo:
           companyError?.code === "23505"
-            ? "Já existe uma empresa com esse CNPJ."
+            ? "Já existe uma empresa com esse CNPJ/CPF."
             : "Não foi possível criar a empresa.",
       });
       continue;
@@ -346,7 +367,7 @@ export async function importarEmpresasPlanilha(
       action: "CREATE",
       entity: "company",
       entityId: company.id,
-      newValue: { legal_name: legalName, cnpj: cnpjDigits, origem: "importacao_planilha" },
+      newValue: { legal_name: legalName, cnpj: cnpjDigits || null, cpf: cpfDigits || null, origem: "importacao_planilha" },
     });
 
     importadas += 1;
