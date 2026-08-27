@@ -1,7 +1,13 @@
-# soma-nfse
+# SOMA Gestão
 
-SaaS multiempresa para a SOMA Contabilidade emitir NFS-e Nacional para seus
-clientes. Ver a especificação completa em [`docs/spec.md`](docs/spec.md).
+SaaS multiempresa da SOMA Contabilidade pra gestão dos clientes — emissão de
+NFS-e Nacional, controle de legalização (Alvará, Vigilância Sanitária, CNES,
+Certidão), controle de extratos bancários, e mais módulos a caminho. Nome do
+produto mudou de "SOMA NFS-e" pra "SOMA Gestão" (era só emissão de nota, virou
+plataforma maior); o slug do repositório e da infraestrutura (`soma-nfse`,
+domínio, projeto na Vercel) ficou como estava — não vale trocar isso só por
+causa do rebrand visual. Ver a especificação completa em
+[`docs/spec.md`](docs/spec.md).
 
 Projeto independente de `alterdata-api`/`alterdata-web`/`portal-cliente`/
 `nfse-engine` (repos irmãos, no mesmo diretório pai — outro sistema, não

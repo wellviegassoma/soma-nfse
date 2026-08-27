@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
-export const metadata = { title: "Tomadores — SOMA NFS-e" };
+export const metadata = { title: "Tomadores — SOMA Gestão" };
 
 export default async function TomadoresPage(
   props: PageProps<"/empresas/[companyId]/tomadores">,

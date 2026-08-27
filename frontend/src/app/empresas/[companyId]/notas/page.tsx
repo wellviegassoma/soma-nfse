@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import type { DpsListItem } from "@/lib/types";
 
-export const metadata = { title: "Notas fiscais — SOMA NFS-e" };
+export const metadata = { title: "Notas fiscais — SOMA Gestão" };
 
 function formatMoney(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

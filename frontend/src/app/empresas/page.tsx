@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { LogoutButton } from "@/components/LogoutButton";
 import { ROLE_LABELS } from "@/lib/types";
 
-export const metadata = { title: "Escolha a empresa — SOMA NFS-e" };
+export const metadata = { title: "Escolha a empresa — SOMA Gestão" };
 
 export default async function EmpresasPage() {
   const companies = await getUserCompanies();

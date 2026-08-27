@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { LoginForm } from "./LoginForm";
 
-export const metadata = { title: "Entrar — SOMA NFS-e" };
+export const metadata = { title: "Entrar — SOMA Gestão" };
 
 export default async function LoginPage(props: PageProps<"/login">) {
   const searchParams = await props.searchParams;

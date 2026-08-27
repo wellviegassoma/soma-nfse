@@ -15,7 +15,7 @@ export function Logo({ className }: { className?: string }) {
       <div className="leading-none">
         <div className="text-[15px] font-semibold text-foreground">SOMA</div>
         <div className="text-[11px] font-medium tracking-wide text-foreground/50">
-          NFS-e
+          Gestão
         </div>
       </div>
     </div>

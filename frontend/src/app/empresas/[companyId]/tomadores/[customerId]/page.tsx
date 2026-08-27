@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/Card";
 import type { Customer } from "@/lib/types";
 import { TomadorForm } from "../TomadorForm";
 
-export const metadata = { title: "Editar tomador — SOMA NFS-e" };
+export const metadata = { title: "Editar tomador — SOMA Gestão" };
 
 export default async function EditTomadorPage(
   props: PageProps<"/empresas/[companyId]/tomadores/[customerId]">,

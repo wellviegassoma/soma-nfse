@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/Card";
 import { ImportTomadoresForm } from "./ImportTomadoresForm";
 
-export const metadata = { title: "Importar tomadores — SOMA NFS-e" };
+export const metadata = { title: "Importar tomadores — SOMA Gestão" };
 
 export default async function ImportarTomadoresPage(
   props: PageProps<"/empresas/[companyId]/tomadores/importar">,

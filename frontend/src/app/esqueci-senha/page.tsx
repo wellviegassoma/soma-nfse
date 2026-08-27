@@ -2,7 +2,7 @@ import { Logo } from "@/components/Logo";
 import { Card } from "@/components/ui/Card";
 import { ForgotPasswordForm } from "./ForgotPasswordForm";
 
-export const metadata = { title: "Esqueci minha senha — SOMA NFS-e" };
+export const metadata = { title: "Esqueci minha senha — SOMA Gestão" };
 
 export default function ForgotPasswordPage() {
   return (

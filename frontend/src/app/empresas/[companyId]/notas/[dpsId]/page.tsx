@@ -6,7 +6,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { CancelNotaForm } from "./CancelNotaForm";
 
-export const metadata = { title: "Nota fiscal — SOMA NFS-e" };
+export const metadata = { title: "Nota fiscal — SOMA Gestão" };
 
 function formatMoney(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

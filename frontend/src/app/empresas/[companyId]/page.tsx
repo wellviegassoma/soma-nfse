@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { ROLE_LABELS } from "@/lib/types";
 import type { DpsListItem } from "@/lib/types";
 
-export const metadata = { title: "Painel — SOMA NFS-e" };
+export const metadata = { title: "Painel — SOMA Gestão" };
 
 function formatMoney(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

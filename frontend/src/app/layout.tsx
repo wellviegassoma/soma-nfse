@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SOMA NFS-e",
-  description: "Emissão de NFS-e e gestão para clientes da SOMA Contabilidade",
+  title: "SOMA Gestão",
+  description: "Gestão de clientes, emissão de NFS-e e mais para a SOMA Contabilidade",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

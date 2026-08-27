@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { EmitirNotaForm } from "./EmitirNotaForm";
 
-export const metadata = { title: "Emitir nota — SOMA NFS-e" };
+export const metadata = { title: "Emitir nota — SOMA Gestão" };
 
 export default async function EmitirNotaPage(
   props: PageProps<"/empresas/[companyId]/emitir">,

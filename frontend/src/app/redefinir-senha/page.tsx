@@ -2,7 +2,7 @@ import { Logo } from "@/components/Logo";
 import { Card } from "@/components/ui/Card";
 import { UpdatePasswordForm } from "./UpdatePasswordForm";
 
-export const metadata = { title: "Redefinir senha — SOMA NFS-e" };
+export const metadata = { title: "Redefinir senha — SOMA Gestão" };
 
 export default function UpdatePasswordPage() {
   return (
