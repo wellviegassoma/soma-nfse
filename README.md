@@ -1428,6 +1428,22 @@ categorias no Societário (concluído, 2026-08-27)**
       categorias do Societário aparecendo só na seção correspondente, e
       categoria inválida rejeitada pelo check constraint do banco
 
+**Ajuste — Contatos por setor no cadastro geral do cliente (concluído,
+2026-08-27)**
+- [x] Nova aba "Contatos" no cadastro geral da empresa (`/admin/empresas/
+      {id}/contatos`, ao lado de "Usuários") — telefone/e-mail de quem
+      recebe cada tipo de assunto por setor (Pessoal, Fiscal, Financeiro
+      etc., campo livre com sugestões via `datalist`), pra não depender de
+      descobrir isso de memória a cada contato com o cliente
+- [x] Tabela `company_contatos_setor` nova (não módulo-específica — vive no
+      cadastro geral, mesmo padrão de acesso de `certificates`/`services`:
+      só staff SOMA lê e escreve). CRUD completo (criar, editar, remover)
+      no mesmo padrão inline já usado em Sócios (Societário)
+- [x] Validado ao vivo: contato criado, editado e removido com sucesso via
+      usuário staff descartável; usuário com papel `ANALISTA_LEGALIZACAO`
+      barrado da rota (redirecionado pro próprio módulo dele, não chega
+      no `/admin`)
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:

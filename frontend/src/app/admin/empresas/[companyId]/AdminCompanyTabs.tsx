@@ -9,6 +9,7 @@ const TABS = [
   { href: "certificado", label: "Certificado" },
   { href: "servicos", label: "Serviços" },
   { href: "usuarios", label: "Usuários" },
+  { href: "contatos", label: "Contatos" },
   { href: "fechamento", label: "Fechamento" },
   { href: "impostos", label: "Impostos" },
   { href: "fator-r", label: "Fator R" },
