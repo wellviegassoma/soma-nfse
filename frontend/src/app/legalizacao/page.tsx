@@ -12,7 +12,7 @@ type EmpresaComDocumentos = {
   id: string;
   legal_name: string;
   trade_name: string | null;
-  legalizacao_documentos: { tipo_id: string; data_vencimento: string }[] | null;
+  legalizacao_documentos: { tipo_id: string; data_vencimento: string | null }[] | null;
 };
 
 function diasAteVencer(dataVencimento: string): number {
@@ -40,12 +40,15 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
 
   const vencendo = empresas
     .flatMap((empresa) =>
-      (empresa.legalizacao_documentos ?? []).map((doc) => ({
-        empresa,
-        tipoNome: nomeTipoPorId.get(doc.tipo_id) ?? "Tipo removido",
-        dataVencimento: doc.data_vencimento,
-        dias: diasAteVencer(doc.data_vencimento),
-      })),
+      (empresa.legalizacao_documentos ?? [])
+        // Validade indeterminada nunca vence — fora da lista de vencimentos.
+        .filter((doc): doc is { tipo_id: string; data_vencimento: string } => doc.data_vencimento != null)
+        .map((doc) => ({
+          empresa,
+          tipoNome: nomeTipoPorId.get(doc.tipo_id) ?? "Tipo removido",
+          dataVencimento: doc.data_vencimento,
+          dias: diasAteVencer(doc.data_vencimento),
+        })),
     )
     .filter((l) => l.dias <= DIAS_LIMITE)
     .sort((a, b) => a.dias - b.dias);

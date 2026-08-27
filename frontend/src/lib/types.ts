@@ -101,7 +101,7 @@ export type LegalizacaoDocumento = {
   id: string;
   company_id: string;
   tipo_id: string;
-  data_vencimento: string;
+  data_vencimento: string | null; // null = validade indeterminada
   blob_url: string;
   blob_pathname: string;
   nome_arquivo: string;

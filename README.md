@@ -982,9 +982,55 @@ empresas via CNPJ/planilha) (concluída)**
       esse comando nunca deve rodar sem `--project <nome-certo>`
       explícito nesse repo. Usuário apagou o projeto errado; relinkado
       corretamente com `vercel link --project soma-nfse --yes`
-- [ ] Rebrand de "SOMA NFS-e" pra "SOMA Gestão" (Logo.tsx, títulos de
-      página, README) ainda não feito — decisão de nome e estrutura de
-      módulos veio primeiro, o rebrand visual em si fica pra depois
+- [x] Rebrand de "SOMA NFS-e" pra "SOMA Gestão" concluído — `Logo.tsx`
+      (wordmark do header/login/portal), título/descrição raiz e os 12
+      títulos de página (`"X — SOMA NFS-e"` → `"X — SOMA Gestão"`) trocados
+      em lote. Deliberadamente fora do escopo: nome do repositório, slug
+      do projeto na Vercel e domínio continuam `soma-nfse` — decisão de
+      infra separada, documentada no início deste README. Referências a
+      "NFS-e" no backend e no resto do README continuam intactas (nome
+      oficial do documento fiscal, não a marca do produto)
+
+**Ajuste — leitura automática do documento de legalização + validade indeterminada (concluído)**
+- [x] Ao anexar um documento de legalização, o sistema agora tenta ler o
+      PDF e sugerir a data de vencimento sozinho, além de conferir se o
+      CNPJ encontrado no documento bate com o da empresa selecionada —
+      evita anexar o arquivo da empresa errada sem perceber
+- [x] Extração é por aproximação de texto (`lib/pdf-import/legalizacao-analise.ts`):
+      acha a primeira data no formato dd/mm/aaaa que aparece logo depois
+      de uma palavra-chave de validade/vencimento (evita confundir com a
+      data de emissão do documento, que normalmente não tem essas
+      palavras por perto) e o primeiro CNPJ no texto. Só funciona em PDF
+      com camada de texto real — documento escaneado/fotografado sem OCR
+      não tem texto nenhum pra procurar, e nesse caso simplesmente não
+      sugere nada (usuário preenche manualmente como já fazia antes,
+      decisão consciente de não introduzir OCR nem chamada a uma IA
+      externa por enquanto)
+- [x] Upload passou a acontecer assim que o arquivo é selecionado (não
+      mais só ao clicar Salvar) — necessário pra poder ler o conteúdo e
+      sugerir a data antes de confirmar. Efeito colateral: se o usuário
+      troca de arquivo ou desiste antes de salvar, o upload anterior
+      ficaria órfão no Blob — corrigido apagando o upload anterior
+      automaticamente sempre que um novo arquivo é selecionado no mesmo
+      campo (`apagarBlobOrfao`). Ainda não coberto: usuário que seleciona
+      um arquivo e sai da página sem trocar nem salvar — fica um blob
+      órfão pequeno, sem faxina automática por enquanto (não vale a
+      complexidade de um job de limpeza pra esse volume)
+- [x] Alguns documentos de legalização são emitidos com validade
+      indeterminada (não vencem, só são revogados) — `data_vencimento`
+      virou nullable (migration própria) e a tela ganhou um checkbox
+      "Validade indeterminada" que desabilita o campo de data; esses
+      documentos aparecem com selo próprio ("Validade indeterminada",
+      tom neutro) e nunca entram na lista de "vencendo em 45 dias"
+- [x] Validado ao vivo com dois PDFs reais gerados pra teste (via
+      reportlab): um com o CNPJ real da Wogel (sem aviso, data sugerida
+      "2027-06-29" batendo exato com o texto "Validade: 29/06/2027" do
+      PDF) e outro com CNPJ de outra empresa (aviso de divergência
+      exibido corretamente); validade indeterminada testada ponta a
+      ponta (checkbox → salva com `data_vencimento = null` → selo
+      correto → fora da lista de vencimentos); limpeza de blob órfão
+      confirmada trocando de arquivo antes de salvar (upload antigo
+      desaparece do Blob assim que o novo é selecionado)
 
 ## Setup do zero
 

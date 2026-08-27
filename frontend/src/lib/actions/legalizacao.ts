@@ -1,23 +1,34 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { del } from "@vercel/blob";
+import { del, get } from "@vercel/blob";
+import { PDFParse } from "pdf-parse";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireLegalizacaoAccess, requireUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
+import { analisarTextoDocumento } from "@/lib/pdf-import/legalizacao-analise";
 
 export type LegalizacaoActionState = { error?: string; success?: boolean } | undefined;
 
-const salvarDocumentoSchema = z.object({
-  companyId: uuidLike,
-  tipoId: uuidLike,
-  dataVencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
-  blobUrl: z.string().url(),
-  blobPathname: z.string().min(1),
-  nomeArquivo: z.string().min(1),
-});
+const salvarDocumentoSchema = z
+  .object({
+    companyId: uuidLike,
+    tipoId: uuidLike,
+    dataVencimento: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.")
+      .optional(),
+    indeterminado: z.literal("on").optional(),
+    blobUrl: z.string().url(),
+    blobPathname: z.string().min(1),
+    nomeArquivo: z.string().min(1),
+  })
+  .refine((v) => v.indeterminado === "on" || v.dataVencimento, {
+    message: "Informe a data de vencimento ou marque validade indeterminada.",
+    path: ["dataVencimento"],
+  });
 
 // O upload em si já aconteceu no cliente, direto pro Vercel Blob (ver
 // /api/legalizacao/upload) — essa action só grava a referência depois que o
@@ -33,7 +44,8 @@ export async function salvarDocumentoLegalizacao(
   const parsed = salvarDocumentoSchema.safeParse({
     companyId: formData.get("companyId"),
     tipoId: formData.get("tipoId"),
-    dataVencimento: formData.get("dataVencimento"),
+    dataVencimento: formData.get("dataVencimento") || undefined,
+    indeterminado: formData.get("indeterminado") || undefined,
     blobUrl: formData.get("blobUrl"),
     blobPathname: formData.get("blobPathname"),
     nomeArquivo: formData.get("nomeArquivo"),
@@ -41,7 +53,8 @@ export async function salvarDocumentoLegalizacao(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
-  const { companyId, tipoId, dataVencimento, blobUrl, blobPathname, nomeArquivo } = parsed.data;
+  const { companyId, tipoId, indeterminado, blobUrl, blobPathname, nomeArquivo } = parsed.data;
+  const dataVencimento = indeterminado === "on" ? null : (parsed.data.dataVencimento ?? null);
 
   const user = await requireUser();
   const supabase = await createClient();
@@ -81,6 +94,67 @@ export async function salvarDocumentoLegalizacao(
   revalidatePath(`/legalizacao/empresas/${companyId}`);
   revalidatePath("/legalizacao");
   return { success: true };
+}
+
+// Limpa um upload feito mas nunca salvo — o arquivo já vai pro Blob assim
+// que selecionado (pra poder analisar antes de confirmar), então se o
+// usuário troca de arquivo ou desiste antes de clicar Salvar, o upload
+// anterior ficaria órfão no Blob (sem nenhuma linha no banco apontando pra
+// ele) se ninguém apagasse.
+export async function apagarBlobOrfao(pathname: string) {
+  await requireLegalizacaoAccess();
+  if (!pathname.startsWith("legalizacao/")) return;
+  await del(pathname).catch(() => {});
+}
+
+export type AnaliseDocumentoResult = {
+  dataVencimentoSugerida: string | null;
+  cnpjEncontrado: string | null;
+  cnpjConfere: boolean | null; // null = não deu pra conferir (nenhum CNPJ encontrado no documento)
+};
+
+// Lê o texto do PDF já enviado ao Blob e tenta achar a validade e o CNPJ
+// dentro do documento — é uma sugestão por aproximação de texto (nenhum
+// formato fixo, cada município tem o seu), não uma extração garantida.
+// Documento escaneado/foto sem camada de texto simplesmente não retorna
+// nada (sem erro) — nesse caso o usuário preenche manualmente como já
+// fazia antes dessa função existir.
+export async function analisarDocumentoLegalizacao(
+  blobPathname: string,
+  companyId: string,
+): Promise<AnaliseDocumentoResult> {
+  await requireLegalizacaoAccess();
+
+  const vazio: AnaliseDocumentoResult = {
+    dataVencimentoSugerida: null,
+    cnpjEncontrado: null,
+    cnpjConfere: null,
+  };
+
+  const supabase = await createClient();
+  const { data: company } = await supabase
+    .from("companies")
+    .select("cnpj")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  let texto: string;
+  try {
+    const blob = await get(blobPathname, { access: "private" });
+    if (!blob || blob.statusCode !== 200 || !blob.blob.contentType.includes("pdf")) return vazio;
+    const buffer = Buffer.from(await new Response(blob.stream).arrayBuffer());
+    const parser = new PDFParse({ data: buffer });
+    texto = (await parser.getText()).text;
+  } catch {
+    return vazio;
+  }
+
+  const { dataVencimentoSugerida, cnpjEncontrado } = analisarTextoDocumento(texto);
+  const cnpjEmpresa = company?.cnpj?.replace(/\D/g, "") || null;
+  const cnpjConfere =
+    cnpjEncontrado && cnpjEmpresa ? cnpjEncontrado === cnpjEmpresa : null;
+
+  return { dataVencimentoSugerida, cnpjEncontrado, cnpjConfere };
 }
 
 export async function apagarDocumentoLegalizacao(documentoId: string, companyId: string) {

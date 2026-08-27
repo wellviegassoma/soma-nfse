@@ -12,7 +12,9 @@ function diasAteVencer(dataVencimento: string): number {
   return Math.ceil((new Date(dataVencimento).getTime() - Date.now()) / 86_400_000);
 }
 
-function statusFor(dias: number) {
+function statusFor(dataVencimento: string | null) {
+  if (dataVencimento == null) return { label: "Validade indeterminada", tone: "success" as const };
+  const dias = diasAteVencer(dataVencimento);
   if (dias < 0) return { label: "Vencido", tone: "danger" as const };
   if (dias <= 45) return { label: `Vence em ${dias} dia(s)`, tone: "warning" as const };
   return { label: "Válido", tone: "success" as const };
@@ -69,8 +71,7 @@ export default async function LegalizacaoEmpresaPage(
         <div className="divide-y divide-border">
           {(tipos ?? []).map((tipo) => {
             const documento = documentoPorTipo.get(tipo.id);
-            const dias = documento ? diasAteVencer(documento.data_vencimento) : null;
-            const status = dias != null ? statusFor(dias) : null;
+            const status = documento ? statusFor(documento.data_vencimento) : null;
             return (
               <div key={tipo.id} className="flex flex-col gap-3 px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -96,6 +97,7 @@ export default async function LegalizacaoEmpresaPage(
                   companyId={companyId}
                   tipoId={tipo.id}
                   dataVencimentoAtual={documento?.data_vencimento ?? null}
+                  indeterminadoAtual={documento != null && documento.data_vencimento == null}
                 />
               </div>
             );
