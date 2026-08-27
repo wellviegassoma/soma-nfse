@@ -22,7 +22,8 @@ from fastapi import Depends, FastAPI, HTTPException
 
 import scheduler
 from auth import exigir_token_interno
-from schemas import DeclaracoesPeriodoOut, ExtratoDasOut, SituacaoFiscalOut
+from catalogo import CATALOGO
+from schemas import ChamarServicoIn, ChamarServicoOut, DeclaracoesPeriodoOut, ExtratoDasOut, SituacaoFiscalOut
 from serpro_client import ErroIntegraContador, chamar
 from sitfis import ErroSitfis, obter_situacao_fiscal
 
@@ -37,6 +38,42 @@ def iniciar_scheduler():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/catalogo", dependencies=[Depends(exigir_token_interno)])
+def listar_catalogo():
+    """Lista os serviços prontos pra usar via /contribuintes/{cnpj}/chamar."""
+    return [
+        {
+            "idSistema": s.id_sistema,
+            "idServico": s.id_servico,
+            "rota": s.rota,
+            "versaoConfirmada": s.versao_sistema is not None,
+            "procuracaoCodigo": s.procuracao_codigo,
+        }
+        for s in CATALOGO.values()
+    ]
+
+
+@app.post(
+    "/contribuintes/{cnpj}/chamar",
+    response_model=ChamarServicoOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def chamar_servico(cnpj: str, corpo: ChamarServicoIn):
+    """
+    Endpoint genérico — chama qualquer serviço já catalogado em
+    catalogo.py (ver GET /catalogo pra lista) sem precisar de um endpoint
+    dedicado por serviço. Mesma engine de cache/log/auth dos endpoints
+    específicos (extrato-das, declaracoes, situacao-fiscal).
+    """
+    try:
+        resposta = chamar(corpo.id_sistema, corpo.id_servico, cnpj, corpo.dados)
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ChamarServicoOut(
+        contribuinte_cnpj=cnpj, id_sistema=corpo.id_sistema, id_servico=corpo.id_servico, resposta=resposta
+    )
 
 
 @app.get(

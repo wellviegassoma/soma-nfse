@@ -20,7 +20,7 @@ from typing import Any
 import requests
 
 import cache
-from catalogo import obter_servico
+from catalogo import ServicoDesconhecidoError, obter_servico
 from serpro_auth import forcar_reautenticacao, obter_tokens
 from supabase_client import obter_cliente
 
@@ -81,7 +81,10 @@ def _chamar_gateway(rota: str, envelope: dict, tentativa_apos_401: bool = False)
 
 
 def chamar(id_sistema: str, id_servico: str, contribuinte_cnpj: str, dados: dict[str, Any]) -> dict:
-    servico = obter_servico(id_sistema, id_servico)
+    try:
+        servico = obter_servico(id_sistema, id_servico)
+    except ServicoDesconhecidoError as e:
+        raise ErroIntegraContador(str(e))
     inicio = time.monotonic()
 
     cacheado = cache.buscar(id_sistema, id_servico, contribuinte_cnpj, dados, servico.cache_ttl_segundos)

@@ -18,3 +18,16 @@ class DeclaracoesPeriodoOut(BaseModel):
 class SituacaoFiscalOut(BaseModel):
     contribuinte_cnpj: str
     resposta: dict
+
+
+class ChamarServicoIn(BaseModel):
+    id_sistema: str
+    id_servico: str
+    dados: dict = {}
+
+
+class ChamarServicoOut(BaseModel):
+    contribuinte_cnpj: str
+    id_sistema: str
+    id_servico: str
+    resposta: dict
