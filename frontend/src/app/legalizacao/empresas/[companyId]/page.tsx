@@ -80,9 +80,14 @@ export default async function LegalizacaoEmpresaPage(
           </h1>
           <p className="text-sm text-foreground/60">Consulta de documentos de legalização.</p>
         </div>
-        <Link href={`/legalizacao/empresas/${companyId}/gerenciar`}>
-          <Button variant="secondary">Gerenciar documentos</Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href={`/legalizacao/empresas/${companyId}/societario`}>
+            <Button variant="ghost">Societário</Button>
+          </Link>
+          <Link href={`/legalizacao/empresas/${companyId}/gerenciar`}>
+            <Button variant="secondary">Gerenciar documentos</Button>
+          </Link>
+        </div>
       </div>
 
       <Card className="flex flex-wrap gap-x-8 gap-y-3 p-5">

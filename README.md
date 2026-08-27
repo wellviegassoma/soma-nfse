@@ -1199,6 +1199,53 @@ empresas via CNPJ/planilha) (concluída)**
       (Petrópolis/RJ 87, Rio de Janeiro/RJ 72, ...) — confirma que o
       backfill populou os dados certos
 
+**Novo módulo — Societário: contrato social, alterações e sócios (concluído, 2026-08-27)**
+- [x] Documentos de legalização têm vencimento e um catálogo fixo de tipos
+      por empresa; contrato social e suas alterações não têm vencimento
+      nenhum e não têm quantidade fixa (uma empresa pode ter zero
+      alterações, outra pode ter oito) — não cabiam no mesmo modelo.
+      Passou a ser um histórico livre por empresa: data + descrição (texto
+      livre, ex.: "Contrato Social", "2ª Alteração — entrada de sócio") +
+      arquivo, sem catálogo de tipos (`societario_documentos`)
+- [x] Sócios (`socios`) são uma entidade nova no sistema — não existia
+      nada parecido antes. PF ou PJ, sem vínculo obrigatório com nenhuma
+      `company` já cadastrada (sócio PJ pode ser de fora da carteira de
+      clientes da SOMA): nome/razão social, CPF/CNPJ opcional, percentual
+      de participação atual (não um histórico de mudanças — se o
+      percentual mudar, o Analista só edita o campo; o documento que
+      comprova a mudança já fica registrado no histórico societário da
+      empresa), data de entrada/saída. Cada sócio tem sua própria
+      mini-lista de documentos (`socios_documentos` — RG, CPF, comprovante
+      de residência, ...), mesmo espírito de descrição livre sem
+      vencimento
+- [x] Reaproveita 100% a infraestrutura do módulo Legalização: mesma
+      rota de upload (`/api/legalizacao/upload`, já gated por
+      `requireLegalizacaoAccess()`, sem lógica específica de tabela — só
+      mudou o prefixo do pathname), mesmo papel Analista de Legalização
+      (nenhum papel novo, nenhuma migration de enum). Só 2 rotas de
+      download novas (`/api/societario/documentos/[id]`,
+      `/api/societario/socios-documentos/[id]`), réplicas diretas do
+      padrão já usado em Legalização
+- [x] Nova aba "Societário" na tela de consulta por empresa
+      (`/legalizacao/empresas/{id}/societario`) com duas seções: histórico
+      societário (lista + form de nova entrada) e sócios (lista com
+      editar/expandir documentos inline + form de novo sócio). Botão de
+      remoção usa o mesmo padrão de confirmação inline (não nativo) já
+      adotado no resto do módulo Legalização
+- [x] RLS pensada pra abrir consulta pra mais gente no futuro sem mexer
+      em schema — hoje é `is_soma_staff() or is_legalizacao_analista()`
+      nas 3 tabelas (igual ao resto de Legalização); ampliar quem pode só
+      *ler* no futuro é adicionar mais um papel na cláusula `using`, não
+      uma migration nova
+- [x] Validado ao vivo com usuário descartável: upload real de documento
+      societário (data + descrição + PDF) → salvo com blob real no Vercel
+      Blob → baixado de volta byte a byte pela rota nova → removido
+      (confirmado sumindo do banco); sócio PF criado (CPF formatado
+      automaticamente na tela), documento anexado a ele, sócio removido e
+      confirmado que a linha do sócio E o documento dele sumiram do banco
+      juntos (cascade); sócio PJ criado (CNPJ formatado), percentual
+      editado ao vivo (40% → 55%, refletindo na tela), removido depois
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
