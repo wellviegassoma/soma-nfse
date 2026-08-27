@@ -33,8 +33,10 @@ _cache: dict[str, object] = {}
 
 
 def _autenticar() -> dict:
-    consumer_key = os.environ["INTEGRA_CONTADOR_CONSUMER_KEY"]
-    consumer_secret = os.environ["INTEGRA_CONTADOR_CONSUMER_SECRET"]
+    # .strip() porque colar do painel da Serpro costuma trazer espaço/quebra
+    # de linha junto, o que quebra o parser de Basic Auth do lado deles.
+    consumer_key = os.environ["INTEGRA_CONTADOR_CONSUMER_KEY"].strip()
+    consumer_secret = os.environ["INTEGRA_CONTADOR_CONSUMER_SECRET"].strip()
     auth_url = os.environ.get(
         "INTEGRA_CONTADOR_AUTH_URL", "https://autenticacao.sapi.serpro.gov.br/authenticate"
     )
