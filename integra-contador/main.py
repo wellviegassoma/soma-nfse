@@ -22,7 +22,7 @@ from fastapi import Depends, FastAPI, HTTPException
 
 import scheduler
 from auth import exigir_token_interno
-from schemas import ExtratoDasOut
+from schemas import DeclaracoesPeriodoOut, ExtratoDasOut
 from serpro_client import ErroIntegraContador, chamar
 
 app = FastAPI(title="integra-contador", docs_url=None, redoc_url=None)
@@ -91,3 +91,22 @@ def consultar_extrato_das(cnpj: str, numero_das: str):
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ExtratoDasOut(contribuinte_cnpj=cnpj, numero_das=numero_das, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/simples/declaracoes/{periodo_apuracao}",
+    response_model=DeclaracoesPeriodoOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def consultar_declaracoes_periodo(cnpj: str, periodo_apuracao: str):
+    """
+    Consulta o índice de declarações/DAS de um período de apuração
+    (PGDASD.CONSDECLARACAO13, formato periodoApuracao: AAAAMM). Útil pra
+    descobrir os números de DAS reais de um contribuinte antes de usar
+    /simples/extrato-das/{numero_das}.
+    """
+    try:
+        resposta = chamar("PGDASD", "CONSDECLARACAO13", cnpj, {"periodoApuracao": periodo_apuracao})
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return DeclaracoesPeriodoOut(contribuinte_cnpj=cnpj, periodo_apuracao=periodo_apuracao, resposta=resposta)
