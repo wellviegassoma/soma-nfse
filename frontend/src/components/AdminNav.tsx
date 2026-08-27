@@ -11,6 +11,7 @@ const TABS = [
   { href: "/admin/fechamento", label: "Fechamento" },
   { href: "/admin/erros", label: "Erros" },
   { href: "/admin/logs", label: "Logs" },
+  { href: "/admin/chat", label: "Chat IA" },
 ];
 
 export function AdminNav() {

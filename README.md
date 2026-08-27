@@ -1273,6 +1273,50 @@ empresas via CNPJ/planilha) (concluída)**
       esperado nesse cenário — não um bug do código). Em uso normal, com
       clique real do mouse, as duas chamadas funcionam
 
+**Novo — Chat de IA interno (relatórios e análises do sistema) (concluído, 2026-08-27)**
+- [x] Chat de IA só pra staff SOMA (`requireSomaStaff()`), em
+      `/admin/chat`, usando Claude Sonnet 5 via Vercel AI SDK (`ai` +
+      `@ai-sdk/anthropic` + `@ai-sdk/react`) — nova dependência de API paga
+      (`ANTHROPIC_API_KEY`), passo manual já feito (chave criada e
+      configurada em `.env.local` + Vercel)
+- [x] Decisão de arquitetura: a IA nunca escreve SQL — chama um conjunto de
+      ~12 ferramentas parametrizadas (`lib/ai/tools.ts`), cada uma fazendo
+      exatamente uma consulta bem definida via `createClient()` (RLS do
+      usuário logado, nunca service role). Cobre faturamento por período e
+      por código de atividade/serviço (`dps` + `services`), erros de
+      emissão de nota, folha mensal, certificados vencendo, pendências de
+      legalização, extratos não entregues, sócios/societário, e busca de
+      empresa por nome/CNPJ
+- [x] Ferramenta extra: a IA consegue **ler o conteúdo real de um
+      documento já anexado no sistema** (Legalização, Societário, Extratos)
+      — busca o PDF no Vercel Blob e devolve como bloco de documento pro
+      Claude ler nativamente (não é extração de texto via `pdf-parse`, é o
+      modelo enxergando o PDF de verdade, inclusive tabela/layout/scan),
+      pra responder "analisa o alvará da empresa X", "resume a última
+      alteração contratual", etc.
+- [x] Histórico de conversa persistido por usuário (`chat_ia_conversas` +
+      `chat_ia_mensagens`, RLS restringindo cada staff à própria conversa —
+      não é compartilhado entre a equipe mesmo todos sendo staff). Cada
+      resposta grava um evento resumido em `audit_logs` (`logAudit`, mesmo
+      padrão do resto do projeto)
+- [x] **Bug real encontrado e corrigido durante o teste ao vivo**: a
+      ferramenta de faturamento mensal total (`consultarFaturamentoMensal`)
+      não excluía notas com evento de cancelamento (`nfse_events.type =
+      'CANCELAMENTO'`), diferente da ferramenta de faturamento por serviço
+      que já excluía — resultado: duas notas canceladas de R$1 cada
+      estavam sendo contadas como R$2 de faturamento "manual" quando na
+      verdade era R$0. Corrigido extraindo um helper `notaValida()`
+      compartilhado pelas duas ferramentas
+- [x] Validado ao vivo com 3 usuários descartáveis: pergunta real de
+      faturamento por código de atividade pra "SOMA Contabilidade
+      Integrada LTDA" batendo com consulta direta ao banco (inclusive
+      confirmando o bug acima antes de corrigir); leitura de documento real
+      (Alvará da 2Z2S) trazendo CNPJ, validade, data de emissão e até uma
+      observação sobre CNAEs pendentes de licença — só possível lendo o
+      PDF de verdade; acesso barrado tanto pela tela quanto por POST direto
+      na API pra usuário não-staff; histórico completamente isolado entre
+      dois usuários staff diferentes
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:
