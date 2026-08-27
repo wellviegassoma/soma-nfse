@@ -1626,6 +1626,45 @@ autônomo) (concluído, 2026-08-27)**
       frontend. Confirme que o deploy do backend pegou essa mudança antes
       de considerar o problema resolvido
 
+**Correção — Retry insuficiente + suspeita de conexão "grudada" (concluído,
+2026-08-27)**
+- [x] O retry de 3 tentativas acima chegou a rodar em produção (confirmado
+      pela própria mensagem de erro, que já dizia "persistente após 3
+      tentativas" — prova de que o deploy do Railway pegou a mudança) mas
+      não foi suficiente pra VERSATILE: as 3 tentativas (~14s no total)
+      esgotaram e a falha continuou. Cruzando os horários de TODOS os
+      certificados × resultado de sincronização, ficou claro que não é
+      "certificado recém-cadastrado que falha" — dezenas de certificados
+      cadastrados na mesma hora sincronizaram com sucesso; os poucos que
+      falharam (incluindo a própria SOMA, certificado de semanas atrás)
+      estão espalhados sem relação com quando o certificado foi cadastrado
+- [x] Usuário levantou a hipótese de "algum cache" — motivada por outro
+      sistema (fora deste projeto) conseguir falar com o mesmo servidor
+      usando o mesmo tipo de certificado sem problema. Levou a uma segunda
+      causa real, já documentada no próprio código (`certificado.py`,
+      `_AdaptadorTLS12`): esse endpoint do governo (`adn.nfse.gov.br`) é
+      conhecido por só aceitar TLS 1.2 vindo desse cliente Python — e o
+      `requests.Session`/urllib3 reaproveita a mesma conexão (e a mesma
+      resolução de IP, se o servidor responde por múltiplos servidores
+      atrás de um balanceador) entre tentativas de retry. Se uma tentativa
+      grudar num caminho ruim, toda tentativa seguinte usando a MESMA
+      sessão bate na mesma conexão quebrada — o que bate exatamente com
+      "sempre falha pra essa empresa, nunca melhora sozinho"
+- [x] Duas mudanças em `nfse_client.py`: (1) limite de tentativas por falha
+      de conexão/TLS subiu de 3 pra 5 (backoff também subiu o teto, de 15s
+      pra 20s); (2) nova `_recriar_sessao()` — fecha a sessão atual e monta
+      uma completamente nova (nova pool de conexão, nova resolução de DNS,
+      novo handshake) a cada tentativa de retry por conexão/TLS, em vez de
+      reusar `self._session` (que só é recriada por padrão uma vez, na
+      criação do cliente)
+- [x] Testado isoladamente (sessão HTTP simulada, sem depender de rede
+      real): confirmado que cada tentativa de retry agora passa por um
+      objeto de sessão genuinamente diferente — nunca reaproveitando a
+      sessão que acabou de falhar — e que o novo limite de 5 tentativas é
+      respeitado antes de desistir
+- [ ] Mesma ressalva de antes: confirme que o Railway já publicou essa
+      segunda correção antes de testar de novo
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:

@@ -313,6 +313,24 @@ class ClienteNFSeNacional:
         self._cert_path, self._key_path = carregar_certificado_pfx(caminho_pfx, senha_pfx)
         self._session = criar_sessao_mtls(self._cert_path, self._key_path)
 
+    def _recriar_sessao(self):
+        """
+        Fecha a sessão atual e monta uma nova do zero (nova pool de conexão,
+        nova resolução de DNS, novo handshake TLS) — usado entre tentativas
+        de retry por falha de conexão/TLS. Suspeita real: o
+        `requests.Session`/urllib3 pode reaproveitar uma conexão (ou uma
+        resolução de IP, se `adn.nfse.gov.br` responde por múltiplos
+        servidores atrás de um balanceador) que ficou presa num caminho
+        ruim — reaproveitar a mesma sessão pra tentar de novo simplesmente
+        bateria na mesma conexão quebrada. Recriar do zero garante que cada
+        tentativa é uma conexão genuinamente nova.
+        """
+        try:
+            self._session.close()
+        except Exception:
+            pass
+        self._session = criar_sessao_mtls(self._cert_path, self._key_path)
+
     def fechar(self):
         self._session.close()
         limpar_certificado_temporario(self._cert_path, self._key_path)
@@ -374,10 +392,12 @@ class ClienteNFSeNacional:
     # instabilidade intermitente do adn.nfse.gov.br, não um certificado
     # inválido: no mesmo dia, empresas diferentes (com certificados
     # diferentes, incluindo um já validado há meses) tomaram esse mesmo erro
-    # em horários distintos. Poucas tentativas, backoff curto — não é o
-    # mesmo cenário de rate-limit do 429 (que já tem seu próprio limite bem
-    # maior), é só dar uma segunda chance pra uma instabilidade passageira.
-    MAX_TENTATIVAS_CONEXAO = 3
+    # em horários distintos. Não é o mesmo cenário de rate-limit do 429 (que
+    # já tem seu próprio limite bem maior), é dar mais chances pra uma
+    # instabilidade passageira — mas real o bastante pra precisar de mais
+    # que 3 tentativas rápidas (visto em produção: mesma empresa esgotou 3
+    # tentativas com backoff de ~2/4/8s e ainda assim continuou falhando).
+    MAX_TENTATIVAS_CONEXAO = 5
 
     def _get_com_retry(
         self,
@@ -417,7 +437,8 @@ class ClienteNFSeNacional:
                         f"Falha de TLS com o servidor — tentando de novo "
                         f"(tentativa {tentativa_conexao}/{self.MAX_TENTATIVAS_CONEXAO})..."
                     )
-                time.sleep(min(2 ** tentativa_conexao, 15))
+                time.sleep(min(2 ** tentativa_conexao, 20))
+                self._recriar_sessao()
                 continue
             except requests.exceptions.RequestException as e:
                 tentativa_conexao += 1
@@ -431,7 +452,8 @@ class ClienteNFSeNacional:
                         f"Falha de conexão com o servidor — tentando de novo "
                         f"(tentativa {tentativa_conexao}/{self.MAX_TENTATIVAS_CONEXAO})..."
                     )
-                time.sleep(min(2 ** tentativa_conexao, 15))
+                time.sleep(min(2 ** tentativa_conexao, 20))
+                self._recriar_sessao()
                 continue
             finally:
                 self._ultima_requisicao_em = time.monotonic()
