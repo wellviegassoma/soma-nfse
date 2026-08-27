@@ -67,6 +67,11 @@ def debug_serpro_credenciais():
         "consumer_key": diagnosticar("INTEGRA_CONTADOR_CONSUMER_KEY"),
         "consumer_secret": diagnosticar("INTEGRA_CONTADOR_CONSUMER_SECRET"),
         "auth_url": os.environ.get("INTEGRA_CONTADOR_AUTH_URL"),
+        "gateway_url": os.environ.get("INTEGRA_CONTADOR_GATEWAY_URL"),
+        # CNPJ não é segredo (registro público) — exibir direto ajuda a
+        # conferir rápido se bate com o CNPJ do contrato na Serpro.
+        "soma_cnpj": os.environ.get("SOMA_CNPJ"),
+        "soma_company_id": os.environ.get("SOMA_COMPANY_ID"),
     }
 
 
