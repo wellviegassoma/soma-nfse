@@ -369,6 +369,16 @@ class ClienteNFSeNacional:
     # no lado do governo, então merece o mesmo tratamento).
     CODIGOS_RETRY_TEMPORARIO = {429, 502, 503, 504}
 
+    # Falha de conexão/TLS (SSLError, conexão resetada, timeout) antes mesmo
+    # de chegar uma resposta HTTP — confirmado em produção que isso também é
+    # instabilidade intermitente do adn.nfse.gov.br, não um certificado
+    # inválido: no mesmo dia, empresas diferentes (com certificados
+    # diferentes, incluindo um já validado há meses) tomaram esse mesmo erro
+    # em horários distintos. Poucas tentativas, backoff curto — não é o
+    # mesmo cenário de rate-limit do 429 (que já tem seu próprio limite bem
+    # maior), é só dar uma segunda chance pra uma instabilidade passageira.
+    MAX_TENTATIVAS_CONEXAO = 3
+
     def _get_com_retry(
         self,
         url: str,
@@ -388,18 +398,41 @@ class ClienteNFSeNacional:
         """
         limite = max_tentativas if max_tentativas is not None else self.max_tentativas_429
         tentativa = 0
+        tentativa_conexao = 0
         while True:
             self._aguardar_intervalo_minimo()
             try:
                 resp = self._session.get(url, params=params, timeout=self.timeout)
             except requests.exceptions.SSLError as e:
-                raise ErroAPI(
-                    "Falha no handshake TLS com certificado do cliente (mTLS). "
-                    "Confirme que o certificado é válido para o ambiente "
-                    f"escolhido e não está expirado. Detalhe: {e}"
-                )
+                tentativa_conexao += 1
+                if tentativa_conexao > self.MAX_TENTATIVAS_CONEXAO:
+                    raise ErroAPI(
+                        "Falha no handshake TLS com certificado do cliente (mTLS), "
+                        f"persistente após {self.MAX_TENTATIVAS_CONEXAO} tentativas. "
+                        "Confirme que o certificado é válido para o ambiente "
+                        f"escolhido e não está expirado. Detalhe: {e}"
+                    ) from e
+                if callback_status:
+                    callback_status(
+                        f"Falha de TLS com o servidor — tentando de novo "
+                        f"(tentativa {tentativa_conexao}/{self.MAX_TENTATIVAS_CONEXAO})..."
+                    )
+                time.sleep(min(2 ** tentativa_conexao, 15))
+                continue
             except requests.exceptions.RequestException as e:
-                raise ErroAPI(f"Falha de conexão com {url}: {e}")
+                tentativa_conexao += 1
+                if tentativa_conexao > self.MAX_TENTATIVAS_CONEXAO:
+                    raise ErroAPI(
+                        f"Falha de conexão com {url}, persistente após "
+                        f"{self.MAX_TENTATIVAS_CONEXAO} tentativas. Detalhe: {e}"
+                    ) from e
+                if callback_status:
+                    callback_status(
+                        f"Falha de conexão com o servidor — tentando de novo "
+                        f"(tentativa {tentativa_conexao}/{self.MAX_TENTATIVAS_CONEXAO})..."
+                    )
+                time.sleep(min(2 ** tentativa_conexao, 15))
+                continue
             finally:
                 self._ultima_requisicao_em = time.monotonic()
 

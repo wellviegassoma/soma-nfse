@@ -1592,6 +1592,40 @@ autônomo) (concluído, 2026-08-27)**
       detalhado corretamente como 206 CNPJ · 67 CPF (batendo com a
       reimportação da planilha do ajuste anterior)
 
+**Correção — Retry em falha de conexão/TLS na sincronização de notas
+(concluído, 2026-08-27)**
+- [x] Usuário reportou "não busca notas" numa empresa (VERSATILE
+      ODONTOLOGIA), com o erro "Falha no handshake TLS com certificado do
+      cliente (mTLS)" contra `adn.nfse.gov.br`. Investigação nos logs de
+      `ultima_sincronizacao_erro` de TODAS as empresas mostrou o padrão
+      real: no mesmo dia, empresas diferentes — com certificados
+      diferentes, incluindo o da própria SOMA (certificado validado há
+      meses, usado desde a primeira emissão real do sistema) — tomaram o
+      mesmo tipo de erro (SSLError ou conexão resetada) em horários
+      distintos. **Não é certificado inválido de ninguém — é instabilidade
+      intermitente do lado do `adn.nfse.gov.br`**, o mesmo tipo de
+      comportamento já documentado neste projeto pro endpoint de DANFSe
+- [x] `nfse_client.py` (`_get_com_retry`) já tinha retry com backoff pra
+      erros HTTP temporários (429/502/503/504), mas erros de conexão/TLS
+      (que acontecem ANTES de qualquer resposta HTTP chegar — `SSLError`,
+      conexão resetada, timeout) iam direto pro erro final, sem nenhuma
+      segunda tentativa. Adicionado retry curto (até 3 tentativas, backoff
+      exponencial de poucos segundos) especificamente pra esses casos,
+      igual ao raciocínio já usado pro 429 — só que com tolerância bem
+      menor, já que não é rate-limit, é só dar uma segunda chance pra uma
+      instabilidade passageira
+- [x] Testado isoladamente com sessão HTTP simulada (sem precisar de
+      certificado real nem depender do `adn.nfse.gov.br` estar instável na
+      hora do teste): `SSLError` intermitente seguido de sucesso passa a
+      funcionar (antes falhava direto); `SSLError`/conexão resetada
+      persistentes além do limite ainda levantam o erro final, com a
+      mensagem agora deixando claro que já tentou de novo
+- [ ] **Atenção**: este backend roda separado do frontend (Railway, via
+      `backend/Procfile`) — não tenho acesso ao CLI/dashboard do Railway
+      pra confirmar ou disparar o redeploy como fiz com o Vercel do
+      frontend. Confirme que o deploy do backend pegou essa mudança antes
+      de considerar o problema resolvido
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:
