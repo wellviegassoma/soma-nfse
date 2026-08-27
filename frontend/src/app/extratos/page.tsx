@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { BuscaRapidaEmpresa } from "@/components/BuscaRapidaEmpresa";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 
 export const metadata = { title: "Extratos — Visão geral" };
@@ -70,6 +71,12 @@ export default async function ExtratosPage(props: PageProps<"/extratos">) {
           ({competenciaAtual.split("-").reverse().join("/")}).
         </p>
       </div>
+
+      <BuscaRapidaEmpresa
+        empresas={empresas.map((e) => ({ id: e.id, legal_name: e.legal_name, trade_name: e.trade_name }))}
+        basePath="/extratos/empresas"
+        placeholder="Buscar empresa e acessar os extratos..."
+      />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Card className="p-4">

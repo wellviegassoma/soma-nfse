@@ -4,13 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
-import {
-  STATUS_PILL_CLASSES,
-  formatarCnpj,
-  formatarEndereco,
-  statusDocumento,
-  tipoAplicavel,
-} from "@/app/legalizacao/status";
+import { statusDocumento, tipoAplicavel } from "@/app/legalizacao/status";
+import { STATUS_PILL_CLASSES, formatarCnpj, formatarEndereco } from "@/lib/formatters";
 import { TAX_REGIME_LABELS, type Company } from "@/lib/types";
 import { ConsultarCnpjReceitaButton } from "./ConsultarCnpjReceitaButton";
 

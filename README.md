@@ -1339,6 +1339,36 @@ empresas via CNPJ/planilha) (concluída)**
       de consulta refletindo as 3 contas com status "pendente este mês"
       corretamente
 
+**Ajuste — busca rápida e dados cadastrais na consulta de Extratos (concluído, 2026-08-27)**
+- [x] `BuscaRapidaEmpresa` (o campo "Buscar empresa e acessar..." já usado
+      em Legalização) virou componente compartilhado
+      (`components/BuscaRapidaEmpresa.tsx`, com `basePath`/`placeholder`
+      configuráveis) e passou a aparecer também no dashboard de Extratos —
+      mesmo princípio: qualquer um da equipe acha a empresa rápido e cai
+      direto na consulta dela
+- [x] `formatarCnpj`/`formatarEndereco`/`STATUS_PILL_CLASSES` saíram de
+      dentro de Legalização e viraram `lib/formatters.ts` (são genéricos,
+      nada específico do módulo) — evita duplicar a mesma formatação ao
+      trazer o mesmo card pra Extratos
+- [x] Tela de consulta por empresa em Extratos
+      (`/extratos/empresas/{id}`) ganhou o mesmo card "Dados cadastrais"
+      (CNPJ, regime tributário, endereço) já usado em Legalização, e o
+      controle mensal deixou de mostrar só o mês corrente — agora mostra os
+      últimos 6 meses por conta, com selo "Entregue"/"Pendente" e link de
+      baixar quando há arquivo, tudo somente leitura (edição continua em
+      "Gerenciar")
+- [x] **Dado de teste órfão encontrado e corrigido durante a validação**:
+      uma operação de teste de sessões anteriores tinha marcado o tipo real
+      "Certidão RFB" como não aplicável pra 203 das 206 empresas (claramente
+      um teste do recurso "restringir tipo a empresas selecionadas" salvo
+      sem querer sobre um tipo de produção, não um tipo de teste) — apagadas
+      as 203 linhas de exceção, tipo voltou a se aplicar normalmente a
+      todas
+- [x] Validado ao vivo: busca rápida funcionando no dashboard de Extratos;
+      card de dados cadastrais e controle de 6 meses corretos na consulta;
+      confirmado que Legalização continua funcionando normalmente após o
+      refactor dos helpers compartilhados
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:

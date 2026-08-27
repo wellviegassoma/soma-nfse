@@ -13,7 +13,15 @@ function normalizar(texto: string): string {
     .toLowerCase();
 }
 
-export function BuscaRapidaEmpresa({ empresas }: { empresas: Empresa[] }) {
+export function BuscaRapidaEmpresa({
+  empresas,
+  basePath,
+  placeholder = "Buscar empresa e acessar os dados...",
+}: {
+  empresas: Empresa[];
+  basePath: string;
+  placeholder?: string;
+}) {
   const [termo, setTermo] = useState("");
 
   const resultados = useMemo(() => {
@@ -29,7 +37,7 @@ export function BuscaRapidaEmpresa({ empresas }: { empresas: Empresa[] }) {
       <Input
         value={termo}
         onChange={(e) => setTermo(e.target.value)}
-        placeholder="Buscar empresa e acessar os documentos..."
+        placeholder={placeholder}
         className="w-full"
         autoComplete="off"
       />
@@ -41,7 +49,7 @@ export function BuscaRapidaEmpresa({ empresas }: { empresas: Empresa[] }) {
             resultados.map((empresa) => (
               <Link
                 key={empresa.id}
-                href={`/legalizacao/empresas/${empresa.id}`}
+                href={`${basePath}/${empresa.id}`}
                 className="flex flex-col gap-0.5 px-4 py-2.5 transition-colors hover:bg-surface-muted"
                 onClick={() => setTermo("")}
               >

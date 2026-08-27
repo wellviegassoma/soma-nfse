@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { BuscaRapidaEmpresa } from "./BuscaRapidaEmpresa";
+import { BuscaRapidaEmpresa } from "@/components/BuscaRapidaEmpresa";
 import { tipoAplicavel } from "./status";
 
 export const metadata = { title: "Legalização — Visão geral" };
@@ -136,6 +136,8 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
 
       <BuscaRapidaEmpresa
         empresas={empresas.map((e) => ({ id: e.id, legal_name: e.legal_name, trade_name: e.trade_name }))}
+        basePath="/legalizacao/empresas"
+        placeholder="Buscar empresa e acessar os documentos..."
       />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
