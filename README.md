@@ -895,6 +895,77 @@ empresas via CNPJ/planilha) (concluída)**
       e validado de novo: 10 com certificado, 196 sem, 2 vencendo (bate
       com a Visão geral)
 
+**Fase O/P — Módulos Legalização e Extratos + dois papéis novos (concluído)**
+- [x] Usuário decidiu renomear o produto pra "SOMA Gestão" (deixa de ser só
+      "SOMA NFS-e") porque quer adicionar módulos além da emissão de nota,
+      pra ajudar na gestão dos clientes de verdade. Primeiros dois:
+      **Legalização** (controle de documentos como Alvará de Funcionamento,
+      Vigilância Sanitária, CNES, Certidão — vencimento + arquivo, por
+      empresa) e **Extratos** (contas bancárias por empresa + controle
+      mês a mês de entrega do extrato bancário pro setor contábil, com o
+      arquivo anexado). Cada módulo tem um papel novo dedicado —
+      **Analista de Legalização** e **Analista Contábil** — que só
+      enxergam o próprio módulo, nada de fiscal/certificado/notas
+- [x] Dois papéis novos no enum `user_role` (migration própria — Postgres
+      não deixa usar um valor de enum recém-criado na mesma transação em
+      que foi adicionado). Duas árvores de rota novas e independentes,
+      `/legalizacao` e `/extratos` (não um retrofit de `/admin`, que já
+      dá acesso a tudo pra quem é staff) — cada uma com seu próprio gate
+      (`requireLegalizacaoAccess`/`requireExtratosAccess` em `lib/auth.ts`,
+      aceitando staff completo OU o papel específico)
+- [x] Bug pego e corrigido durante o teste ao vivo: a policy de RLS de
+      `companies` só liberava leitura pra staff ou pra quem tem vínculo
+      direto com aquela empresa — os papéis novos têm um vínculo só
+      incidental (mesma linha "pra existir" que staff usa), então não
+      enxergavam NENHUMA empresa de verdade, só a linha especial da SOMA.
+      Sem isso os dois módulos ficavam inutilizáveis. Corrigido liberando
+      `companies_select` também pros dois papéis novos
+- [x] Bug lateral pego e corrigido: `/empresas/[companyId]` (portal do
+      cliente) checava só "existe vínculo com essa empresa", sem checar o
+      papel — um Analista cujo vínculo incidental apontasse pra uma
+      empresa real veria a casca do portal do cliente (RLS ainda bloqueava
+      os dados, mas a tela ficava quebrada). Adicionada checagem de papel
+- [x] `/` (redirecionamento pós-login) passou a decidir o destino pelo
+      papel antes de olhar quantas empresas o usuário tem — staff vai
+      direto pro `/admin` (antes aparentemente só chegava lá por favorito
+      de URL), Analista de Legalização pro `/legalizacao`, Analista
+      Contábil pro `/extratos`
+- [x] Arquivos (documento de legalização, extrato bancário) vão pro
+      **Vercel Blob**, não bytea no Postgres (padrão usado em
+      `certificates`) nem Supabase Storage — decisão tomada depois de
+      levantar que bytea esbarra no limite prático de ~4,5MB por
+      requisição de Serverless Function da Vercel, que um documento
+      escaneado de várias páginas pode ultrapassar. Upload é direto do
+      navegador pro Blob (`@vercel/blob/client`, rotas
+      `/api/legalizacao/upload` e `/api/extratos/upload` só geram o token
+      assinado) — o arquivo nunca passa pelo corpo de nenhuma Server
+      Action, contornando o limite de verdade
+- [x] Catálogo de tipos de documento de legalização é configurável
+      (`/legalizacao/tipos`) — staff/analista adiciona tipos novos sem
+      precisar de deploy; nem toda empresa precisa de todo tipo (ex.: CNES
+      só se aplica a empresa de saúde), então uma empresa sem necessidade
+      de um tipo simplesmente não tem linha cadastrada pra ele, mesmo
+      padrão de `certificates`
+- [x] "Entregue" no controle de extrato é independente do arquivo — dá
+      pra marcar como recebido (ex.: mandado por WhatsApp) antes do
+      upload ficar pronto no sistema
+- [x] Validado ao vivo com usuários descartáveis por papel: Analista de
+      Legalização e Analista Contábil corretamente redirecionados pra
+      fora de `/admin` e do módulo um do outro; cadastro de conta
+      bancária, marcar mês como entregue (sem arquivo, já que o Blob
+      Store ainda não estava configurado no ambiente de teste) e apagar
+      conta (com cascade dos extratos mensais) testados de ponta a ponta
+      contra o banco real; catálogo de tipos testado (criar tipo,
+      inativar/reativar); staff confirmado acessando os dois módulos
+      novos pelos atalhos adicionados no cabeçalho do `/admin`
+- [ ] Upload de arquivo de verdade (Vercel Blob) ainda não testado —
+      precisa o usuário criar o Blob Store no dashboard da Vercel e
+      configurar `BLOB_READ_WRITE_TOKEN` primeiro (documentado em
+      `.env.local.example`)
+- [ ] Rebrand de "SOMA NFS-e" pra "SOMA Gestão" (Logo.tsx, títulos de
+      página, README) ainda não feito — decisão de nome e estrutura de
+      módulos veio primeiro, o rebrand visual em si fica pra depois
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

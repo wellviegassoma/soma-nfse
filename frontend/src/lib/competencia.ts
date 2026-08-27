@@ -20,6 +20,21 @@ export function proximaCompetencia(competencia: string): string {
   return `${proximoAno}-${String(proximoMes).padStart(2, "0")}`;
 }
 
+// "YYYY-MM" da competência informada e das (n - 1) anteriores, mais
+// recente primeiro — inclui o próprio mês corrente (diferente de
+// competenciasRbt12, que exclui o mês de apuração de propósito). Usado
+// pra grades mês-a-mês onde o mês atual também precisa aparecer, como o
+// controle de entrega de extrato.
+export function ultimasCompetencias(competenciaAlvo: string, n: number): string[] {
+  const [ano, mes] = competenciaAlvo.split("-").map(Number);
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const d = new Date(Date.UTC(ano, mes - 1 - i, 1));
+    out.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
 // "YYYY-MM-DD" de hoje no fuso de Brasília — mesmo motivo do
 // mesCorrenteBrasilia acima; `new Date().toISOString()` usa UTC e pode
 // já mostrar o dia/mês seguinte pra quem está no Brasil à noite.

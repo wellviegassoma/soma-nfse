@@ -8,7 +8,14 @@ import { Field } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Alert";
 import { ROLE_LABELS, type UserRole } from "@/lib/types";
 
-const ROLES: UserRole[] = ["ADMIN_CLIENTE", "EMISSOR", "ADMIN_SOMA", "SUPER_ADMIN"];
+const ROLES: UserRole[] = [
+  "ADMIN_CLIENTE",
+  "EMISSOR",
+  "ANALISTA_LEGALIZACAO",
+  "ANALISTA_CONTABIL",
+  "ADMIN_SOMA",
+  "SUPER_ADMIN",
+];
 
 export function InviteUserForm({ companyId }: { companyId: string }) {
   const [state, formAction, pending] = useActionState(

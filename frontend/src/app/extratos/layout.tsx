@@ -1,13 +1,12 @@
 import Link from "next/link";
-import { requireSomaStaff, getCurrentProfileName } from "@/lib/auth";
+import { requireExtratosAccess, getCurrentProfileName } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
 import { LogoutButton } from "@/components/LogoutButton";
-import { AdminNav } from "@/components/AdminNav";
 
-export default async function AdminLayout({
+export default async function ExtratosLayout({
   children,
-}: LayoutProps<"/admin">) {
-  await requireSomaStaff();
+}: LayoutProps<"/extratos">) {
+  await requireExtratosAccess();
   const userName = await getCurrentProfileName();
 
   return (
@@ -18,23 +17,10 @@ export default async function AdminLayout({
             <Logo />
             <div className="hidden h-8 w-px bg-border sm:block" />
             <span className="hidden text-sm font-semibold text-foreground/70 sm:inline">
-              Painel de Administração
+              Extratos
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Link
-              href="/legalizacao"
-              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
-            >
-              Legalização
-            </Link>
-            <Link
-              href="/extratos"
-              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
-            >
-              Extratos
-            </Link>
-            <div className="hidden h-8 w-px bg-border sm:block" />
             <Link
               href="/"
               className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
@@ -42,18 +28,13 @@ export default async function AdminLayout({
               Sair do painel
             </Link>
             {userName && (
-              <span className="hidden text-sm text-foreground/60 md:inline">
-                {userName}
-              </span>
+              <span className="hidden text-sm text-foreground/60 md:inline">{userName}</span>
             )}
             <LogoutButton />
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-5xl px-4 py-8">
-        <AdminNav />
-        <div className="pt-6">{children}</div>
-      </div>
+      <div className="mx-auto max-w-5xl px-4 py-8">{children}</div>
     </div>
   );
 }

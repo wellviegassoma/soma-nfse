@@ -25,6 +25,15 @@ export default async function CompanyLayout(
     (c) => c.role === "SUPER_ADMIN" || c.role === "ADMIN_SOMA",
   );
 
+  // Papéis de analista (Legalização, Contábil) têm uma linha em
+  // user_companies só pra existir (mesmo padrão de staff) — sem essa
+  // checagem, se essa linha incidental apontar pra uma empresa real, esse
+  // usuário cairia aqui e veria a casca do painel do cliente (RLS ainda
+  // bloqueia os dados, mas a tela fica quebrada/sem sentido pra esse papel).
+  if (!isSomaStaff && access.role !== "ADMIN_CLIENTE" && access.role !== "EMISSOR") {
+    redirect("/");
+  }
+
   return (
     <div className="min-h-dvh bg-background">
       <AppHeader

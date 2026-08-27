@@ -8,6 +8,19 @@ export default async function HomePage() {
   await requireUser();
   const companies = await getUserCompanies();
 
+  // Papel decide o destino antes de olhar quantas empresas o usuário tem —
+  // staff e analistas de módulo têm um vínculo incidental (só pra existir
+  // uma linha em user_companies), que não deve mandar pro fluxo de cliente.
+  if (companies.some((c) => c.role === "SUPER_ADMIN" || c.role === "ADMIN_SOMA")) {
+    redirect("/admin");
+  }
+  if (companies.some((c) => c.role === "ANALISTA_LEGALIZACAO")) {
+    redirect("/legalizacao");
+  }
+  if (companies.some((c) => c.role === "ANALISTA_CONTABIL")) {
+    redirect("/extratos");
+  }
+
   if (companies.length === 1) {
     redirect(`/empresas/${companies[0].company_id}`);
   }

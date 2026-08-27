@@ -44,6 +44,34 @@ export async function requireSomaStaff() {
   if (!(await isSomaStaff())) redirect("/");
 }
 
+// Cada módulo novo (Legalização, Extratos) é restrito ao próprio papel —
+// diferente de requireSomaStaff(), que dá acesso a tudo em /admin. Staff
+// completo (SUPER_ADMIN/ADMIN_SOMA) também passa, pra continuar
+// enxergando qualquer módulo.
+export async function requireLegalizacaoAccess() {
+  await requireUser();
+  const companies = await getUserCompanies();
+  const ok = companies.some(
+    (c) =>
+      c.role === "SUPER_ADMIN" ||
+      c.role === "ADMIN_SOMA" ||
+      c.role === "ANALISTA_LEGALIZACAO",
+  );
+  if (!ok) redirect("/");
+}
+
+export async function requireExtratosAccess() {
+  await requireUser();
+  const companies = await getUserCompanies();
+  const ok = companies.some(
+    (c) =>
+      c.role === "SUPER_ADMIN" ||
+      c.role === "ADMIN_SOMA" ||
+      c.role === "ANALISTA_CONTABIL",
+  );
+  if (!ok) redirect("/");
+}
+
 export async function getCompanyAccess(
   companyId: string,
 ): Promise<CompanyAccess | null> {

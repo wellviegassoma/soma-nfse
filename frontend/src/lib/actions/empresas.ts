@@ -310,7 +310,14 @@ export async function importarEmpresasPlanilha(
 const inviteSchema = z.object({
   email: z.string().trim().toLowerCase().email("E-mail inválido."),
   fullName: z.string().trim().min(2, "Informe o nome."),
-  role: z.enum(["SUPER_ADMIN", "ADMIN_SOMA", "ADMIN_CLIENTE", "EMISSOR"]),
+  role: z.enum([
+    "SUPER_ADMIN",
+    "ADMIN_SOMA",
+    "ADMIN_CLIENTE",
+    "EMISSOR",
+    "ANALISTA_LEGALIZACAO",
+    "ANALISTA_CONTABIL",
+  ]),
   companyId: uuidLike,
 });
 

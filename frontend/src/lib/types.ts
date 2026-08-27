@@ -1,10 +1,18 @@
-export type UserRole = "SUPER_ADMIN" | "ADMIN_SOMA" | "ADMIN_CLIENTE" | "EMISSOR";
+export type UserRole =
+  | "SUPER_ADMIN"
+  | "ADMIN_SOMA"
+  | "ADMIN_CLIENTE"
+  | "EMISSOR"
+  | "ANALISTA_LEGALIZACAO"
+  | "ANALISTA_CONTABIL";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   SUPER_ADMIN: "Super Admin",
   ADMIN_SOMA: "Administrador SOMA",
   ADMIN_CLIENTE: "Administrador Cliente",
   EMISSOR: "Emissor",
+  ANALISTA_LEGALIZACAO: "Analista de Legalização",
+  ANALISTA_CONTABIL: "Analista Contábil",
 };
 
 export type TaxRegime = "SIMPLES_NACIONAL" | "LUCRO_PRESUMIDO" | "LUCRO_REAL";
@@ -81,6 +89,42 @@ export type CertificateMeta = {
   fingerprint: string;
   expires_at: string;
   created_at: string;
+};
+
+export type LegalizacaoTipoDocumento = {
+  id: string;
+  nome: string;
+  ativo: boolean;
+};
+
+export type LegalizacaoDocumento = {
+  id: string;
+  company_id: string;
+  tipo_id: string;
+  data_vencimento: string;
+  blob_url: string;
+  blob_pathname: string;
+  nome_arquivo: string;
+  created_at: string;
+};
+
+export type ExtratoContaBancaria = {
+  id: string;
+  company_id: string;
+  banco: string;
+  agencia: string;
+  conta: string;
+  ativo: boolean;
+};
+
+export type ExtratoMensal = {
+  id: string;
+  conta_id: string;
+  competencia: string;
+  entregue: boolean;
+  blob_url: string | null;
+  blob_pathname: string | null;
+  nome_arquivo: string | null;
 };
 
 export type Service = {
