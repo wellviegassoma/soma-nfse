@@ -38,43 +38,6 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/debug/serpro-credenciais", dependencies=[Depends(exigir_token_interno)])
-def debug_serpro_credenciais():
-    """
-    Diagnóstico temporário — NUNCA expõe o valor da credencial, só
-    metadados (tamanho, se tem espaço/caractere de controle, primeiro e
-    último caractere isolados) pra investigar o erro 400 "Authorization
-    não está no formato esperado" sem ninguém colar a credencial de
-    verdade em lugar nenhum. Remover depois de resolver (ver README).
-    """
-    import os
-    import re
-
-    def diagnosticar(nome: str) -> dict:
-        valor = os.environ.get(nome)
-        if valor is None:
-            return {"presente": False}
-        return {
-            "presente": True,
-            "tamanho": len(valor),
-            "primeiro_caractere": repr(valor[0]) if valor else None,
-            "ultimo_caractere": repr(valor[-1]) if valor else None,
-            "tem_espaco_ou_controle": bool(re.search(r"[\s\x00-\x1f]", valor)),
-            "tem_aspas": '"' in valor or "'" in valor,
-        }
-
-    return {
-        "consumer_key": diagnosticar("INTEGRA_CONTADOR_CONSUMER_KEY"),
-        "consumer_secret": diagnosticar("INTEGRA_CONTADOR_CONSUMER_SECRET"),
-        "auth_url": os.environ.get("INTEGRA_CONTADOR_AUTH_URL"),
-        "gateway_url": os.environ.get("INTEGRA_CONTADOR_GATEWAY_URL"),
-        # CNPJ não é segredo (registro público) — exibir direto ajuda a
-        # conferir rápido se bate com o CNPJ do contrato na Serpro.
-        "soma_cnpj": os.environ.get("SOMA_CNPJ"),
-        "soma_company_id": os.environ.get("SOMA_COMPANY_ID"),
-    }
-
-
 @app.get(
     "/contribuintes/{cnpj}/simples/extrato-das/{numero_das}",
     response_model=ExtratoDasOut,
