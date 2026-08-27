@@ -12,6 +12,7 @@ import {
   tipoAplicavel,
 } from "@/app/legalizacao/status";
 import { TAX_REGIME_LABELS, type Company } from "@/lib/types";
+import { ConsultarCnpjReceitaButton } from "./ConsultarCnpjReceitaButton";
 
 export const metadata = { title: "Legalização — Empresa" };
 
@@ -82,7 +83,7 @@ export default async function LegalizacaoEmpresaPage(
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/legalizacao/empresas/${companyId}/societario`}>
-            <Button variant="ghost">Societário</Button>
+            <Button variant="primary">Societário</Button>
           </Link>
           <Link href={`/legalizacao/empresas/${companyId}/gerenciar`}>
             <Button variant="secondary">Gerenciar documentos</Button>
@@ -96,6 +97,7 @@ export default async function LegalizacaoEmpresaPage(
           <div className="text-sm font-medium text-foreground">
             {formatarCnpj(empresa.cnpj) ?? "Não cadastrado"}
           </div>
+          <ConsultarCnpjReceitaButton cnpj={empresa.cnpj} />
         </div>
         <div>
           <div className="text-xs text-foreground/50">Regime tributário</div>

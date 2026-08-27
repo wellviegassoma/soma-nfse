@@ -1246,7 +1246,32 @@ empresas via CNPJ/planilha) (concluída)**
       juntos (cascade); sócio PJ criado (CNPJ formatado), percentual
       editado ao vivo (40% → 55%, refletindo na tela), removido depois
 
-## Setup do zero
+**Ajuste — botão Societário mais visível + atalho pra consultar CNPJ na Receita (concluído, 2026-08-27)**
+- [x] O botão "Societário" na tela de consulta por empresa era `variant="ghost"`
+      (texto sem fundo), pouco visível ao lado de "Gerenciar documentos"
+      (`variant="secondary"`, com borda) — usuário reportou que não achou o
+      botão. Virou `variant="primary"` (preenchido, mesmo peso visual de um
+      botão principal)
+- [x] Pedido de trazer o "Comprovante de Inscrição e de Situação Cadastral"
+      (o PDF oficial que a Receita Federal emite) direto na tela — não dá
+      pra automatizar: a consulta oficial exige resolver captcha a cada
+      vez, de propósito, pra impedir automação. Não tentei contornar isso.
+      Em vez disso, um botão "Consultar CNPJ na Receita ↗"
+      (`ConsultarCnpjReceitaButton.tsx`) copia o CNPJ pra área de
+      transferência e abre a página oficial
+      (`solucoes.receita.fazenda.gov.br`) numa aba nova — usuário só cola,
+      resolve o captcha e baixa o PDF de verdade, podendo depois subir esse
+      arquivo no Societário ou em "Certidão RFB" de Legalização
+- [x] Validado ao vivo: botão "Societário" com destaque de botão principal
+      confirmado na tela; botão de CNPJ aparecendo corretamente sob o CNPJ
+      formatado. O clique em si (copiar pro clipboard + abrir nova aba) não
+      dá pra simular no navegador de automação headless desta sessão —
+      `navigator.clipboard.writeText` e `window.open` exigem um gesto de
+      usuário genuíno com o documento em foco, que um clique disparado via
+      JavaScript não fornece (confirmado isoladamente: a chamada de
+      clipboard retornou "Document is not focused", exatamente o erro
+      esperado nesse cenário — não um bug do código). Em uso normal, com
+      clique real do mouse, as duas chamadas funcionam
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
