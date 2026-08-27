@@ -21,6 +21,7 @@ export type DadosCnpj = {
   situacaoCadastral: string | null;
   ativa: boolean;
   simplesNacional: boolean;
+  dataAbertura: string | null;
 };
 
 type BrasilApiCnpjResponse = {
@@ -39,6 +40,7 @@ type BrasilApiCnpjResponse = {
   cep: string | null;
   descricao_situacao_cadastral: string | null;
   opcao_pelo_simples: boolean | null;
+  data_inicio_atividade: string | null;
 };
 
 export async function buscarDadosCnpj(
@@ -91,6 +93,7 @@ export async function buscarDadosCnpj(
       situacaoCadastral: situacao || null,
       ativa: (situacao || "").toUpperCase() === "ATIVA",
       simplesNacional: json.opcao_pelo_simples === true,
+      dataAbertura: json.data_inicio_atividade || null,
     },
   };
 }

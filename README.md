@@ -1475,6 +1475,21 @@ categorias no Societário (concluído, 2026-08-27)**
       (papel do módulo Extratos, sem relação com Legalização) barrado da
       rota, redirecionado pro próprio módulo dele
 
+**Ajuste — Varredura de `data_abertura` via Brasil API (concluído,
+2026-08-27)**
+- [x] `lib/cnpj-lookup.ts` (já usado no cadastro manual de empresa e na
+      importação em lote) passou a extrair também `data_inicio_atividade`
+      da Brasil API (`dataAbertura` no tipo `DadosCnpj`) — sem isso, a seção
+      "Empresas abertas nos últimos 90 dias" da Legalização não tinha como
+      funcionar de verdade, já que nenhuma empresa tinha essa data
+      preenchida
+- [x] Rodada uma varredura única (script descartável, não fica no repo)
+      em todas as 202 empresas com CNPJ e sem `data_abertura` cadastrada —
+      201 atualizadas com sucesso, 1 falhou por CNPJ com dígito verificador
+      inválido já cadastrado no sistema (`ASSOSCIAÇÃO BRASILEIRA DE
+      ESTUDOS E DOENÇAS IMUNO`, CNPJ `36.204.726/0001-66` — precisa de
+      correção manual do CNPJ pra poder ser consultado)
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:
