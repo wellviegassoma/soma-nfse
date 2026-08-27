@@ -1,17 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getCompanyAccess } from "@/lib/auth";
+import { requireSomaStaff } from "@/lib/auth";
 
 export async function GET(
   _request: Request,
   props: { params: Promise<{ companyId: string }> },
 ) {
+  await requireSomaStaff();
   const { companyId } = await props.params;
-
-  const access = await getCompanyAccess(companyId);
-  if (!access) {
-    return NextResponse.json({ error: "Sem acesso a essa empresa." }, { status: 403 });
-  }
 
   const supabase = await createClient();
   const { data: company } = await supabase
