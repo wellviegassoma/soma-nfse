@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ROLE_LABELS } from "@/lib/types";
+import { formatarDocumentoEmpresa } from "@/lib/formatters";
 import type { DpsListItem } from "@/lib/types";
 
 export const metadata = { title: "Painel — SOMA Gestão" };
@@ -106,9 +107,11 @@ export default async function CompanyDashboardPage(
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-foreground/50">CNPJ</dt>
+            <dt className="text-xs text-foreground/50">
+              {company.person_type === "PF" ? "CPF" : "CNPJ"}
+            </dt>
             <dd className="text-sm font-medium text-foreground">
-              {company.cnpj || "Ainda não cadastrado"}
+              {formatarDocumentoEmpresa(company)?.valor ?? "Ainda não cadastrado"}
             </dd>
           </div>
         </dl>

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { formatarDocumentoEmpresa } from "@/lib/formatters";
 import { AdminCompanyTabs } from "./AdminCompanyTabs";
 
 export default async function AdminCompanyLayout(
@@ -10,11 +11,12 @@ export default async function AdminCompanyLayout(
 
   const { data: company } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name, cnpj")
+    .select("id, legal_name, trade_name, cnpj, cpf")
     .eq("id", companyId)
     .single();
 
   if (!company) notFound();
+  const documento = formatarDocumentoEmpresa(company);
 
   return (
     <div className="flex flex-col gap-6">
@@ -23,7 +25,8 @@ export default async function AdminCompanyLayout(
           {company.trade_name || company.legal_name}
         </h1>
         <p className="text-sm text-foreground/60">
-          {company.legal_name} · {company.cnpj || "CNPJ pendente"}
+          {company.legal_name} ·{" "}
+          {documento ? `${documento.label}: ${documento.valor}` : "CNPJ/CPF pendente"}
         </p>
       </div>
 

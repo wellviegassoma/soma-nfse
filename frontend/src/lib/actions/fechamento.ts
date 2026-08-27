@@ -71,7 +71,7 @@ export async function buscarAgora(
   const { data: company } = await admin
     .from("companies")
     .select(
-      "id, cnpj, nfse_ambiente, ultimo_nsu_distribuicao, certificates(encrypted_file, encrypted_password, expires_at)",
+      "id, cnpj, cpf, nfse_ambiente, ultimo_nsu_distribuicao, certificates(encrypted_file, encrypted_password, expires_at)",
     )
     .eq("id", companyId)
     .single();
@@ -110,7 +110,7 @@ export async function buscarHistoricoAgora(
   const { data: company } = await admin
     .from("companies")
     .select(
-      "id, cnpj, nfse_ambiente, ultimo_nsu_distribuicao, certificates(encrypted_file, encrypted_password, expires_at)",
+      "id, cnpj, cpf, nfse_ambiente, ultimo_nsu_distribuicao, certificates(encrypted_file, encrypted_password, expires_at)",
     )
     .eq("id", companyId)
     .single();

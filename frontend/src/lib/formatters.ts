@@ -14,6 +14,47 @@ export function formatarCnpj(cnpj: string | null | undefined): string | null {
   return digitos.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
 }
 
+export function formatarCpf(cpf: string | null | undefined): string | null {
+  if (!cpf) return null;
+  const digitos = cpf.replace(/\D/g, "");
+  if (digitos.length !== 11) return cpf;
+  return digitos.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+}
+
+/** Checksum dos dois dígitos verificadores do CPF (algoritmo oficial). */
+export function isCpfValido(cpf: string): boolean {
+  const digitos = cpf.replace(/\D/g, "");
+  if (digitos.length !== 11 || /^(\d)\1{10}$/.test(digitos)) return false;
+
+  const calcularDigito = (base: string, pesoInicial: number): number => {
+    const soma = base
+      .split("")
+      .reduce((acc, digito, i) => acc + Number(digito) * (pesoInicial - i), 0);
+    const resto = (soma * 10) % 11;
+    return resto === 10 ? 0 : resto;
+  };
+
+  const digito1 = calcularDigito(digitos.slice(0, 9), 10);
+  const digito2 = calcularDigito(digitos.slice(0, 9) + digito1, 11);
+  return digitos === digitos.slice(0, 9) + String(digito1) + String(digito2);
+}
+
+type EmpresaComDocumento = { cnpj: string | null; cpf: string | null };
+
+/** CNPJ ou CPF, o que estiver preenchido — nunca ambos (ver check
+ * constraint `companies_documento_por_tipo`). */
+export function documentoEmpresa(empresa: EmpresaComDocumento): string | null {
+  return empresa.cnpj || empresa.cpf || null;
+}
+
+export function formatarDocumentoEmpresa(
+  empresa: EmpresaComDocumento,
+): { label: "CNPJ" | "CPF"; valor: string } | null {
+  if (empresa.cnpj) return { label: "CNPJ", valor: formatarCnpj(empresa.cnpj)! };
+  if (empresa.cpf) return { label: "CPF", valor: formatarCpf(empresa.cpf)! };
+  return null;
+}
+
 type EnderecoEmpresa = {
   address_street: string | null;
   address_number: string | null;

@@ -9,6 +9,7 @@ import { decryptSecret, fromBytea } from "@/lib/certificate";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
+import { documentoEmpresa } from "@/lib/formatters";
 import type { NfseAmbiente } from "@/lib/types";
 
 export type IssueNfseState =
@@ -83,7 +84,7 @@ export async function issueNfse(
     supabase
       .from("companies")
       .select(
-        "cnpj, municipal_registration, municipality_ibge_code, nfse_ambiente, dps_series, tax_regime, regime_especial_tributacao, allow_retroactive_emission",
+        "cnpj, cpf, municipal_registration, municipality_ibge_code, nfse_ambiente, dps_series, tax_regime, regime_especial_tributacao, allow_retroactive_emission",
       )
       .eq("id", companyId)
       .single(),
@@ -109,10 +110,11 @@ export async function issueNfse(
   if (!customer) return { error: "Tomador não encontrado." };
   if (!service) return { error: "Serviço não encontrado." };
 
-  if (!company.cnpj || !company.municipality_ibge_code) {
+  const documentoPrestador = documentoEmpresa(company);
+  if (!documentoPrestador || !company.municipality_ibge_code) {
     return {
       error:
-        "Cadastro fiscal incompleto — peça pra SOMA configurar CNPJ e município antes de emitir.",
+        "Cadastro fiscal incompleto — peça pra SOMA configurar CNPJ/CPF e município antes de emitir.",
     };
   }
   if (!company.allow_retroactive_emission && competenceDate.slice(0, 7) !== mesCorrenteBrasilia()) {
@@ -168,7 +170,7 @@ export async function issueNfse(
   const payload = {
     prestador: {
       codigo_municipio_ibge: company.municipality_ibge_code,
-      cnpj: company.cnpj,
+      cnpj: documentoPrestador,
       ambiente: AMBIENTE_MAP[company.nfse_ambiente as NfseAmbiente],
       inscricao_municipal: company.municipal_registration,
       serie_dps: company.dps_series,
@@ -367,11 +369,13 @@ export async function cancelarNfse(
   const supabase = await createClient();
 
   const [{ data: company }, { data: nfseRow }] = await Promise.all([
-    supabase.from("companies").select("cnpj, nfse_ambiente").eq("id", companyId).single(),
+    supabase.from("companies").select("cnpj, cpf, nfse_ambiente").eq("id", companyId).single(),
     supabase.from("nfse").select("id, access_key, status").eq("dps_id", dpsId).maybeSingle(),
   ]);
 
-  if (!company?.cnpj) return { error: "Empresa sem CNPJ cadastrado." };
+  if (!company) return { error: "Empresa não encontrada." };
+  const documentoPrestador = documentoEmpresa(company);
+  if (!documentoPrestador) return { error: "Empresa sem CNPJ/CPF cadastrado." };
   if (!nfseRow) return { error: "Essa nota ainda não tem NFS-e emitida — nada para cancelar." };
   if (!nfseRow.access_key) return { error: "Essa nota não tem chave de acesso registrada." };
   if (nfseRow.status === "CANCELADA") return { error: "Essa nota já está cancelada." };
@@ -401,7 +405,7 @@ export async function cancelarNfse(
     certificado: { pfx_base64: pfxBase64, senha },
     ambiente: AMBIENTE_MAP[company.nfse_ambiente as NfseAmbiente],
     chave_nfse: nfseRow.access_key,
-    autor_documento: company.cnpj,
+    autor_documento: documentoPrestador,
     motivo_codigo: motivoCodigo,
     motivo_descricao: motivoDescricao,
   };

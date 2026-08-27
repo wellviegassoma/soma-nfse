@@ -23,7 +23,7 @@ export async function getUserCompanies(): Promise<CompanyAccess[]> {
   const { data, error } = await supabase
     .from("user_companies")
     .select(
-      "company_id, role, company:companies(id, organization_id, cnpj, legal_name, trade_name, created_at)",
+      "company_id, role, company:companies(id, organization_id, person_type, cnpj, cpf, legal_name, trade_name, created_at)",
     )
     .eq("user_id", user.id)
     .order("created_at", { referencedTable: "companies", ascending: true });

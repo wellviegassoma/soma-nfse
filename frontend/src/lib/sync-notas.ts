@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptSecret, fromBytea } from "@/lib/certificate";
 import { classificarDirecao } from "@/lib/notas-distribuidas";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { documentoEmpresa } from "@/lib/formatters";
 import type { NfseAmbiente } from "@/lib/types";
 
 const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
@@ -64,6 +65,7 @@ type NotaBuscada = {
 type CompanyParaSincronizar = {
   id: string;
   cnpj: string | null;
+  cpf: string | null;
   nfse_ambiente: string;
   ultimo_nsu_distribuicao?: number | null;
   certificates:
@@ -90,7 +92,8 @@ export async function syncOneCompany(
     ? company.certificates[0]
     : company.certificates;
 
-  if (!company.cnpj || !certificado) {
+  const documentoConsulta = documentoEmpresa(company);
+  if (!documentoConsulta || !certificado) {
     return { companyId: company.id, status: "pulado", erro: "sem certificado cadastrado" };
   }
   if (new Date(certificado.expires_at).getTime() < Date.now()) {
@@ -127,7 +130,7 @@ export async function syncOneCompany(
         mes: mesAlvo,
         nsu_inicial: 0,
         max_lotes: MAX_LOTES_BUSCA,
-        cnpj_consulta: company.cnpj,
+        cnpj_consulta: documentoConsulta,
         meses_anteriores: mesesAnteriores ?? 0,
       }),
       cache: "no-store",
@@ -145,7 +148,7 @@ export async function syncOneCompany(
         company_id: company.id,
         nsu: Number(n.nsu),
         chave_acesso: n.chave_acesso,
-        direcao: classificarDirecao(n.prestador_cnpj, n.tomador_cnpj, company.cnpj),
+        direcao: classificarDirecao(n.prestador_cnpj, n.tomador_cnpj, documentoConsulta),
         cancelada: n.cancelada,
         motivo_cancelamento: n.motivo_cancelamento,
         numero: n.numero,
@@ -215,7 +218,7 @@ export async function syncAllCompanies(
   const { data: companies } = await admin
     .from("companies")
     .select(
-      "id, cnpj, nfse_ambiente, ultimo_nsu_distribuicao, certificates(encrypted_file, encrypted_password, expires_at)",
+      "id, cnpj, cpf, nfse_ambiente, ultimo_nsu_distribuicao, certificates(encrypted_file, encrypted_password, expires_at)",
     );
 
   const resultados: ResultadoSincronizacao[] = [];

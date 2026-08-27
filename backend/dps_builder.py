@@ -327,8 +327,11 @@ def gerar_xml_dps(dados: DadosDPS) -> tuple[str, str]:
     saber qual elemento assinar.
     """
     cnpj_prestador = _somente_digitos(dados.prestador.cnpj)
-    if len(cnpj_prestador) != 14:
-        raise ErroDadosDPS(f"CNPJ do prestador inválido: '{dados.prestador.cnpj}'.")
+    if len(cnpj_prestador) not in (11, 14):
+        raise ErroDadosDPS(
+            f"Documento do prestador inválido: '{dados.prestador.cnpj}' "
+            "(esperado CPF de 11 dígitos ou CNPJ de 14)."
+        )
 
     id_dps = montar_id_dps(
         dados.codigo_municipio_emissor, cnpj_prestador, dados.serie, dados.numero_dps
@@ -426,8 +429,8 @@ def gerar_xml_dps(dados: DadosDPS) -> tuple[str, str]:
         f"<tpEmit>{dados.tipo_emissao}</tpEmit>"
         f"<cLocEmi>{_somente_digitos(dados.codigo_municipio_emissor).zfill(7)}</cLocEmi>"
         "<prest>"
-        f"<CNPJ>{cnpj_prestador}</CNPJ>"
-        f"{im_xml}{fone_xml}{email_xml}"
+        + (f"<CPF>{cnpj_prestador}</CPF>" if len(cnpj_prestador) == 11 else f"<CNPJ>{cnpj_prestador}</CNPJ>")
+        + f"{im_xml}{fone_xml}{email_xml}"
         "<regTrib>"
         f"<opSimpNac>{prest.regime.opcao_simples_nacional}</opSimpNac>"
         f"<regApTribSN>{prest.regime.regime_apuracao_simples}</regApTribSN>"

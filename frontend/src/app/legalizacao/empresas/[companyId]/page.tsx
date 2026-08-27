@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { statusDocumento, tipoAplicavel } from "@/app/legalizacao/status";
-import { STATUS_PILL_CLASSES, formatarCnpj, formatarEndereco } from "@/lib/formatters";
+import { STATUS_PILL_CLASSES, formatarEndereco, formatarDocumentoEmpresa } from "@/lib/formatters";
 import { TAX_REGIME_LABELS, type Company } from "@/lib/types";
 import { ConsultarCnpjReceitaButton } from "./ConsultarCnpjReceitaButton";
 
@@ -22,7 +22,7 @@ export default async function LegalizacaoEmpresaPage(
       supabase
         .from("companies")
         .select(
-          "id, legal_name, trade_name, cnpj, tax_regime, address_street, address_number, address_complement, address_neighborhood, address_zip, municipality_name, state",
+          "id, legal_name, trade_name, person_type, cnpj, cpf, tax_regime, address_street, address_number, address_complement, address_neighborhood, address_zip, municipality_name, state",
         )
         .eq("id", companyId)
         .single(),
@@ -44,7 +44,9 @@ export default async function LegalizacaoEmpresaPage(
   if (!company) notFound();
   const empresa = company as Pick<
     Company,
+    | "person_type"
     | "cnpj"
+    | "cpf"
     | "tax_regime"
     | "address_street"
     | "address_number"
@@ -91,18 +93,22 @@ export default async function LegalizacaoEmpresaPage(
 
       <Card className="flex flex-wrap gap-x-8 gap-y-3 p-5">
         <div>
-          <div className="text-xs text-foreground/50">CNPJ</div>
-          <div className="text-sm font-medium text-foreground">
-            {formatarCnpj(empresa.cnpj) ?? "Não cadastrado"}
+          <div className="text-xs text-foreground/50">
+            {empresa.person_type === "PF" ? "CPF" : "CNPJ"}
           </div>
-          <ConsultarCnpjReceitaButton cnpj={empresa.cnpj} />
-        </div>
-        <div>
-          <div className="text-xs text-foreground/50">Regime tributário</div>
           <div className="text-sm font-medium text-foreground">
-            {empresa.tax_regime ? TAX_REGIME_LABELS[empresa.tax_regime] : "Não cadastrado"}
+            {formatarDocumentoEmpresa(empresa)?.valor ?? "Não cadastrado"}
           </div>
+          {empresa.person_type !== "PF" && <ConsultarCnpjReceitaButton cnpj={empresa.cnpj} />}
         </div>
+        {empresa.person_type !== "PF" && (
+          <div>
+            <div className="text-xs text-foreground/50">Regime tributário</div>
+            <div className="text-sm font-medium text-foreground">
+              {empresa.tax_regime ? TAX_REGIME_LABELS[empresa.tax_regime] : "Não cadastrado"}
+            </div>
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <div className="text-xs text-foreground/50">Endereço</div>
           <div className="text-sm font-medium text-foreground">

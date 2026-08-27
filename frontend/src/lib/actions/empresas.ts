@@ -9,6 +9,7 @@ import { requireSomaStaff } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import { buscarDadosCnpj, type DadosCnpj } from "@/lib/cnpj-lookup";
+import { isCpfValido } from "@/lib/formatters";
 import type { ActionState } from "@/lib/actions/auth";
 
 export async function buscarCnpjAction(
@@ -25,11 +26,18 @@ const createCompanySchema = z.object({
   organizationName: z.string().trim().min(2, "Informe o nome da empresa/organização."),
   legalName: z.string().trim().min(2, "Informe a razão social."),
   tradeName: z.string().trim().optional(),
+  personType: z.enum(["PF", "PJ"]).default("PJ"),
   cnpj: z
     .string()
     .trim()
     .optional()
     .transform((v) => (v ? v.replace(/\D/g, "") : undefined)),
+  cpf: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v.replace(/\D/g, "") : undefined))
+    .refine((v) => v === undefined || isCpfValido(v), "CPF inválido."),
   cnae: z.string().trim().optional(),
   municipalityIbgeCode: z.string().trim().optional(),
   municipalityName: z.string().trim().optional(),
@@ -52,7 +60,9 @@ export async function createCompany(
     organizationName: formData.get("organizationName"),
     legalName: formData.get("legalName"),
     tradeName: formData.get("tradeName") || undefined,
+    personType: formData.get("personType") || undefined,
     cnpj: formData.get("cnpj") || undefined,
+    cpf: formData.get("cpf") || undefined,
     cnae: formData.get("cnae") || undefined,
     municipalityIbgeCode: formData.get("municipalityIbgeCode") || undefined,
     municipalityName: formData.get("municipalityName") || undefined,
@@ -66,6 +76,9 @@ export async function createCompany(
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  if (parsed.data.personType === "PF" && !parsed.data.cpf) {
+    return { error: "Informe o CPF." };
   }
 
   const supabase = await createClient();
@@ -85,7 +98,9 @@ export async function createCompany(
       organization_id: org.id,
       legal_name: parsed.data.legalName,
       trade_name: parsed.data.tradeName || null,
-      cnpj: parsed.data.cnpj || null,
+      person_type: parsed.data.personType,
+      cnpj: parsed.data.personType === "PJ" ? parsed.data.cnpj || null : null,
+      cpf: parsed.data.personType === "PF" ? parsed.data.cpf || null : null,
       cnae: parsed.data.cnae || null,
       municipality_ibge_code: parsed.data.municipalityIbgeCode || null,
       municipality_name: parsed.data.municipalityName || null,
@@ -95,7 +110,8 @@ export async function createCompany(
       address_complement: parsed.data.addressComplement || null,
       address_neighborhood: parsed.data.addressNeighborhood || null,
       address_zip: parsed.data.addressZip || null,
-      tax_regime: parsed.data.taxRegime || null,
+      tax_regime: parsed.data.personType === "PJ" ? parsed.data.taxRegime || null : null,
+      regime_especial_tributacao: parsed.data.personType === "PF" ? 5 : 0,
     })
     .select("id")
     .single();
@@ -103,7 +119,7 @@ export async function createCompany(
     return {
       error:
         companyError?.code === "23505"
-          ? "Já existe uma empresa cadastrada com esse CNPJ."
+          ? "Já existe uma empresa cadastrada com esse CNPJ/CPF."
           : "Não foi possível criar a empresa.",
     };
   }
@@ -113,7 +129,12 @@ export async function createCompany(
     action: "CREATE",
     entity: "company",
     entityId: company.id,
-    newValue: { legal_name: parsed.data.legalName, cnpj: parsed.data.cnpj ?? null },
+    newValue: {
+      legal_name: parsed.data.legalName,
+      person_type: parsed.data.personType,
+      cnpj: parsed.data.cnpj ?? null,
+      cpf: parsed.data.cpf ?? null,
+    },
   });
 
   revalidatePath("/admin/empresas");

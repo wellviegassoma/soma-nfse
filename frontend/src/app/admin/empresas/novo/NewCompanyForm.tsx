@@ -9,12 +9,14 @@ import { Select } from "@/components/ui/Select";
 import { Field } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Alert";
 import { Card } from "@/components/ui/Card";
-import { TAX_REGIME_LABELS, type TaxRegime } from "@/lib/types";
+import { TAX_REGIME_LABELS, type TaxRegime, type CustomerType } from "@/lib/types";
 
 export function NewCompanyForm() {
   const [state, formAction, pending] = useActionState(createCompany, undefined);
 
+  const [personType, setPersonType] = useState<CustomerType>("PJ");
   const [cnpj, setCnpj] = useState("");
+  const [cpf, setCpf] = useState("");
   const [organizationName, setOrganizationName] = useState("");
   const [legalName, setLegalName] = useState("");
   const [tradeName, setTradeName] = useState("");
@@ -34,6 +36,7 @@ export function NewCompanyForm() {
   const [buscaInfo, setBuscaInfo] = useState<string | null>(null);
 
   const cnpjDigits = cnpj.replace(/\D/g, "");
+  const isPF = personType === "PF";
 
   async function handleBuscarCnpj() {
     setBuscaErro(null);
@@ -78,28 +81,53 @@ export function NewCompanyForm() {
       <form action={formAction} className="flex flex-col gap-4">
         {state?.error && <Alert tone="danger">{state.error}</Alert>}
 
-        <Field label="CNPJ" htmlFor="cnpj" hint="Buscamos os dados automaticamente na Receita Federal">
-          <div className="flex gap-2">
-            <Input
-              id="cnpj"
-              name="cnpj"
-              placeholder="00.000.000/0000-00"
-              value={cnpj}
-              onChange={(e) => setCnpj(e.target.value)}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              loading={buscando}
-              disabled={cnpjDigits.length !== 14}
-              onClick={handleBuscarCnpj}
-            >
-              Buscar dados
-            </Button>
-          </div>
-          {buscaErro && <p className="mt-1.5 text-xs text-danger">{buscaErro}</p>}
-          {buscaInfo && <p className="mt-1.5 text-xs text-success">{buscaInfo}</p>}
+        <Field label="Tipo de pessoa" htmlFor="personType">
+          <Select
+            id="personType"
+            name="personType"
+            value={personType}
+            onChange={(e) => setPersonType(e.target.value as CustomerType)}
+          >
+            <option value="PJ">Pessoa Jurídica</option>
+            <option value="PF">Pessoa Física (autônomo)</option>
+          </Select>
         </Field>
+
+        {isPF ? (
+          <Field label="CPF" htmlFor="cpf">
+            <Input
+              id="cpf"
+              name="cpf"
+              placeholder="000.000.000-00"
+              value={cpf}
+              onChange={(e) => setCpf(e.target.value)}
+              required
+            />
+          </Field>
+        ) : (
+          <Field label="CNPJ" htmlFor="cnpj" hint="Buscamos os dados automaticamente na Receita Federal">
+            <div className="flex gap-2">
+              <Input
+                id="cnpj"
+                name="cnpj"
+                placeholder="00.000.000/0000-00"
+                value={cnpj}
+                onChange={(e) => setCnpj(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                loading={buscando}
+                disabled={cnpjDigits.length !== 14}
+                onClick={handleBuscarCnpj}
+              >
+                Buscar dados
+              </Button>
+            </div>
+            {buscaErro && <p className="mt-1.5 text-xs text-danger">{buscaErro}</p>}
+            {buscaInfo && <p className="mt-1.5 text-xs text-success">{buscaInfo}</p>}
+          </Field>
+        )}
 
         <Field
           label="Nome da empresa/organização"
@@ -116,7 +144,7 @@ export function NewCompanyForm() {
           />
         </Field>
 
-        <Field label="Razão social" htmlFor="legalName">
+        <Field label={isPF ? "Nome completo" : "Razão social"} htmlFor="legalName">
           <Input
             id="legalName"
             name="legalName"
@@ -135,35 +163,82 @@ export function NewCompanyForm() {
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="CNAE principal" htmlFor="cnae" hint="Opcional">
-            <Input id="cnae" name="cnae" value={cnae} onChange={(e) => setCnae(e.target.value)} />
-          </Field>
-          <Field label="Regime tributário" htmlFor="taxRegime" hint="Opcional">
-            <Select
-              id="taxRegime"
-              name="taxRegime"
-              value={taxRegime}
-              onChange={(e) => setTaxRegime(e.target.value as TaxRegime | "")}
-            >
-              <option value="">Selecione</option>
-              {Object.entries(TAX_REGIME_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
+        {!isPF && (
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="CNAE principal" htmlFor="cnae" hint="Opcional">
+              <Input id="cnae" name="cnae" value={cnae} onChange={(e) => setCnae(e.target.value)} />
+            </Field>
+            <Field label="Regime tributário" htmlFor="taxRegime" hint="Opcional">
+              <Select
+                id="taxRegime"
+                name="taxRegime"
+                value={taxRegime}
+                onChange={(e) => setTaxRegime(e.target.value as TaxRegime | "")}
+              >
+                <option value="">Selecione</option>
+                {Object.entries(TAX_REGIME_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        )}
 
-        <input type="hidden" name="municipalityIbgeCode" value={municipalityIbgeCode} />
-        <input type="hidden" name="municipalityName" value={municipalityName} />
-        <input type="hidden" name="state" value={uf} />
-        <input type="hidden" name="addressStreet" value={addressStreet} />
-        <input type="hidden" name="addressNumber" value={addressNumber} />
-        <input type="hidden" name="addressComplement" value={addressComplement} />
-        <input type="hidden" name="addressNeighborhood" value={addressNeighborhood} />
-        <input type="hidden" name="addressZip" value={addressZip} />
+        {isPF ? (
+          <div className="flex flex-col gap-4 border-t border-border pt-4">
+            <p className="text-xs text-foreground/50">
+              Não existe busca automática de endereço por CPF — preencha manualmente.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Logradouro" htmlFor="addressStreet">
+                <Input id="addressStreet" name="addressStreet" value={addressStreet} onChange={(e) => setAddressStreet(e.target.value)} />
+              </Field>
+              <Field label="Número" htmlFor="addressNumber">
+                <Input id="addressNumber" name="addressNumber" value={addressNumber} onChange={(e) => setAddressNumber(e.target.value)} />
+              </Field>
+              <Field label="Complemento" htmlFor="addressComplement" hint="Opcional">
+                <Input id="addressComplement" name="addressComplement" value={addressComplement} onChange={(e) => setAddressComplement(e.target.value)} />
+              </Field>
+              <Field label="Bairro" htmlFor="addressNeighborhood">
+                <Input id="addressNeighborhood" name="addressNeighborhood" value={addressNeighborhood} onChange={(e) => setAddressNeighborhood(e.target.value)} />
+              </Field>
+              <Field label="CEP" htmlFor="addressZip">
+                <Input id="addressZip" name="addressZip" value={addressZip} onChange={(e) => setAddressZip(e.target.value)} />
+              </Field>
+              <Field label="UF" htmlFor="state">
+                <Input id="state" name="state" maxLength={2} value={uf} onChange={(e) => setUf(e.target.value.toUpperCase())} />
+              </Field>
+              <Field label="Município" htmlFor="municipalityName">
+                <Input id="municipalityName" name="municipalityName" value={municipalityName} onChange={(e) => setMunicipalityName(e.target.value)} />
+              </Field>
+              <Field
+                label="Código IBGE do município"
+                htmlFor="municipalityIbgeCode"
+                hint="Obrigatório pra emitir NFS-e depois"
+              >
+                <Input
+                  id="municipalityIbgeCode"
+                  name="municipalityIbgeCode"
+                  value={municipalityIbgeCode}
+                  onChange={(e) => setMunicipalityIbgeCode(e.target.value)}
+                />
+              </Field>
+            </div>
+          </div>
+        ) : (
+          <>
+            <input type="hidden" name="municipalityIbgeCode" value={municipalityIbgeCode} />
+            <input type="hidden" name="municipalityName" value={municipalityName} />
+            <input type="hidden" name="state" value={uf} />
+            <input type="hidden" name="addressStreet" value={addressStreet} />
+            <input type="hidden" name="addressNumber" value={addressNumber} />
+            <input type="hidden" name="addressComplement" value={addressComplement} />
+            <input type="hidden" name="addressNeighborhood" value={addressNeighborhood} />
+            <input type="hidden" name="addressZip" value={addressZip} />
+          </>
+        )}
 
         <div className="mt-2 flex items-center gap-3">
           <Button type="submit" loading={pending}>

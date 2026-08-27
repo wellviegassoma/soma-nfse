@@ -1490,6 +1490,73 @@ categorias no Societário (concluído, 2026-08-27)**
       ESTUDOS E DOENÇAS IMUNO`, CNPJ `36.204.726/0001-66` — precisa de
       correção manual do CNPJ pra poder ser consultado)
 
+**Fase Q — Cliente Pessoa Física (cadastro + emissão de NFS-e como
+autônomo) (concluído, 2026-08-27)**
+- [x] `companies` ganhou `person_type` (reaproveita o enum `customer_type`
+      'PF'/'PJ' que já existia só pra `customers`) e `cpf`, com check
+      constraint garantindo que só um dos dois documentos (CNPJ ou CPF)
+      é preenchido conforme o tipo
+- [x] **Achado que reduziu bastante o risco da mudança**: o padrão nacional
+      da DPS já foi projetado com CPF-prestador em mente — `_tipo_
+      inscricao_federal` (`backend/dps_builder.py`) já detecta CPF/CNPJ
+      genericamente pelo tamanho, o domínio de `regEspTrib` já tem o código
+      5 = "Profissional Autônomo", e o bloco `<toma>` (tomador) já emitia
+      `<CPF>`/`<CNPJ>` condicionalmente. Só faltava o bloco `<prest>`
+      (prestador), ainda hardcoded pra CNPJ — ajustado pra aceitar 11 ou 14
+      dígitos e emitir a tag certa, espelhando exatamente o que já existia
+      pro tomador. Nenhuma outra mudança foi necessária no backend:
+      `opSimpNac` já cai em "não optante" quando não há regime tributário
+      (que é o caso de toda empresa PF), sem precisar de nenhum código novo
+- [x] Testado isoladamente (sem precisar de certificado real): chamada
+      direta a `gerar_xml_dps()` com CPF de teste como prestador, conferindo
+      que o XML sai com `<CPF>` (não `<CNPJ>`) dentro de `<prest>` e que o
+      `Id` da DPS usa `tpInsc=1` — e que o caminho CNPJ/PJ de sempre
+      continua gerando exatamente igual a antes
+- [x] `NewCompanyForm.tsx` ganhou um toggle "Tipo de pessoa" — quando PF,
+      troca CNPJ+busca automática por CPF simples (sem API pública
+      equivalente por sigilo), "Razão social" vira "Nome completo", esconde
+      CNAE/Regime tributário, e os campos de endereço (que antes só
+      existiam ocultos, preenchidos pela busca de CNPJ) viram Inputs
+      visíveis pra digitação manual — sem isso um cliente PF nunca teria
+      endereço nem código IBGE do município cadastrado
+- [x] Aba "Dados fiscais" esconde, pra empresa PF, o Select de Regime
+      Tributário e a seção inteira de "Cálculo de imposto" (Simples
+      Nacional/Fator R, Lucro Presumido/IRPJ-CSLL) — nenhum dos dois existe
+      pra autônomo (ele paga IRPF via carnê-leão, não regime corporativo).
+      Novo cadastro PF já vem com "Regime especial de tributação" pré-
+      selecionado em "5 - Profissional Autônomo"
+- [x] Emissão e cancelamento de nota (`notas.ts`) trocaram o gate/payload
+      de `company.cnpj` isolado pelo novo helper `documentoEmpresa()`
+      (CNPJ ou CPF, o que estiver preenchido) — mesmo ajuste replicado em
+      `sync-notas.ts` (sincronização diária de notas distribuídas)
+- [x] Toda tela que mostrava só "CNPJ" (lista de empresas, cabeçalho do
+      cadastro, portal do próprio cliente, cards de consulta em Legalização
+      e Extratos) passou a mostrar o rótulo e o valor certos (CNPJ ou CPF)
+      via `formatarDocumentoEmpresa()`
+- [x] **Fora do escopo desta rodada, sinalizado no código/commit**:
+      importação de fechamento por XML e o restante de `sync-notas.ts`
+      continuam com alguns pontos assumindo CNPJ — não bloqueiam o pedido
+      (cliente PF novo não tem histórico externo pra importar ainda), mas
+      precisam de atenção quando o primeiro cliente PF de verdade chegar
+      nessa etapa
+- [x] Validado ao vivo com usuário descartável: empresa PF criada com CPF
+      (`111.444.777-35`) e endereço manual; CPF aparecendo corretamente em
+      todas as telas (inclusive busca por CPF na lista de empresas); aba
+      Dados fiscais sem as seções de Simples/Presumido e com regime
+      especial 5 pré-selecionado; fluxo completo de emissão (tomador +
+      serviço reais, formulário de 2 passos) avançando sem bloqueio pelo
+      gate de CNPJ/CPF+município e parando exatamente no próximo bloqueio
+      legítimo ("certificado digital não cadastrado") — confirma que o
+      relaxamento do gate funciona ponta a ponta pela UI real, sem precisar
+      forjar um certificado/assinatura de verdade
+- [ ] **Ainda não validado**: aceite real do Sefin Nacional pra um
+      prestador Pessoa Física — como em todo o resto do motor fiscal deste
+      projeto, a estrutura do XML foi conferida campo a campo contra o
+      padrão nacional, mas nunca contra uma emissão de valor real aceita em
+      produção. Testar com cautela redobrada (ambiente de homologação
+      primeiro) assim que houver um certificado real de pessoa física
+      disponível
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:

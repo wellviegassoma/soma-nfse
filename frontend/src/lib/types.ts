@@ -46,7 +46,9 @@ export type CustomerType = "PF" | "PJ";
 export type Company = {
   id: string;
   organization_id: string;
+  person_type: CustomerType;
   cnpj: string | null;
+  cpf: string | null;
   legal_name: string;
   trade_name: string | null;
   created_at: string;

@@ -20,6 +20,7 @@ export function FiscalForm({ company }: { company: Company }) {
     updateCompanyFiscal,
     undefined,
   );
+  const isPF = company.person_type === "PF";
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
@@ -50,20 +51,22 @@ export function FiscalForm({ company }: { company: Company }) {
               defaultValue={company.data_abertura ?? ""}
             />
           </Field>
-          <Field label="Regime tributário" htmlFor="taxRegime">
-            <Select
-              id="taxRegime"
-              name="taxRegime"
-              defaultValue={company.tax_regime ?? ""}
-            >
-              <option value="">Selecione</option>
-              {Object.entries(TAX_REGIME_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {!isPF && (
+            <Field label="Regime tributário" htmlFor="taxRegime">
+              <Select
+                id="taxRegime"
+                name="taxRegime"
+                defaultValue={company.tax_regime ?? ""}
+              >
+                <option value="">Selecione</option>
+                {Object.entries(TAX_REGIME_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           <Field label="CNAE principal" htmlFor="cnae">
             <Input id="cnae" name="cnae" defaultValue={company.cnae ?? ""} />
           </Field>
@@ -149,83 +152,85 @@ export function FiscalForm({ company }: { company: Company }) {
         </label>
       </div>
 
-      <div className="flex flex-col gap-4 border-t border-border pt-6">
-        <h2 className="text-sm font-semibold text-foreground/70">
-          Cálculo de imposto (aba Impostos)
-        </h2>
+      {!isPF && (
+        <div className="flex flex-col gap-4 border-t border-border pt-6">
+          <h2 className="text-sm font-semibold text-foreground/70">
+            Cálculo de imposto (aba Impostos)
+          </h2>
 
-        <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-foreground/50">
-            Simples Nacional
-          </div>
-          <label className="flex items-start gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              name="sujeitoFatorR"
-              defaultChecked={company.sujeito_fator_r}
-              className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
-            />
-            <span>
-              Sujeito ao Fator R (decide entre Anexo III e V)
-              <span className="block text-xs text-foreground/50">
-                Sem isso, o cálculo usa direto o Anexo III. Com isso marcado, o Fator R
-                (folha ÷ RBT12) é calculado sozinho a partir da folha de pagamento informada
-                mês a mês na aba Impostos da empresa.
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-foreground/50">
+              Simples Nacional
+            </div>
+            <label className="flex items-start gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                name="sujeitoFatorR"
+                defaultChecked={company.sujeito_fator_r}
+                className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+              />
+              <span>
+                Sujeito ao Fator R (decide entre Anexo III e V)
+                <span className="block text-xs text-foreground/50">
+                  Sem isso, o cálculo usa direto o Anexo III. Com isso marcado, o Fator R
+                  (folha ÷ RBT12) é calculado sozinho a partir da folha de pagamento informada
+                  mês a mês na aba Impostos da empresa.
+                </span>
               </span>
-            </span>
-          </label>
-          <p className="text-xs text-foreground/50">
-            Se a empresa já faturava antes de entrar no sistema, informe o faturamento
-            histórico mês a mês na aba{" "}
-            <Link
-              href={`/admin/empresas/${company.id}/rbt12`}
-              className="text-brand underline"
+            </label>
+            <p className="text-xs text-foreground/50">
+              Se a empresa já faturava antes de entrar no sistema, informe o faturamento
+              histórico mês a mês na aba{" "}
+              <Link
+                href={`/admin/empresas/${company.id}/rbt12`}
+                className="text-brand underline"
+              >
+                RBT12
+              </Link>{" "}
+              — o cálculo usa o real quando existe nota emitida aqui, e o manual só pros meses
+              que faltam.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-foreground/50">
+              Lucro Presumido
+            </div>
+            <label className="flex items-start gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                name="irpjCsllApuracaoMensal"
+                defaultChecked={company.irpj_csll_apuracao_mensal}
+                className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+              />
+              <span>
+                Antecipar IRPJ/CSLL mensalmente
+                <span className="block text-xs text-foreground/50">
+                  Por padrão, IRPJ/CSLL do Lucro Presumido são apurados por trimestre (guia só no
+                  3º mês). Marque para recolher mês a mês em vez de esperar o trimestre fechar.
+                </span>
+              </span>
+            </label>
+            <Field
+              label="Alíquota de ISS do município (%)"
+              htmlFor="issAliquotaPadrao"
+              hint="Usada no cálculo agregado mensal de ISS"
             >
-              RBT12
-            </Link>{" "}
-            — o cálculo usa o real quando existe nota emitida aqui, e o manual só pros meses
-            que faltam.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-foreground/50">
-            Lucro Presumido
+              <Input
+                id="issAliquotaPadrao"
+                name="issAliquotaPadrao"
+                type="number"
+                step="0.01"
+                min={0}
+                max={100}
+                defaultValue={
+                  company.iss_aliquota_padrao != null ? company.iss_aliquota_padrao * 100 : ""
+                }
+              />
+            </Field>
           </div>
-          <label className="flex items-start gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              name="irpjCsllApuracaoMensal"
-              defaultChecked={company.irpj_csll_apuracao_mensal}
-              className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
-            />
-            <span>
-              Antecipar IRPJ/CSLL mensalmente
-              <span className="block text-xs text-foreground/50">
-                Por padrão, IRPJ/CSLL do Lucro Presumido são apurados por trimestre (guia só no
-                3º mês). Marque para recolher mês a mês em vez de esperar o trimestre fechar.
-              </span>
-            </span>
-          </label>
-          <Field
-            label="Alíquota de ISS do município (%)"
-            htmlFor="issAliquotaPadrao"
-            hint="Usada no cálculo agregado mensal de ISS"
-          >
-            <Input
-              id="issAliquotaPadrao"
-              name="issAliquotaPadrao"
-              type="number"
-              step="0.01"
-              min={0}
-              max={100}
-              defaultValue={
-                company.iss_aliquota_padrao != null ? company.iss_aliquota_padrao * 100 : ""
-              }
-            />
-          </Field>
         </div>
-      </div>
+      )}
 
       <div>
         <Button type="submit" loading={pending}>
