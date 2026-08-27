@@ -1068,6 +1068,36 @@ empresas via CNPJ/planilha) (concluída)**
       rápida testada digitando parte do nome de uma empresa e conferindo
       o link sugerido
 
+**Ajuste — tela de consulta separada da tela de gerenciamento + confirmação de remoção (concluído, 2026-08-27)**
+- [x] A tela `/legalizacao/empresas/{id}` misturava duas necessidades
+      diferentes (consultar rapidamente o status/baixar um documento vs.
+      cadastrar/editar), o que ficava visualmente poluído — link de
+      "Baixar" e o toggle de aplicável lado a lado, formulário de upload
+      sempre visível mesmo pra só olhar o status. Virou duas telas:
+      `/legalizacao/empresas/{id}` (consulta, somente leitura — nome do
+      tipo, selo de status colorido, vencimento e botão "Baixar" quando
+      existe documento; tipos não aplicáveis saem da lista principal e
+      aparecem só como uma linha de rodapé) e
+      `/legalizacao/empresas/{id}/gerenciar` (upload, toggle de
+      aplicável e remoção, um botão "Gerenciar documentos" leva de uma
+      pra outra). Link de "toggle aplicável" virou um componente
+      `Switch` de verdade (`components/ui/Switch.tsx`) em vez de um link
+      de texto "Marcar como não aplicável" — mais claro visualmente qual
+      é o estado atual
+- [x] "Remover documento" não depende mais do `confirm()` nativo do
+      navegador (fácil de clicar sem perceber) — o botão agora abre uma
+      confirmação inline dentro do próprio card ("Remover este
+      documento? / Sim, remover / Cancelar"), exigindo um segundo clique
+      explícito antes de apagar o arquivo do Blob e a linha do banco
+- [x] Validado ao vivo com usuário descartável: tela de consulta
+      mostrando só os tipos aplicáveis com selo/baixar; "Gerenciar
+      documentos" levando pra tela de edição; clicar "Remover" no Alvará
+      real abriu a confirmação inline sem apagar nada, "Cancelar"
+      manteve o documento intacto (conferido direto no banco); toggle do
+      Switch pro CNES colapsando o card pra "não se aplica" e refletindo
+      corretamente na tela de consulta (some da lista principal, aparece
+      no rodapé "Não aplicáveis a esta empresa")
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { alternarTipoAplicavel } from "@/lib/actions/legalizacao";
+import { Switch } from "@/components/ui/Switch";
 
 export function TipoAplicavelToggle({
   companyId,
@@ -15,13 +16,14 @@ export function TipoAplicavelToggle({
   const [pending, startTransition] = useTransition();
 
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() => startTransition(() => alternarTipoAplicavel(companyId, tipoId, !aplicavel))}
-      className="text-xs text-brand underline disabled:opacity-40"
-    >
-      {aplicavel ? "Marcar como não aplicável" : "Marcar como aplicável"}
-    </button>
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-foreground/50">Aplicável a esta empresa</span>
+      <Switch
+        checked={aplicavel}
+        disabled={pending}
+        label="Aplicável a esta empresa"
+        onChange={() => startTransition(() => alternarTipoAplicavel(companyId, tipoId, !aplicavel))}
+      />
+    </div>
   );
 }
