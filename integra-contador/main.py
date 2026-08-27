@@ -22,8 +22,9 @@ from fastapi import Depends, FastAPI, HTTPException
 
 import scheduler
 from auth import exigir_token_interno
-from schemas import DeclaracoesPeriodoOut, ExtratoDasOut
+from schemas import DeclaracoesPeriodoOut, ExtratoDasOut, SituacaoFiscalOut
 from serpro_client import ErroIntegraContador, chamar
+from sitfis import ErroSitfis, obter_situacao_fiscal
 
 app = FastAPI(title="integra-contador", docs_url=None, redoc_url=None)
 
@@ -73,3 +74,23 @@ def consultar_declaracoes_periodo(cnpj: str, periodo_apuracao: str):
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return DeclaracoesPeriodoOut(contribuinte_cnpj=cnpj, periodo_apuracao=periodo_apuracao, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/situacao-fiscal",
+    response_model=SituacaoFiscalOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def consultar_situacao_fiscal(cnpj: str):
+    """
+    Emite o relatório de Situação Fiscal (Integra-Sitfis). Fluxo em duas
+    etapas com espera assíncrona (ver sitfis.py) — a chamada pode demorar
+    até ~1 minuto na primeira vez; chamadas seguintes no mesmo dia vêm do
+    cache. Exige procuração eletrônica código 00002 no e-CAC (diferente
+    do código 00146 usado pelo PGDAS-D).
+    """
+    try:
+        resposta = obter_situacao_fiscal(cnpj)
+    except (ErroIntegraContador, ErroSitfis) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return SituacaoFiscalOut(contribuinte_cnpj=cnpj, resposta=resposta)

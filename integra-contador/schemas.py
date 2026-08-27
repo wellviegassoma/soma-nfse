@@ -13,3 +13,8 @@ class DeclaracoesPeriodoOut(BaseModel):
     contribuinte_cnpj: str
     periodo_apuracao: str
     resposta: dict
+
+
+class SituacaoFiscalOut(BaseModel):
+    contribuinte_cnpj: str
+    resposta: dict

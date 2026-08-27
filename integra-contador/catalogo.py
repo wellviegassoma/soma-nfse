@@ -1,9 +1,14 @@
 """
 Catálogo de serviços do Integra Contador habilitados neste serviço —
 idSistema/idServico -> rota do gateway + versão + TTL de cache. Adicionar
-um novo serviço (DEFIS, DCTFWeb, Parcelamentos, Caixa Postal, Sitfis,
+um novo serviço (DEFIS, DCTFWeb, Parcelamentos, Caixa Postal,
 Procurações — ver plano) é só acrescentar uma entrada aqui, checando rota
 e versão certas na documentação oficial antes de ligar.
+
+SITFIS (Situação Fiscal) não está aqui de propósito — é um fluxo de duas
+etapas com espera assíncrona (protocolo -> relatório, com retry/tempo de
+espera), incompatível com o padrão simples de request/resposta que
+catalogo.py + serpro_client.chamar() assumem. Ver sitfis.py.
 """
 
 from __future__ import annotations
