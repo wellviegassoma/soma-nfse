@@ -104,7 +104,14 @@ def chamar(id_sistema: str, id_servico: str, contribuinte_cnpj: str, dados: dict
     }
 
     resposta = _chamar_gateway(servico.rota, envelope)
-    resposta.raise_for_status()
+    if not resposta.ok:
+        _logar(
+            id_sistema, id_servico, contribuinte_cnpj, resposta.status_code, False, int((time.monotonic() - inicio) * 1000)
+        )
+        raise ErroIntegraContador(
+            f"Serpro respondeu HTTP {resposta.status_code} para {id_sistema}.{id_servico} "
+            f"(contribuinte {contribuinte_cnpj}): {resposta.text[:1000]}"
+        )
     corpo = resposta.json()
 
     cache.salvar(id_sistema, id_servico, contribuinte_cnpj, dados, corpo, resposta.status_code)
