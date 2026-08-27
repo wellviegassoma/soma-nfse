@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import {
+  agruparPorAtividade,
   buscarFaturamentoMensal,
+  buscarFaturamentoPorAtividade,
   buscarReceitaManual,
   competenciasTrimestre,
   receitaComManual,
@@ -59,6 +61,8 @@ export default async function ImpostosPage(
 
   const notas = await buscarFaturamentoMensal(supabase, companyId);
   const receitaMes = somarFaturamento(notas, [competencia]);
+  const notasPorAtividade = await buscarFaturamentoPorAtividade(supabase, companyId);
+  const atividadesDoMes = agruparPorAtividade(notasPorAtividade, competencia);
 
   const competenciaFilterForm = (
     <Card className="p-6">
@@ -246,6 +250,43 @@ export default async function ImpostosPage(
               <span>{formatMoney(resultado.dasTotal)}</span>
             </div>
           </div>
+        </Card>
+
+        <Card className="overflow-hidden">
+          <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
+            Faturamento por atividade — {formatCompetencia(competencia)}
+          </div>
+          <p className="border-b border-border bg-surface-muted px-5 py-2 text-xs text-foreground/50">
+            Visão preparatória — o PGDAS-D oficial exige receita segregada por atividade (não um
+            total único). Cadastro de atividade por serviço ainda não existe; agrupado aqui só pelo
+            código de tributação nacional (LC 116) de cada nota.
+          </p>
+          {atividadesDoMes.length === 0 ? (
+            <div className="px-5 py-4 text-sm text-foreground/50">
+              Nenhuma nota nessa competência.
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {atividadesDoMes.map((atividade) => (
+                <div
+                  key={atividade.chave}
+                  className="flex items-center justify-between gap-3 px-5 py-3 text-sm"
+                >
+                  <div>
+                    <div className="text-foreground/70">{atividade.descricao}</div>
+                    {atividade.codigo && (
+                      <div className="text-xs text-foreground/40">Código LC 116: {atividade.codigo}</div>
+                    )}
+                  </div>
+                  <span className="font-medium text-foreground">{formatMoney(atividade.valor)}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between bg-surface-muted px-5 py-3 text-sm font-semibold">
+                <span>Total</span>
+                <span>{formatMoney(atividadesDoMes.reduce((acc, a) => acc + a.valor, 0))}</span>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
     );

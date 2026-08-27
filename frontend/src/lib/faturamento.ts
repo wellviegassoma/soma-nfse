@@ -93,6 +93,107 @@ export async function buscarReceitaManual(
   return new Map((data ?? []).map((r) => [r.competencia as string, Number(r.valor)]));
 }
 
+export type NotaPorAtividade = {
+  competencia: string; // "YYYY-MM"
+  valor: number;
+  cancelada: boolean;
+  // Código de tributação nacional (LC 116) — chave de agrupamento. Nulo
+  // quando a nota (normalmente distribuída, não cadastrada aqui) não tem
+  // um serviço identificado.
+  codigo: string | null;
+  descricao: string;
+};
+
+// Mesma fonte/dedup de buscarFaturamentoMensal, mas preservando o serviço
+// (dps.service_id -> services.national_tax_code/name) ou, pra notas
+// distribuídas sem cadastro de serviço aqui, o código/descrição que já
+// vem na própria nota (codigo_trib_nacional/descricao_servico). Visão
+// preparatória pra segregar o faturamento por atividade do PGDAS-D — sem
+// isso, TRANSDECLARACAO11 não dá pra montar (exige receita por atividade,
+// não um total único).
+export async function buscarFaturamentoPorAtividade(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any, any, any>,
+  companyId: string,
+): Promise<NotaPorAtividade[]> {
+  type DpsComServicoRow = DpsRow & {
+    services:
+      | { name: string; national_tax_code: string | null }
+      | { name: string; national_tax_code: string | null }[]
+      | null;
+  };
+
+  const [{ data: notas }, { data: distribuidas }] = await Promise.all([
+    supabase
+      .from("dps")
+      .select("valor, status, data_competencia, services(name, national_tax_code), nfse(status, access_key)")
+      .eq("company_id", companyId),
+    supabase
+      .from("notas_distribuidas")
+      .select(
+        "chave_acesso, valor_servico, competencia, cancelada, direcao, codigo_trib_nacional, descricao_servico",
+      )
+      .eq("company_id", companyId)
+      .eq("direcao", "saida"),
+  ]);
+
+  const vistos = new Set<string>();
+  const out: NotaPorAtividade[] = [];
+
+  for (const nota of (notas ?? []) as unknown as DpsComServicoRow[]) {
+    if (nota.status !== "ACCEPTED") continue;
+    const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
+    const chaveAcesso = nfseArr[0]?.access_key ?? null;
+    const cancelada = nfseArr.some((n) => n.status === "CANCELADA");
+    if (chaveAcesso) vistos.add(chaveAcesso);
+    const servico = Array.isArray(nota.services) ? nota.services[0] : nota.services;
+    out.push({
+      competencia: nota.data_competencia.slice(0, 7),
+      valor: Number(nota.valor),
+      cancelada,
+      codigo: servico?.national_tax_code ?? null,
+      descricao: servico?.name ?? "Serviço não identificado no cadastro",
+    });
+  }
+
+  for (const nota of (distribuidas ?? []) as (NotaDistribuidaRow & {
+    codigo_trib_nacional: string | null;
+    descricao_servico: string | null;
+  })[]) {
+    if (nota.chave_acesso && vistos.has(nota.chave_acesso)) continue;
+    if (nota.chave_acesso) vistos.add(nota.chave_acesso);
+    out.push({
+      competencia: (nota.competencia ?? "").slice(0, 7),
+      valor: Number(nota.valor_servico ?? 0),
+      cancelada: nota.cancelada,
+      codigo: nota.codigo_trib_nacional,
+      descricao: nota.descricao_servico ?? "Nota distribuída (sem serviço cadastrado)",
+    });
+  }
+
+  return out;
+}
+
+export type AtividadeAgrupada = { chave: string; descricao: string; codigo: string | null; valor: number };
+
+// Agrupa por código de tributação nacional (LC 116) — mesmo código pode
+// ter descrições ligeiramente diferentes entre serviços cadastrados e
+// notas distribuídas, então a descrição mostrada é a da primeira nota
+// encontrada do grupo. Notas sem código viram um grupo próprio por
+// descrição (evita misturar serviços diferentes só porque nenhum tem
+// código identificado).
+export function agruparPorAtividade(notas: NotaPorAtividade[], competencia: string): AtividadeAgrupada[] {
+  const mapa = new Map<string, AtividadeAgrupada>();
+  for (const nota of notas) {
+    if (nota.cancelada || nota.competencia !== competencia) continue;
+    const chave = nota.codigo ?? `desc:${nota.descricao}`;
+    const atual = mapa.get(chave) ?? { chave, descricao: nota.descricao, codigo: nota.codigo, valor: 0 };
+    atual.valor += nota.valor;
+    mapa.set(chave, atual);
+  }
+  return Array.from(mapa.values()).sort((a, b) => b.valor - a.valor);
+}
+
 export function somarFaturamento(notas: NotaFaturamento[], competencias: string[]): number {
   const alvo = new Set(competencias);
   return notas
