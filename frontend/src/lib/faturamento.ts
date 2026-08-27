@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { sugerirAtividade } from "@/lib/lc116-sugestao-atividade";
 
 export type NotaFaturamento = {
   competencia: string; // "YYYY-MM"
@@ -102,15 +103,47 @@ export type NotaPorAtividade = {
   // um serviço identificado.
   codigo: string | null;
   descricao: string;
+  // Id de ATIVIDADES_SIMPLES_NACIONAL já resolvido — ver
+  // resolverAtividadeNota pra a ordem de prioridade. Nulo = não dá pra
+  // classificar (nem cadastro, nem sugestão automática cobrem o código).
+  atividadeId: string | null;
+  // true quando atividadeId veio só da sugestão automática por LC 116
+  // (lc116-sugestao-atividade.ts), não de um serviço cadastrado com essa
+  // classificação já confirmada — usado só pra sinalizar na UI que vale a
+  // pena conferir.
+  viaSugestao: boolean;
 };
 
+// Resolve a atividade do Simples Nacional de uma nota que não está
+// diretamente ligada a um `services` cadastrado (é o caso de toda nota em
+// `notas_distribuidas` — emitida por fora do soma-nfse, sem
+// service_id/FK nenhum). Ordem de prioridade:
+//
+// 1. A empresa já tem algum serviço cadastrado com esse MESMO código LC
+//    116, e esse serviço já está classificado? Reaproveita — é
+//    informação que o contador já confirmou, só que pra outro serviço.
+// 2. Sugestão automática pelo código (sugerirAtividade) — só cobre os
+//    códigos inequívocos já mapeados.
+// 3. Não classificado — melhor deixar em branco do que chutar.
+function resolverAtividadeNota(
+  codigo: string | null,
+  mapaServicosPorCodigo: Map<string, string>,
+): { atividadeId: string | null; viaSugestao: boolean } {
+  if (!codigo) return { atividadeId: null, viaSugestao: false };
+  const doCadastro = mapaServicosPorCodigo.get(codigo);
+  if (doCadastro) return { atividadeId: doCadastro, viaSugestao: false };
+  const sugestao = sugerirAtividade(codigo);
+  return { atividadeId: sugestao?.id ?? null, viaSugestao: Boolean(sugestao) };
+}
+
 // Mesma fonte/dedup de buscarFaturamentoMensal, mas preservando o serviço
-// (dps.service_id -> services.national_tax_code/name) ou, pra notas
-// distribuídas sem cadastro de serviço aqui, o código/descrição que já
-// vem na própria nota (codigo_trib_nacional/descricao_servico). Visão
-// preparatória pra segregar o faturamento por atividade do PGDAS-D — sem
-// isso, TRANSDECLARACAO11 não dá pra montar (exige receita por atividade,
-// não um total único).
+// (dps.service_id -> services.national_tax_code/name/atividade_simples_nacional)
+// ou, pra notas distribuídas sem cadastro de serviço aqui, o
+// código/descrição que já vem na própria nota
+// (codigo_trib_nacional/descricao_servico) — nesse caso a atividade é
+// resolvida por resolverAtividadeNota. Visão preparatória pra segregar o
+// faturamento por atividade do PGDAS-D — sem isso, TRANSDECLARACAO11 não
+// dá pra montar (exige receita por atividade, não um total único).
 export async function buscarFaturamentoPorAtividade(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any, any, any>,
@@ -118,15 +151,17 @@ export async function buscarFaturamentoPorAtividade(
 ): Promise<NotaPorAtividade[]> {
   type DpsComServicoRow = DpsRow & {
     services:
-      | { name: string; national_tax_code: string | null }
-      | { name: string; national_tax_code: string | null }[]
+      | { name: string; national_tax_code: string | null; atividade_simples_nacional: string | null }
+      | { name: string; national_tax_code: string | null; atividade_simples_nacional: string | null }[]
       | null;
   };
 
-  const [{ data: notas }, { data: distribuidas }] = await Promise.all([
+  const [{ data: notas }, { data: distribuidas }, { data: todosServicos }] = await Promise.all([
     supabase
       .from("dps")
-      .select("valor, status, data_competencia, services(name, national_tax_code), nfse(status, access_key)")
+      .select(
+        "valor, status, data_competencia, services(name, national_tax_code, atividade_simples_nacional), nfse(status, access_key)",
+      )
       .eq("company_id", companyId),
     supabase
       .from("notas_distribuidas")
@@ -135,7 +170,24 @@ export async function buscarFaturamentoPorAtividade(
       )
       .eq("company_id", companyId)
       .eq("direcao", "saida"),
+    supabase
+      .from("services")
+      .select("national_tax_code, atividade_simples_nacional")
+      .eq("company_id", companyId)
+      .not("national_tax_code", "is", null)
+      .not("atividade_simples_nacional", "is", null),
   ]);
+
+  // Código LC 116 -> atividade já classificada em QUALQUER serviço dessa
+  // empresa (não só o serviço da nota em questão) — é o que permite
+  // reaproveitar a classificação pra notas distribuídas sem cadastro
+  // próprio, desde que o código bata com algo já classificado aqui.
+  const mapaServicosPorCodigo = new Map<string, string>();
+  for (const s of (todosServicos ?? []) as { national_tax_code: string; atividade_simples_nacional: string }[]) {
+    if (!mapaServicosPorCodigo.has(s.national_tax_code)) {
+      mapaServicosPorCodigo.set(s.national_tax_code, s.atividade_simples_nacional);
+    }
+  }
 
   const vistos = new Set<string>();
   const out: NotaPorAtividade[] = [];
@@ -147,12 +199,19 @@ export async function buscarFaturamentoPorAtividade(
     const cancelada = nfseArr.some((n) => n.status === "CANCELADA");
     if (chaveAcesso) vistos.add(chaveAcesso);
     const servico = Array.isArray(nota.services) ? nota.services[0] : nota.services;
+    // Nota ligada a um serviço cadastrado de verdade (service_id) — usa a
+    // classificação DESSE serviço direto, sem precisar do fallback por
+    // código (mais preciso: é o serviço exato da nota, não só "algum"
+    // serviço com o mesmo código).
+    const atividadeDoServico = servico?.atividade_simples_nacional ?? null;
     out.push({
       competencia: nota.data_competencia.slice(0, 7),
       valor: Number(nota.valor),
       cancelada,
       codigo: servico?.national_tax_code ?? null,
       descricao: servico?.name ?? "Serviço não identificado no cadastro",
+      atividadeId: atividadeDoServico,
+      viaSugestao: false,
     });
   }
 
@@ -162,19 +221,29 @@ export async function buscarFaturamentoPorAtividade(
   })[]) {
     if (nota.chave_acesso && vistos.has(nota.chave_acesso)) continue;
     if (nota.chave_acesso) vistos.add(nota.chave_acesso);
+    const { atividadeId, viaSugestao } = resolverAtividadeNota(nota.codigo_trib_nacional, mapaServicosPorCodigo);
     out.push({
       competencia: (nota.competencia ?? "").slice(0, 7),
       valor: Number(nota.valor_servico ?? 0),
       cancelada: nota.cancelada,
       codigo: nota.codigo_trib_nacional,
       descricao: nota.descricao_servico ?? "Nota distribuída (sem serviço cadastrado)",
+      atividadeId,
+      viaSugestao,
     });
   }
 
   return out;
 }
 
-export type AtividadeAgrupada = { chave: string; descricao: string; codigo: string | null; valor: number };
+export type AtividadeAgrupada = {
+  chave: string;
+  descricao: string;
+  codigo: string | null;
+  valor: number;
+  atividadeId: string | null;
+  viaSugestao: boolean;
+};
 
 // Agrupa por código de tributação nacional (LC 116) — mesmo código pode
 // ter descrições ligeiramente diferentes entre serviços cadastrados e
@@ -187,7 +256,16 @@ export function agruparPorAtividade(notas: NotaPorAtividade[], competencia: stri
   for (const nota of notas) {
     if (nota.cancelada || nota.competencia !== competencia) continue;
     const chave = nota.codigo ?? `desc:${nota.descricao}`;
-    const atual = mapa.get(chave) ?? { chave, descricao: nota.descricao, codigo: nota.codigo, valor: 0 };
+    const atual =
+      mapa.get(chave) ??
+      ({
+        chave,
+        descricao: nota.descricao,
+        codigo: nota.codigo,
+        valor: 0,
+        atividadeId: nota.atividadeId,
+        viaSugestao: nota.viaSugestao,
+      } satisfies AtividadeAgrupada);
     atual.valor += nota.valor;
     mapa.set(chave, atual);
   }

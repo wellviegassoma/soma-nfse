@@ -19,6 +19,13 @@ import {
 } from "@/lib/faturamento";
 import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { calcularLucroPresumido, calcularSimplesNacional } from "@/lib/calculo-impostos";
+import { buscarAtividade, type TratamentoAtividade } from "@/lib/simples-nacional-atividades";
+
+const BADGE_POR_TRATAMENTO: Record<TratamentoAtividade, string> = {
+  ANEXO_III_FIXO: "bg-green-100 text-green-900",
+  FATOR_R: "bg-amber-100 text-amber-900",
+  ANEXO_IV_FIXO: "bg-orange-100 text-orange-900",
+};
 
 export const metadata = { title: "Impostos — Painel SOMA" };
 
@@ -258,8 +265,9 @@ export default async function ImpostosPage(
           </div>
           <p className="border-b border-border bg-surface-muted px-5 py-2 text-xs text-foreground/50">
             Visão preparatória — o PGDAS-D oficial exige receita segregada por atividade (não um
-            total único). Cadastro de atividade por serviço ainda não existe; agrupado aqui só pelo
-            código de tributação nacional (LC 116) de cada nota.
+            total único). Notas de serviço cadastrado usam a atividade escolhida nele; notas
+            distribuídas (sem cadastro aqui) tentam reaproveitar a classificação de outro serviço
+            com o mesmo código, ou a sugestão automática pelo código LC 116.
           </p>
           {atividadesDoMes.length === 0 ? (
             <div className="px-5 py-4 text-sm text-foreground/50">
@@ -267,20 +275,37 @@ export default async function ImpostosPage(
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {atividadesDoMes.map((atividade) => (
-                <div
-                  key={atividade.chave}
-                  className="flex items-center justify-between gap-3 px-5 py-3 text-sm"
-                >
-                  <div>
-                    <div className="text-foreground/70">{atividade.descricao}</div>
-                    {atividade.codigo && (
-                      <div className="text-xs text-foreground/40">Código LC 116: {atividade.codigo}</div>
-                    )}
+              {atividadesDoMes.map((atividade) => {
+                const resolvida = atividade.atividadeId ? buscarAtividade(atividade.atividadeId) : undefined;
+                return (
+                  <div
+                    key={atividade.chave}
+                    className="flex items-center justify-between gap-3 px-5 py-3 text-sm"
+                  >
+                    <div>
+                      <div className="text-foreground/70">{atividade.descricao}</div>
+                      {atividade.codigo && (
+                        <div className="text-xs text-foreground/40">Código LC 116: {atividade.codigo}</div>
+                      )}
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {resolvida ? (
+                          <span
+                            className={`rounded px-2 py-0.5 text-xs font-medium ${BADGE_POR_TRATAMENTO[resolvida.tratamento]}`}
+                          >
+                            {resolvida.descricao}
+                            {atividade.viaSugestao ? " (sugestão automática — conferir)" : ""}
+                          </span>
+                        ) : (
+                          <span className="rounded bg-surface-muted px-2 py-0.5 text-xs font-medium text-foreground/50">
+                            Não classificado
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="font-medium text-foreground">{formatMoney(atividade.valor)}</span>
                   </div>
-                  <span className="font-medium text-foreground">{formatMoney(atividade.valor)}</span>
-                </div>
-              ))}
+                );
+              })}
               <div className="flex items-center justify-between bg-surface-muted px-5 py-3 text-sm font-semibold">
                 <span>Total</span>
                 <span>{formatMoney(atividadesDoMes.reduce((acc, a) => acc + a.valor, 0))}</span>
