@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { BuscaRapidaEmpresa } from "./BuscaRapidaEmpresa";
+import { tipoAplicavel } from "./status";
 
 export const metadata = { title: "Legalização — Visão geral" };
 
@@ -25,33 +26,32 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
   const q = typeof searchParams.q === "string" ? searchParams.q.trim() : "";
 
   const supabase = await createClient();
-  const [{ data }, { data: tipos }, { data: naoAplicaveis }] = await Promise.all([
+  const [{ data }, { data: tipos }, { data: excecoes }] = await Promise.all([
     supabase
       .from("companies")
       .select("id, legal_name, trade_name, legalizacao_documentos(tipo_id, data_vencimento)")
       .order("legal_name", { ascending: true }),
-    supabase.from("legalizacao_tipos_documento").select("id, nome").eq("ativo", true),
-    supabase.from("legalizacao_tipos_nao_aplicaveis").select("company_id, tipo_id"),
+    supabase.from("legalizacao_tipos_documento").select("id, nome, aplica_a_todas").eq("ativo", true),
+    supabase.from("legalizacao_tipos_empresas_excecao").select("company_id, tipo_id, aplicavel"),
   ]);
 
   const empresas = (data ?? []) as unknown as EmpresaComDocumentos[];
   const nomeTipoPorId = new Map((tipos ?? []).map((t) => [t.id, t.nome]));
-  const todosTipoIds = (tipos ?? []).map((t) => t.id);
 
-  const naoAplicaveisPorEmpresa = new Map<string, Set<string>>();
-  for (const row of naoAplicaveis ?? []) {
-    if (!naoAplicaveisPorEmpresa.has(row.company_id)) naoAplicaveisPorEmpresa.set(row.company_id, new Set());
-    naoAplicaveisPorEmpresa.get(row.company_id)!.add(row.tipo_id);
+  const excecaoPorEmpresaETipo = new Map<string, boolean>();
+  for (const row of excecoes ?? []) {
+    excecaoPorEmpresaETipo.set(`${row.company_id}:${row.tipo_id}`, row.aplicavel);
   }
 
-  // Documentação completa = todo tipo aplicável a essa empresa (catálogo
-  // menos os marcados como "não se aplica") já tem documento cadastrado.
+  // Documentação completa = todo tipo aplicável a essa empresa (padrão do
+  // tipo, com as exceções por empresa aplicadas) já tem documento cadastrado.
   const incompletas = empresas.filter((e) => {
-    const excluidos = naoAplicaveisPorEmpresa.get(e.id) ?? new Set<string>();
-    const aplicaveis = todosTipoIds.filter((id) => !excluidos.has(id));
+    const aplicaveis = (tipos ?? []).filter((tipo) =>
+      tipoAplicavel(tipo.aplica_a_todas, excecaoPorEmpresaETipo.get(`${e.id}:${tipo.id}`)),
+    );
     if (aplicaveis.length === 0) return false;
     const cadastrados = new Set((e.legalizacao_documentos ?? []).map((d) => d.tipo_id));
-    return aplicaveis.some((id) => !cadastrados.has(id));
+    return aplicaveis.some((tipo) => !cadastrados.has(tipo.id));
   });
   const comDocumento = empresas.filter((e) => (e.legalizacao_documentos?.length ?? 0) > 0);
 

@@ -1098,6 +1098,38 @@ empresas via CNPJ/planilha) (concluída)**
       corretamente na tela de consulta (some da lista principal, aparece
       no rodapé "Não aplicáveis a esta empresa")
 
+**Ajuste — vincular empresas pelo tipo de documento, não empresa por empresa (concluído, 2026-08-27)**
+- [x] Até aqui, todo tipo novo aparecia automaticamente pras 206 empresas,
+      e restringir um tipo de nicho (ex.: CNES) exigia entrar empresa por
+      empresa desmarcando quem não precisa — inviável na prática. Cada
+      tipo agora escolhe o próprio padrão: `aplica_a_todas` (comportamento
+      de sempre — Alvará, Certidão, ...) ou restrito, caso em que ele não
+      se aplica a ninguém até alguém escolher as empresas na tela do
+      próprio tipo. A tabela de exceção (renomeada de
+      `legalizacao_tipos_nao_aplicaveis` pra
+      `legalizacao_tipos_empresas_excecao`) ganhou uma coluna `aplicavel`
+      pra guardar a exceção nos dois sentidos: com o tipo em modo "todas",
+      uma linha com `aplicavel=false` exclui; em modo restrito, uma linha
+      com `aplicavel=true` inclui — ausência de linha sempre quer dizer
+      "usa o padrão do tipo"
+- [x] Tela "Tipos de documento" ganhou um `Switch` por tipo pra alternar
+      entre os dois modos e um link "Gerenciar empresas" levando pra
+      `/legalizacao/tipos/{id}/empresas` — lista com busca, "selecionar
+      todas/filtradas" e "limpar seleção", salva o conjunto inteiro de
+      empresas aplicáveis de uma vez (recria as exceções do zero,
+      guardando só as que realmente divergem do padrão, mesmo princípio
+      de tabela enxuta de sempre). Criar um tipo já marcado como restrito
+      leva direto pra essa tela em vez de deixá-lo invisível até alguém
+      lembrar de configurar
+- [x] Validado ao vivo: criado tipo restrito de teste, confirmado
+      `aplica_a_todas=false` no banco; selecionadas 2 de 206 empresas na
+      tela de gerenciar empresas, salvo, e confirmadas as duas linhas de
+      exceção certas (`aplicavel=true`) no banco; tela de consulta da
+      empresa selecionada mostrando o tipo normalmente, e de uma empresa
+      não selecionada mostrando ele só no rodapé "Não aplicáveis a esta
+      empresa" — comportamento correto nos dois lados sem tocar em
+      nenhuma empresa manualmente
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

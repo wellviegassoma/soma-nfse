@@ -7,6 +7,12 @@ export const STATUS_PILL_CLASSES: Record<StatusTone, string> = {
   neutral: "bg-surface-muted text-foreground/50",
 };
 
+// Uma linha na tabela de exceção guarda o valor explícito de "aplicavel"
+// pra essa empresa+tipo; na ausência dela, vale o padrão do próprio tipo.
+export function tipoAplicavel(aplicaATodas: boolean, override: boolean | undefined): boolean {
+  return override ?? aplicaATodas;
+}
+
 export function diasAteVencer(dataVencimento: string): number {
   return Math.ceil((new Date(dataVencimento).getTime() - Date.now()) / 86_400_000);
 }

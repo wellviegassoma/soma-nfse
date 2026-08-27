@@ -10,7 +10,9 @@ import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import { analisarTextoDocumento } from "@/lib/pdf-import/legalizacao-analise";
 
-export type LegalizacaoActionState = { error?: string; success?: boolean } | undefined;
+export type LegalizacaoActionState =
+  | { error?: string; success?: boolean; tipoId?: string }
+  | undefined;
 
 const salvarDocumentoSchema = z
   .object({
@@ -181,6 +183,7 @@ export async function apagarDocumentoLegalizacao(documentoId: string, companyId:
 
 const criarTipoSchema = z.object({
   nome: z.string().trim().min(2, "Informe o nome do tipo de documento."),
+  aplicaATodas: z.literal("on").optional(),
 });
 
 export async function criarTipoDocumento(
@@ -189,22 +192,28 @@ export async function criarTipoDocumento(
 ): Promise<LegalizacaoActionState> {
   await requireLegalizacaoAccess();
 
-  const parsed = criarTipoSchema.safeParse({ nome: formData.get("nome") });
+  const parsed = criarTipoSchema.safeParse({
+    nome: formData.get("nome"),
+    aplicaATodas: formData.get("aplicaATodas") || undefined,
+  });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("legalizacao_tipos_documento")
-    .insert({ nome: parsed.data.nome });
+    .insert({ nome: parsed.data.nome, aplica_a_todas: parsed.data.aplicaATodas === "on" })
+    .select("id")
+    .single();
   if (error) {
     if (error.code === "23505") return { error: "Já existe um tipo de documento com esse nome." };
     return { error: "Não foi possível criar o tipo de documento." };
   }
 
   revalidatePath("/legalizacao/tipos");
-  return { success: true };
+  revalidatePath("/legalizacao");
+  return { success: true, tipoId: data.id };
 }
 
 export async function alternarAtivoTipoDocumento(tipoId: string, ativo: boolean) {
@@ -215,23 +224,79 @@ export async function alternarAtivoTipoDocumento(tipoId: string, ativo: boolean)
   revalidatePath("/legalizacao");
 }
 
-// Ausência de linha em legalizacao_tipos_nao_aplicaveis = tipo se aplica
-// normalmente à empresa (padrão). Uma linha aqui é a exceção: "essa empresa
-// não precisa controlar esse tipo de documento".
+// Muda o padrão do tipo: aplicável a todas as empresas por padrão, ou só
+// às empresas explicitamente selecionadas na tela de gerenciamento. Não
+// mexe nas exceções já cadastradas — elas continuam valendo como exceção
+// ao novo padrão.
+export async function alternarModoAplicacaoTipo(tipoId: string, aplicaATodas: boolean) {
+  await requireLegalizacaoAccess();
+  const supabase = await createClient();
+  await supabase.from("legalizacao_tipos_documento").update({ aplica_a_todas: aplicaATodas }).eq("id", tipoId);
+  revalidatePath("/legalizacao/tipos");
+  revalidatePath("/legalizacao");
+}
+
+// Ausência de linha em legalizacao_tipos_empresas_excecao = a empresa usa
+// o padrão do tipo (aplica_a_todas). Uma linha aqui é a exceção pontual
+// pra essa empresa, nos dois sentidos: exclui (tipo aplica a todas, mas
+// essa empresa não precisa) ou inclui (tipo é restrito, mas essa empresa
+// precisa).
 export async function alternarTipoAplicavel(companyId: string, tipoId: string, aplicavel: boolean) {
   await requireLegalizacaoAccess();
   const supabase = await createClient();
-  if (aplicavel) {
+  const { data: tipo } = await supabase
+    .from("legalizacao_tipos_documento")
+    .select("aplica_a_todas")
+    .eq("id", tipoId)
+    .single();
+  if (!tipo) return;
+
+  if (aplicavel === tipo.aplica_a_todas) {
     await supabase
-      .from("legalizacao_tipos_nao_aplicaveis")
+      .from("legalizacao_tipos_empresas_excecao")
       .delete()
       .eq("company_id", companyId)
       .eq("tipo_id", tipoId);
   } else {
     await supabase
-      .from("legalizacao_tipos_nao_aplicaveis")
-      .upsert({ company_id: companyId, tipo_id: tipoId }, { onConflict: "company_id,tipo_id" });
+      .from("legalizacao_tipos_empresas_excecao")
+      .upsert({ company_id: companyId, tipo_id: tipoId, aplicavel }, { onConflict: "company_id,tipo_id" });
   }
   revalidatePath(`/legalizacao/empresas/${companyId}`);
+  revalidatePath(`/legalizacao/empresas/${companyId}/gerenciar`);
+  revalidatePath("/legalizacao");
+}
+
+// Define, de uma vez só, o conjunto completo de empresas em que esse tipo
+// é aplicável — usado pela tela "Gerenciar empresas" do tipo, pra não
+// precisar entrar empresa por empresa. Recria as exceções do zero,
+// guardando só as que realmente divergem do padrão do tipo (mesmo
+// princípio de manter a tabela enxuta usado em alternarTipoAplicavel).
+export async function definirEmpresasAplicaveisDoTipo(tipoId: string, companyIdsAplicaveis: string[]) {
+  await requireLegalizacaoAccess();
+  const supabase = await createClient();
+
+  const [{ data: tipo }, { data: empresas }] = await Promise.all([
+    supabase.from("legalizacao_tipos_documento").select("aplica_a_todas").eq("id", tipoId).single(),
+    supabase.from("companies").select("id"),
+  ]);
+  if (!tipo) return;
+
+  const aplicaveisSet = new Set(companyIdsAplicaveis);
+  const linhas = (empresas ?? [])
+    .filter((empresa) => aplicaveisSet.has(empresa.id) !== tipo.aplica_a_todas)
+    .map((empresa) => ({
+      company_id: empresa.id,
+      tipo_id: tipoId,
+      aplicavel: aplicaveisSet.has(empresa.id),
+    }));
+
+  await supabase.from("legalizacao_tipos_empresas_excecao").delete().eq("tipo_id", tipoId);
+  if (linhas.length > 0) {
+    await supabase.from("legalizacao_tipos_empresas_excecao").insert(linhas);
+  }
+
+  revalidatePath(`/legalizacao/tipos/${tipoId}/empresas`);
+  revalidatePath("/legalizacao/tipos");
   revalidatePath("/legalizacao");
 }

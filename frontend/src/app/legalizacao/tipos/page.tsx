@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { NovoTipoDocumentoForm } from "./NovoTipoDocumentoForm";
 import { ToggleTipoDocumentoButton } from "./ToggleTipoDocumentoButton";
+import { ModoAplicacaoTipoToggle } from "./ModoAplicacaoTipoToggle";
 
 export const metadata = { title: "Tipos de documento — Legalização" };
 
@@ -10,7 +12,7 @@ export default async function TiposDocumentoPage() {
 
   const { data: tipos } = await supabase
     .from("legalizacao_tipos_documento")
-    .select("id, nome, ativo")
+    .select("id, nome, ativo, aplica_a_todas")
     .order("nome", { ascending: true });
 
   return (
@@ -36,13 +38,22 @@ export default async function TiposDocumentoPage() {
         ) : (
           <div className="divide-y divide-border">
             {tipos.map((tipo) => (
-              <div key={tipo.id} className="flex items-center justify-between gap-4 px-5 py-3">
+              <div key={tipo.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
                 <span
                   className={`text-sm font-medium ${tipo.ativo ? "text-foreground" : "text-foreground/40 line-through"}`}
                 >
                   {tipo.nome}
                 </span>
-                <ToggleTipoDocumentoButton tipoId={tipo.id} ativo={tipo.ativo} />
+                <div className="flex items-center gap-4">
+                  <Link
+                    href={`/legalizacao/tipos/${tipo.id}/empresas`}
+                    className="text-xs text-brand underline"
+                  >
+                    Gerenciar empresas
+                  </Link>
+                  <ModoAplicacaoTipoToggle tipoId={tipo.id} aplicaATodas={tipo.aplica_a_todas} />
+                  <ToggleTipoDocumentoButton tipoId={tipo.id} ativo={tipo.ativo} />
+                </div>
               </div>
             ))}
           </div>
