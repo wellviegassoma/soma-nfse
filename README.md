@@ -958,10 +958,24 @@ empresas via CNPJ/planilha) (concluída)**
       contra o banco real; catálogo de tipos testado (criar tipo,
       inativar/reativar); staff confirmado acessando os dois módulos
       novos pelos atalhos adicionados no cabeçalho do `/admin`
-- [ ] Upload de arquivo de verdade (Vercel Blob) ainda não testado —
-      precisa o usuário criar o Blob Store no dashboard da Vercel e
-      configurar `BLOB_READ_WRITE_TOKEN` primeiro (documentado em
-      `.env.local.example`)
+- [x] Upload de arquivo de verdade validado depois que o Blob Store
+      ("SOMAGestao") foi criado e conectado ao projeto `soma-nfse` na
+      Vercel, com `BLOB_READ_WRITE_TOKEN` liberado pros três ambientes
+      (Production, Preview e Development — a conexão automática só tinha
+      coberto Production/Preview). Ponta a ponta com usuário descartável:
+      upload real (PDF simulando um Alvará) → linha criada em
+      `legalizacao_documentos` com `blob_url`/`blob_pathname` corretos →
+      download pela rota `/api/legalizacao/documentos/[id]` devolvendo o
+      arquivo certo (`Content-Type`, `Content-Disposition` e conteúdo
+      byte a byte) → "Remover" apagando a linha do banco E o blob no
+      Vercel Blob (confirmado com `list()` direto contra o Blob Store,
+      prefixo vazio depois de apagar)
+- [x] `vercel link` (`--yes`) tentou linkar sem projeto explícito e
+      **criou um projeto novo por engano** (`frontend` num time
+      `soma-7532`) em vez de achar o `soma-nfse` existente — sinal de que
+      esse comando nunca deve rodar sem `--project <nome-certo>`
+      explícito nesse repo. Usuário apagou o projeto errado; relinkado
+      corretamente com `vercel link --project soma-nfse --yes`
 - [ ] Rebrand de "SOMA NFS-e" pra "SOMA Gestão" (Logo.tsx, títulos de
       página, README) ainda não feito — decisão de nome e estrutura de
       módulos veio primeiro, o rebrand visual em si fica pra depois
