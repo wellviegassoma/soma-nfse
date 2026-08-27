@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 const TABS = [
   { href: "dados-fiscais", label: "Dados fiscais" },
   { href: "certificado", label: "Certificado" },
+  { href: "integra-contador", label: "Integra Contador" },
   { href: "servicos", label: "Serviços" },
   { href: "usuarios", label: "Usuários" },
   { href: "contatos", label: "Contatos" },
