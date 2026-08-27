@@ -1369,6 +1369,30 @@ empresas via CNPJ/planilha) (concluída)**
       confirmado que Legalização continua funcionando normalmente após o
       refactor dos helpers compartilhados
 
+**Ajuste — grade de meses em colunas e período de controle por conta (concluído, 2026-08-27)**
+- [x] Controle mensal na consulta de Extratos virou uma grade (mês em cima,
+      selo Entregue/Pendente embaixo, lado a lado — `grid grid-cols-3
+      sm:grid-cols-4 md:grid-cols-6`) em vez da lista vertical anterior
+- [x] Cada conta bancária ganhou período de controle próprio —
+      `data_inicio_controle`/`data_fim_controle` (nullable) em
+      `extrato_contas_bancarias`. Sem essas datas, continua valendo o
+      padrão de sempre (últimos 6 meses na consulta, 12 no gerenciar);
+      com elas, a janela de meses mostrada (nas duas telas) fica limitada
+      ao período real da conta — útil pra conta aberta há pouco tempo ou já
+      encerrada. Nova função `competenciasNoIntervalo()` em
+      `lib/competencia.ts` (com trava de 5 anos contra intervalo
+      configurado errado)
+- [x] Formulário de nova conta ganhou os dois campos (opcionais); contas já
+      existentes ganham um mini-formulário inline
+      (`PeriodoContaForm.tsx`) na tela de gerenciar pra setar/editar o
+      período depois, sem precisar recriar a conta
+- [x] Validado ao vivo: grade em colunas confirmada geometricamente (todos
+      os meses na mesma linha, selo na linha de baixo, mesma coluna X);
+      período aplicado a uma conta (início = 06/2026) reduziu a lista de 12
+      pra 3 meses no gerenciar e de 6 pra 3 na consulta, refletindo em
+      tempo real nas duas telas; conta sem período configurado manteve o
+      padrão de sempre
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:

@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { STATUS_PILL_CLASSES, formatarCnpj, formatarEndereco } from "@/lib/formatters";
 import { TAX_REGIME_LABELS, type Company } from "@/lib/types";
-import { mesCorrenteBrasilia, ultimasCompetencias } from "@/lib/competencia";
+import { mesCorrenteBrasilia, ultimasCompetencias, competenciasNoIntervalo } from "@/lib/competencia";
 
 export const metadata = { title: "Extratos — Empresa" };
 
-const MESES_EXIBIDOS = 6;
+const MESES_PADRAO = 6;
 
 function formatCompetencia(competencia: string) {
   const [ano, mes] = competencia.split("-");
@@ -22,6 +22,7 @@ export default async function ExtratosEmpresaPage(
 ) {
   const { companyId } = await props.params;
   const supabase = await createClient();
+  const mesAtual = mesCorrenteBrasilia();
 
   const [{ data: company }, { data: contas }] = await Promise.all([
     supabase
@@ -33,7 +34,7 @@ export default async function ExtratosEmpresaPage(
       .single(),
     supabase
       .from("extrato_contas_bancarias")
-      .select("id, banco, codigo_banco, agencia, conta")
+      .select("id, banco, codigo_banco, agencia, conta, data_inicio_controle, data_fim_controle")
       .eq("company_id", companyId)
       .eq("ativo", true)
       .order("created_at", { ascending: true }),
@@ -53,14 +54,23 @@ export default async function ExtratosEmpresaPage(
     | "state"
   >;
 
+  // Sem data de início/fim configurada, cai no padrão de sempre (últimos N
+  // meses até hoje) — cada conta pode ter sua própria janela de controle.
+  const padrao = ultimasCompetencias(mesAtual, MESES_PADRAO);
+  const mesesPorConta = new Map(
+    (contas ?? []).map((c) => {
+      const inicio = c.data_inicio_controle?.slice(0, 7) ?? padrao[padrao.length - 1];
+      const fim = c.data_fim_controle?.slice(0, 7) ?? mesAtual;
+      return [c.id, competenciasNoIntervalo(inicio, fim)];
+    }),
+  );
+
   const contaIds = (contas ?? []).map((c) => c.id);
-  const meses = ultimasCompetencias(mesCorrenteBrasilia(), MESES_EXIBIDOS);
   const { data: extratos } = contaIds.length
     ? await supabase
         .from("extratos_mensais")
         .select("id, conta_id, competencia, entregue, nome_arquivo")
         .in("conta_id", contaIds)
-        .in("competencia", meses)
     : { data: [] };
 
   const extratoPorContaCompetencia = new Map(
@@ -112,22 +122,23 @@ export default async function ExtratosEmpresaPage(
           Nenhuma conta bancária cadastrada ainda.
         </Card>
       ) : (
-        contas.map((conta) => (
-          <Card key={conta.id} className="overflow-hidden">
-            <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
-              {conta.codigo_banco ? `${conta.codigo_banco} — ` : ""}
-              {conta.banco} — Ag. {conta.agencia} / Conta {conta.conta}
-            </div>
-            <div className="divide-y divide-border">
-              {meses.map((mes) => {
-                const extrato = extratoPorContaCompetencia.get(`${conta.id}-${mes}`);
-                const entregue = extrato?.entregue ?? false;
-                return (
-                  <div key={mes} className="flex items-center justify-between gap-3 px-5 py-3">
-                    <span className="text-sm font-medium text-foreground">
-                      {formatCompetencia(mes)}
-                    </span>
-                    <div className="flex items-center gap-3">
+        contas.map((conta) => {
+          const meses = mesesPorConta.get(conta.id) ?? [];
+          return (
+            <Card key={conta.id} className="overflow-hidden">
+              <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
+                {conta.codigo_banco ? `${conta.codigo_banco} — ` : ""}
+                {conta.banco} — Ag. {conta.agencia} / Conta {conta.conta}
+              </div>
+              <div className="grid grid-cols-3 gap-px bg-border sm:grid-cols-4 md:grid-cols-6">
+                {meses.map((mes) => {
+                  const extrato = extratoPorContaCompetencia.get(`${conta.id}-${mes}`);
+                  const entregue = extrato?.entregue ?? false;
+                  return (
+                    <div key={mes} className="flex flex-col items-center gap-2 bg-surface px-3 py-4">
+                      <span className="text-sm font-medium text-foreground">
+                        {formatCompetencia(mes)}
+                      </span>
                       <span
                         className={cn(
                           "rounded-full px-2.5 py-1 text-xs font-medium",
@@ -139,18 +150,18 @@ export default async function ExtratosEmpresaPage(
                       {extrato?.nome_arquivo && (
                         <a
                           href={`/api/extratos/mensais/${extrato.id}`}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-muted"
+                          className="text-xs text-brand underline"
                         >
                           ↓ Baixar
                         </a>
                       )}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        ))
+                  );
+                })}
+              </div>
+            </Card>
+          );
+        })
       )}
     </div>
   );

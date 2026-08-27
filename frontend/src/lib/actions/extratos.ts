@@ -16,6 +16,8 @@ const contaBancariaSchema = z.object({
   codigoBanco: z.string().trim().optional(),
   agencia: z.string().trim().min(1, "Informe a agência."),
   conta: z.string().trim().min(1, "Informe a conta."),
+  dataInicioControle: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dataFimControle: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 export async function criarContaBancaria(
@@ -30,21 +32,81 @@ export async function criarContaBancaria(
     codigoBanco: formData.get("codigoBanco") || undefined,
     agencia: formData.get("agencia"),
     conta: formData.get("conta"),
+    dataInicioControle: formData.get("dataInicioControle") || undefined,
+    dataFimControle: formData.get("dataFimControle") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
-  const { companyId, banco, codigoBanco, agencia, conta } = parsed.data;
+  const { companyId, banco, codigoBanco, agencia, conta, dataInicioControle, dataFimControle } = parsed.data;
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("extrato_contas_bancarias").insert({
+    company_id: companyId,
+    banco,
+    codigo_banco: codigoBanco || null,
+    agencia,
+    conta,
+    data_inicio_controle: dataInicioControle || null,
+    data_fim_controle: dataFimControle || null,
+  });
+  if (error) return { error: "Não foi possível cadastrar a conta." };
+
+  await logAudit({
+    companyId,
+    action: "CREATE",
+    entity: "extrato_conta_bancaria",
+    newValue: { banco, codigoBanco, agencia, conta, dataInicioControle, dataFimControle },
+  });
+  revalidatePath(`/extratos/empresas/${companyId}`);
+  revalidatePath(`/extratos/empresas/${companyId}/gerenciar`);
+  revalidatePath("/extratos");
+  return { success: true };
+}
+
+const periodoContaSchema = z.object({
+  contaId: uuidLike,
+  companyId: uuidLike,
+  dataInicioControle: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dataFimControle: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+export async function atualizarPeriodoConta(
+  _prevState: ExtratosActionState,
+  formData: FormData,
+): Promise<ExtratosActionState> {
+  await requireExtratosAccess();
+
+  const parsed = periodoContaSchema.safeParse({
+    contaId: formData.get("contaId"),
+    companyId: formData.get("companyId"),
+    dataInicioControle: formData.get("dataInicioControle") || undefined,
+    dataFimControle: formData.get("dataFimControle") || undefined,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const { contaId, companyId, dataInicioControle, dataFimControle } = parsed.data;
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("extrato_contas_bancarias")
-    .insert({ company_id: companyId, banco, codigo_banco: codigoBanco || null, agencia, conta });
-  if (error) return { error: "Não foi possível cadastrar a conta." };
+    .update({
+      data_inicio_controle: dataInicioControle || null,
+      data_fim_controle: dataFimControle || null,
+    })
+    .eq("id", contaId);
+  if (error) return { error: "Não foi possível salvar o período." };
 
-  await logAudit({ companyId, action: "CREATE", entity: "extrato_conta_bancaria", newValue: { banco, codigoBanco, agencia, conta } });
+  await logAudit({
+    companyId,
+    action: "UPDATE",
+    entity: "extrato_conta_bancaria",
+    entityId: contaId,
+    newValue: { dataInicioControle, dataFimControle },
+  });
   revalidatePath(`/extratos/empresas/${companyId}`);
-  revalidatePath("/extratos");
+  revalidatePath(`/extratos/empresas/${companyId}/gerenciar`);
   return { success: true };
 }
 

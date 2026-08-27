@@ -34,6 +34,14 @@ export function ContaBancariaForm({ companyId }: { companyId: string }) {
           </Button>
         </div>
       </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <Field label="Início do controle" htmlFor="dataInicioControle" hint="Opcional">
+          <Input id="dataInicioControle" name="dataInicioControle" type="date" />
+        </Field>
+        <Field label="Fim do controle" htmlFor="dataFimControle" hint="Opcional — conta encerrada">
+          <Input id="dataFimControle" name="dataFimControle" type="date" />
+        </Field>
+      </div>
     </form>
   );
 }

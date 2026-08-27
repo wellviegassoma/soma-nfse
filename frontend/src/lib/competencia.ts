@@ -35,6 +35,30 @@ export function ultimasCompetencias(competenciaAlvo: string, n: number): string[
   return out;
 }
 
+const MAX_COMPETENCIAS_INTERVALO = 60; // trava de segurança (5 anos) contra intervalo absurdo
+
+// Todas as competências "YYYY-MM" entre `inicio` e `fim` (inclusive nos
+// dois extremos), mais antiga primeiro — usado pra limitar a grade de
+// controle de extrato ao período real de uma conta (não sempre os últimos
+// N meses fixos). Se o intervalo passar de 5 anos, mantém só os mais
+// recentes (proteção contra data de início muito distante por engano).
+export function competenciasNoIntervalo(inicio: string, fim: string): string[] {
+  const [anoIni, mesIni] = inicio.split("-").map(Number);
+  const [anoFim, mesFim] = fim.split("-").map(Number);
+  const out: string[] = [];
+  let ano = anoIni;
+  let mes = mesIni;
+  while (ano < anoFim || (ano === anoFim && mes <= mesFim)) {
+    out.push(`${ano}-${String(mes).padStart(2, "0")}`);
+    mes += 1;
+    if (mes > 12) {
+      mes = 1;
+      ano += 1;
+    }
+  }
+  return out.length > MAX_COMPETENCIAS_INTERVALO ? out.slice(-MAX_COMPETENCIAS_INTERVALO) : out;
+}
+
 // "YYYY-MM-DD" de hoje no fuso de Brasília — mesmo motivo do
 // mesCorrenteBrasilia acima; `new Date().toISOString()` usa UTC e pode
 // já mostrar o dia/mês seguinte pra quem está no Brasil à noite.
