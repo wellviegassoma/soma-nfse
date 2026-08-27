@@ -1393,6 +1393,41 @@ empresas via CNPJ/planilha) (concluída)**
       tempo real nas duas telas; conta sem período configurado manteve o
       padrão de sempre
 
+**Ajuste — conciliação de extrato, evidência de empresa recém-aberta e
+categorias no Societário (concluído, 2026-08-27)**
+- [x] `extratos_mensais` ganhou a coluna `conciliado` (boolean, independente
+      de `entregue`) — "entregue" é só o cliente ter mandado o extrato,
+      "conciliado" é o time contábil ter batido esse extrato com o razão.
+      Checkbox próprio no gerenciar, selo próprio (embaixo do selo
+      Entregue/Pendente) na grade de consulta
+- [x] Visão geral da Legalização reordenada: "Ranking de empresas por
+      cidade" passou pra depois de "Documentos de legalização vencidos...
+      separado por tipo" (antes vinha logo após os KPIs)
+- [x] Nova seção "Empresas abertas nos últimos 90 dias com documentação
+      pendente" na Visão geral da Legalização — usa a `data_abertura` já
+      cadastrada da empresa (helper `ehRecente()`, extraído pra fora do
+      componente por causa da regra de lint `react-hooks/purity` contra
+      `Date.now()` direto no corpo do componente, mesmo padrão já usado por
+      `diasAteVencer()`). Só aparece quando existe pelo menos uma empresa
+      recente com pendência, logo após os KPIs e antes de Certificados
+- [x] Societário ganhou duas categorias novas de documento, além do
+      histórico (contrato social + alterações) que já existia: **IPTU**
+      (validade indeterminada, aceita vários arquivos ao longo do tempo) e
+      **Outros documentos** (repositório livre — contrato de locação e
+      qualquer outro documento societário relevante). Implementado como
+      coluna `categoria` (check constraint) em `societario_documentos`
+      em vez de tabelas novas — reaproveita 100% do upload/download/exclusão
+      já existente, só filtra e separa visualmente em três seções
+- [x] Validado ao vivo com usuário descartável: "Conciliado" marcado
+      independente de "Entregue" num mês real, refletindo corretamente nos
+      dois selos da consulta; ordem das seções da Visão geral da Legalização
+      conferida (Certificados → Documentos vencidos → Ranking de cidades →
+      Ranking de documentação incompleta); seção de empresa recém-aberta
+      aparecendo com a pendência certa ao simular uma `data_abertura`
+      recente numa empresa real; documento salvo em cada uma das três
+      categorias do Societário aparecendo só na seção correspondente, e
+      categoria inválida rejeitada pelo check constraint do banco
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:

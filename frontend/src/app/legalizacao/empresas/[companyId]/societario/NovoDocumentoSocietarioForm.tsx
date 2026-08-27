@@ -6,7 +6,15 @@ import { salvarDocumentoSocietario } from "@/lib/actions/societario";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
-export function NovoDocumentoSocietarioForm({ companyId }: { companyId: string }) {
+export function NovoDocumentoSocietarioForm({
+  companyId,
+  categoria = "contrato_social",
+  descricaoPlaceholder = "Ex.: Contrato Social, 2ª Alteração...",
+}: {
+  companyId: string;
+  categoria?: "contrato_social" | "iptu" | "outros";
+  descricaoPlaceholder?: string;
+}) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -34,6 +42,7 @@ export function NovoDocumentoSocietarioForm({ companyId }: { companyId: string }
 
       const formData = new FormData();
       formData.set("companyId", companyId);
+      formData.set("categoria", categoria);
       formData.set("dataDocumento", dataDocumento);
       formData.set("descricao", descricao);
       formData.set("blobUrl", blob.url);
@@ -63,7 +72,7 @@ export function NovoDocumentoSocietarioForm({ companyId }: { companyId: string }
         <label className="text-xs text-foreground/50">Descrição</label>
         <Input
           name="descricao"
-          placeholder="Ex.: Contrato Social, 2ª Alteração..."
+          placeholder={descricaoPlaceholder}
           required
           className="w-72"
         />

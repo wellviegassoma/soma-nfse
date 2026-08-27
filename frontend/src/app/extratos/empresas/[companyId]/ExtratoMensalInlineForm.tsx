@@ -10,6 +10,7 @@ export function ExtratoMensalInlineForm({
   contaId,
   competencia,
   entregueAtual,
+  conciliadoAtual,
   nomeArquivoAtual,
   extratoId,
 }: {
@@ -17,6 +18,7 @@ export function ExtratoMensalInlineForm({
   contaId: string;
   competencia: string;
   entregueAtual: boolean;
+  conciliadoAtual: boolean;
   nomeArquivoAtual: string | null;
   extratoId: string | null;
 }) {
@@ -31,6 +33,7 @@ export function ExtratoMensalInlineForm({
     const form = e.currentTarget;
     const fileInput = form.elements.namedItem("arquivo") as HTMLInputElement;
     const entregueInput = form.elements.namedItem("entregue") as HTMLInputElement;
+    const conciliadoInput = form.elements.namedItem("conciliado") as HTMLInputElement;
     const file = fileInput.files?.[0];
 
     setPending(true);
@@ -40,6 +43,7 @@ export function ExtratoMensalInlineForm({
       formData.set("contaId", contaId);
       formData.set("competencia", competencia);
       if (entregueInput.checked) formData.set("entregue", "on");
+      if (conciliadoInput.checked) formData.set("conciliado", "on");
 
       if (file) {
         const blob = await upload(`extratos/${companyId}/${contaId}-${competencia}-${file.name}`, file, {
@@ -70,6 +74,15 @@ export function ExtratoMensalInlineForm({
           className="h-4 w-4 rounded border-border accent-brand"
         />
         Entregue
+      </label>
+      <label className="flex items-center gap-2 text-sm text-foreground">
+        <input
+          type="checkbox"
+          name="conciliado"
+          defaultChecked={conciliadoAtual}
+          className="h-4 w-4 rounded border-border accent-brand"
+        />
+        Conciliado
       </label>
       <input
         name="arquivo"

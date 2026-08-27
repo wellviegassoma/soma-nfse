@@ -9,6 +9,48 @@ import { SociosList } from "./SociosList";
 
 export const metadata = { title: "Societário — Legalização" };
 
+type DocumentoSocietario = { id: string; data_documento: string; descricao: string; nome_arquivo: string };
+
+function ListaDocumentosSocietarios({
+  documentos,
+  companyId,
+  vazioLabel,
+}: {
+  documentos: DocumentoSocietario[];
+  companyId: string;
+  vazioLabel: string;
+}) {
+  return (
+    <Card className="mt-3 overflow-hidden">
+      {documentos.length === 0 ? (
+        <div className="p-6 text-center text-sm text-foreground/50">{vazioLabel}</div>
+      ) : (
+        <div className="divide-y divide-border">
+          {documentos.map((doc) => (
+            <div key={doc.id} className="flex items-center justify-between gap-3 px-5 py-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-foreground">{doc.descricao}</div>
+                <div className="text-xs text-foreground/50">
+                  {new Date(doc.data_documento).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <a
+                  href={`/api/societario/documentos/${doc.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-muted"
+                >
+                  ↓ Baixar
+                </a>
+                <DeleteDocumentoSocietarioButton documentoId={doc.id} companyId={companyId} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default async function SocietarioPage(
   props: PageProps<"/legalizacao/empresas/[companyId]/societario">,
 ) {
@@ -19,7 +61,7 @@ export default async function SocietarioPage(
     supabase.from("companies").select("id, legal_name, trade_name").eq("id", companyId).single(),
     supabase
       .from("societario_documentos")
-      .select("id, data_documento, descricao, nome_arquivo")
+      .select("id, categoria, data_documento, descricao, nome_arquivo")
       .eq("company_id", companyId)
       .order("data_documento", { ascending: false }),
     supabase
@@ -30,6 +72,10 @@ export default async function SocietarioPage(
   ]);
 
   if (!company) notFound();
+
+  const documentosContratoSocial = (documentos ?? []).filter((d) => d.categoria === "contrato_social");
+  const documentosIptu = (documentos ?? []).filter((d) => d.categoria === "iptu");
+  const documentosOutros = (documentos ?? []).filter((d) => d.categoria === "outros");
 
   const socioIds = (socios ?? []).map((s) => s.id);
   const { data: sociosDocumentos } =
@@ -66,38 +112,53 @@ export default async function SocietarioPage(
 
       <div>
         <h2 className="mb-3 text-sm font-semibold text-foreground/70">Histórico societário</h2>
+        <p className="mb-2 text-xs text-foreground/50">Contrato social e alterações contratuais.</p>
         <Card className="p-4">
-          <NovoDocumentoSocietarioForm companyId={companyId} />
+          <NovoDocumentoSocietarioForm companyId={companyId} categoria="contrato_social" />
         </Card>
-        <Card className="mt-3 overflow-hidden">
-          {(!documentos || documentos.length === 0) ? (
-            <div className="p-6 text-center text-sm text-foreground/50">
-              Nenhum documento societário cadastrado ainda.
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {documentos.map((doc) => (
-                <div key={doc.id} className="flex items-center justify-between gap-3 px-5 py-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-foreground">{doc.descricao}</div>
-                    <div className="text-xs text-foreground/50">
-                      {new Date(doc.data_documento).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <a
-                      href={`/api/societario/documentos/${doc.id}`}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-muted"
-                    >
-                      ↓ Baixar
-                    </a>
-                    <DeleteDocumentoSocietarioButton documentoId={doc.id} companyId={companyId} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        <ListaDocumentosSocietarios
+          documentos={documentosContratoSocial}
+          companyId={companyId}
+          vazioLabel="Nenhum documento societário cadastrado ainda."
+        />
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-sm font-semibold text-foreground/70">IPTU</h2>
+        <p className="mb-2 text-xs text-foreground/50">
+          Validade indeterminada — pode haver mais de um arquivo.
+        </p>
+        <Card className="p-4">
+          <NovoDocumentoSocietarioForm
+            companyId={companyId}
+            categoria="iptu"
+            descricaoPlaceholder="Ex.: IPTU 2026, imóvel sede..."
+          />
         </Card>
+        <ListaDocumentosSocietarios
+          documentos={documentosIptu}
+          companyId={companyId}
+          vazioLabel="Nenhum IPTU cadastrado ainda."
+        />
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-sm font-semibold text-foreground/70">Outros documentos</h2>
+        <p className="mb-2 text-xs text-foreground/50">
+          Repositório livre para qualquer outro documento societário relevante — contrato de locação, etc.
+        </p>
+        <Card className="p-4">
+          <NovoDocumentoSocietarioForm
+            companyId={companyId}
+            categoria="outros"
+            descricaoPlaceholder="Ex.: Contrato de locação da sede..."
+          />
+        </Card>
+        <ListaDocumentosSocietarios
+          documentos={documentosOutros}
+          companyId={companyId}
+          vazioLabel="Nenhum documento cadastrado ainda."
+        />
       </div>
 
       <div>

@@ -40,7 +40,7 @@ export default async function ExtratosGerenciarPage(
   const { data: extratos } = contaIds.length
     ? await supabase
         .from("extratos_mensais")
-        .select("id, conta_id, competencia, entregue, nome_arquivo")
+        .select("id, conta_id, competencia, entregue, conciliado, nome_arquivo")
         .in("conta_id", contaIds)
     : { data: [] };
 
@@ -114,6 +114,7 @@ export default async function ExtratosGerenciarPage(
                       contaId={conta.id}
                       competencia={mes}
                       entregueAtual={extrato?.entregue ?? false}
+                      conciliadoAtual={extrato?.conciliado ?? false}
                       nomeArquivoAtual={extrato?.nome_arquivo ?? null}
                       extratoId={extrato?.id ?? null}
                     />

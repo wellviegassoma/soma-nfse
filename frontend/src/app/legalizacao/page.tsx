@@ -16,13 +16,21 @@ type EmpresaComDocumentos = {
   trade_name: string | null;
   municipality_name: string | null;
   state: string | null;
+  data_abertura: string | null;
   legalizacao_documentos: { tipo_id: string; data_vencimento: string | null }[] | null;
 };
+
+const DIAS_EMPRESA_RECENTE = 90;
 
 type CertificadoVencendo = { company_id: string; expires_at: string };
 
 function diasAteVencer(dataVencimento: string): number {
   return Math.ceil((new Date(dataVencimento).getTime() - Date.now()) / 86_400_000);
+}
+
+function ehRecente(dataAbertura: string, limiteDias: number): boolean {
+  const corte = new Date(Date.now() - limiteDias * 86_400_000);
+  return new Date(dataAbertura) >= corte;
 }
 
 export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) {
@@ -35,7 +43,7 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
       supabase
         .from("companies")
         .select(
-          "id, legal_name, trade_name, municipality_name, state, legalizacao_documentos(tipo_id, data_vencimento)",
+          "id, legal_name, trade_name, municipality_name, state, data_abertura, legalizacao_documentos(tipo_id, data_vencimento)",
         )
         .order("legal_name", { ascending: true }),
       supabase.from("legalizacao_tipos_documento").select("id, nome, aplica_a_todas").eq("ativo", true),
@@ -78,6 +86,18 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
     .filter((p) => p.pendencias > 0)
     .sort((a, b) => b.pendencias - a.pendencias || a.empresa.legal_name.localeCompare(b.empresa.legal_name));
   const tudoOk = pendenciaPorEmpresa.filter((p) => p.pendencias === 0);
+
+  // Empresa recém-aberta normalmente ainda está correndo atrás do Alvará e
+  // demais documentos — vale destacar essas em evidência, não só deixar
+  // misturado no ranking geral de pendência.
+  const recemAbertasComPendencia = pendenciaPorEmpresa
+    .filter(
+      (p) =>
+        p.empresa.data_abertura &&
+        ehRecente(p.empresa.data_abertura, DIAS_EMPRESA_RECENTE) &&
+        p.pendencias > 0,
+    )
+    .sort((a, b) => (b.empresa.data_abertura ?? "").localeCompare(a.empresa.data_abertura ?? ""));
 
   const vencendoPorTipo = new Map<
     string,
@@ -161,31 +181,39 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
         </Card>
       </div>
 
-      <Card className="overflow-hidden">
-        <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
-          Ranking de empresas por cidade
-        </div>
-        {rankingCidades.length === 0 ? (
-          <div className="p-6 text-center text-sm text-foreground/50">
-            Nenhuma empresa com cidade cadastrada ainda.
+      {recemAbertasComPendencia.length > 0 && (
+        <Card className="overflow-hidden border-l-4 border-l-brand">
+          <div className="border-b border-border bg-brand/5 px-5 py-3 text-sm font-semibold text-foreground/70">
+            Empresas abertas nos últimos {DIAS_EMPRESA_RECENTE} dias com documentação pendente
           </div>
-        ) : (
-          <div className="max-h-80 divide-y divide-border overflow-y-auto">
-            {rankingCidades.map(({ cidade, total }) => (
-              <div key={cidade} className="flex items-center justify-between gap-4 px-5 py-2.5">
-                <span className="truncate text-sm text-foreground">{cidade}</span>
-                <span className="shrink-0 text-sm font-medium text-foreground/70">{total}</span>
-              </div>
+          <div className="divide-y divide-border">
+            {recemAbertasComPendencia.map(({ empresa, aplicaveis, faltando, vencido }) => (
+              <Link
+                key={empresa.id}
+                href={`/legalizacao/empresas/${empresa.id}`}
+                className="flex items-center justify-between gap-4 px-5 py-3 transition-colors hover:bg-surface-muted"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-foreground">
+                    {empresa.trade_name || empresa.legal_name}
+                  </div>
+                  <div className="truncate text-xs text-foreground/50">
+                    Aberta em{" "}
+                    {empresa.data_abertura && new Date(empresa.data_abertura).toLocaleDateString("pt-BR")}
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-full bg-brand/10 px-2 py-1 text-xs font-medium text-brand">
+                  {faltando > 0 && vencido > 0
+                    ? `${faltando} faltando, ${vencido} vencido(s)`
+                    : faltando > 0
+                      ? `${faltando} de ${aplicaveis} faltando`
+                      : `${vencido} vencido(s)`}
+                </span>
+              </Link>
             ))}
-            {semCidade > 0 && (
-              <div className="flex items-center justify-between gap-4 px-5 py-2.5">
-                <span className="truncate text-sm text-foreground/40">Sem cidade cadastrada</span>
-                <span className="shrink-0 text-sm font-medium text-foreground/40">{semCidade}</span>
-              </div>
-            )}
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
@@ -264,6 +292,32 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
+          Ranking de empresas por cidade
+        </div>
+        {rankingCidades.length === 0 ? (
+          <div className="p-6 text-center text-sm text-foreground/50">
+            Nenhuma empresa com cidade cadastrada ainda.
+          </div>
+        ) : (
+          <div className="max-h-80 divide-y divide-border overflow-y-auto">
+            {rankingCidades.map(({ cidade, total }) => (
+              <div key={cidade} className="flex items-center justify-between gap-4 px-5 py-2.5">
+                <span className="truncate text-sm text-foreground">{cidade}</span>
+                <span className="shrink-0 text-sm font-medium text-foreground/70">{total}</span>
+              </div>
+            ))}
+            {semCidade > 0 && (
+              <div className="flex items-center justify-between gap-4 px-5 py-2.5">
+                <span className="truncate text-sm text-foreground/40">Sem cidade cadastrada</span>
+                <span className="shrink-0 text-sm font-medium text-foreground/40">{semCidade}</span>
+              </div>
+            )}
           </div>
         )}
       </Card>

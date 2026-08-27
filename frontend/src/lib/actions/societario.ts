@@ -18,6 +18,7 @@ function pathBaseFor(companyId: string) {
 
 const salvarDocumentoSocietarioSchema = z.object({
   companyId: uuidLike,
+  categoria: z.enum(["contrato_social", "iptu", "outros"]).default("contrato_social"),
   dataDocumento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
   descricao: z.string().trim().min(2, "Descreva o documento."),
   blobUrl: z.string().url(),
@@ -33,6 +34,7 @@ export async function salvarDocumentoSocietario(
 
   const parsed = salvarDocumentoSocietarioSchema.safeParse({
     companyId: formData.get("companyId"),
+    categoria: formData.get("categoria") || undefined,
     dataDocumento: formData.get("dataDocumento"),
     descricao: formData.get("descricao"),
     blobUrl: formData.get("blobUrl"),
@@ -42,12 +44,13 @@ export async function salvarDocumentoSocietario(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
-  const { companyId, dataDocumento, descricao, blobUrl, blobPathname, nomeArquivo } = parsed.data;
+  const { companyId, categoria, dataDocumento, descricao, blobUrl, blobPathname, nomeArquivo } = parsed.data;
 
   const user = await requireUser();
   const supabase = await createClient();
   const { error } = await supabase.from("societario_documentos").insert({
     company_id: companyId,
+    categoria,
     data_documento: dataDocumento,
     descricao,
     blob_url: blobUrl,

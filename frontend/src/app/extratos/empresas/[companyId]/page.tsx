@@ -69,7 +69,7 @@ export default async function ExtratosEmpresaPage(
   const { data: extratos } = contaIds.length
     ? await supabase
         .from("extratos_mensais")
-        .select("id, conta_id, competencia, entregue, nome_arquivo")
+        .select("id, conta_id, competencia, entregue, conciliado, nome_arquivo")
         .in("conta_id", contaIds)
     : { data: [] };
 
@@ -134,8 +134,9 @@ export default async function ExtratosEmpresaPage(
                 {meses.map((mes) => {
                   const extrato = extratoPorContaCompetencia.get(`${conta.id}-${mes}`);
                   const entregue = extrato?.entregue ?? false;
+                  const conciliado = extrato?.conciliado ?? false;
                   return (
-                    <div key={mes} className="flex flex-col items-center gap-2 bg-surface px-3 py-4">
+                    <div key={mes} className="flex flex-col items-center gap-1.5 bg-surface px-3 py-4">
                       <span className="text-sm font-medium text-foreground">
                         {formatCompetencia(mes)}
                       </span>
@@ -146,6 +147,14 @@ export default async function ExtratosEmpresaPage(
                         )}
                       >
                         {entregue ? "Entregue" : "Pendente"}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-xs font-medium",
+                          STATUS_PILL_CLASSES[conciliado ? "success" : "neutral"],
+                        )}
+                      >
+                        {conciliado ? "Conciliado" : "Não conciliado"}
                       </span>
                       {extrato?.nome_arquivo && (
                         <a

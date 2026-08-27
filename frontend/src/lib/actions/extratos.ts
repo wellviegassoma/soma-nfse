@@ -141,6 +141,7 @@ const salvarExtratoSchema = z.object({
   contaId: uuidLike,
   competencia: z.string().regex(/^\d{4}-\d{2}$/, "Competência inválida."),
   entregue: z.literal("on").optional(),
+  conciliado: z.literal("on").optional(),
   blobUrl: z.string().url().optional(),
   blobPathname: z.string().min(1).optional(),
   nomeArquivo: z.string().min(1).optional(),
@@ -157,6 +158,7 @@ export async function salvarExtratoMensal(
     contaId: formData.get("contaId"),
     competencia: formData.get("competencia"),
     entregue: formData.get("entregue") || undefined,
+    conciliado: formData.get("conciliado") || undefined,
     blobUrl: formData.get("blobUrl") || undefined,
     blobPathname: formData.get("blobPathname") || undefined,
     nomeArquivo: formData.get("nomeArquivo") || undefined,
@@ -164,7 +166,8 @@ export async function salvarExtratoMensal(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
-  const { companyId, contaId, competencia, entregue, blobUrl, blobPathname, nomeArquivo } = parsed.data;
+  const { companyId, contaId, competencia, entregue, conciliado, blobUrl, blobPathname, nomeArquivo } =
+    parsed.data;
 
   const supabase = await createClient();
 
@@ -185,10 +188,16 @@ export async function salvarExtratoMensal(
     conta_id: string;
     competencia: string;
     entregue: boolean;
+    conciliado: boolean;
     blob_url?: string;
     blob_pathname?: string;
     nome_arquivo?: string;
-  } = { conta_id: contaId, competencia, entregue: entregue === "on" };
+  } = {
+    conta_id: contaId,
+    competencia,
+    entregue: entregue === "on",
+    conciliado: conciliado === "on",
+  };
   if (blobUrl && blobPathname && nomeArquivo) {
     linha.blob_url = blobUrl;
     linha.blob_pathname = blobPathname;
