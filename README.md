@@ -1032,6 +1032,42 @@ empresas via CNPJ/planilha) (concluída)**
       confirmada trocando de arquivo antes de salvar (upload antigo
       desaparece do Blob assim que o novo é selecionado)
 
+**Ajuste — tipo de documento por empresa, busca rápida e vencimento agrupado (concluído, 2026-08-27)**
+- [x] Nem toda empresa precisa controlar todo tipo de documento do
+      catálogo (ex.: CNES só faz sentido pra empresa de saúde). Nova
+      tabela `legalizacao_tipos_nao_aplicaveis` guarda só as *exceções*
+      (empresa marcou que não se aplica) — ausência de linha continua
+      significando "se aplica normalmente", então nenhuma migração de
+      dados foi necessária pras 206 empresas já cadastradas. Toggle
+      "Marcar como (não) aplicável" por tipo na tela da empresa; quando
+      marcado como não aplicável, o formulário de upload some (a menos
+      que já exista um documento cadastrado pra esse tipo — nesse caso o
+      documento continua visível/gerenciável, só a contagem de pendência
+      é que ignora esse tipo)
+- [x] Dashboard (`/legalizacao`) passou a calcular "documentação
+      incompleta" considerando as exceções por empresa: uma empresa só
+      entra na lista de pendência se sobrar pelo menos um tipo aplicável
+      sem documento. Card e lista que antes eram "sem nenhum documento"
+      foram renomeados pra refletir isso
+- [x] Painel de consulta rápida: campo de busca no topo do dashboard
+      (`BuscaRapidaEmpresa.tsx`) filtra as 206 empresas no cliente
+      (sem round-trip ao servidor a cada tecla) e linka direto pra
+      `/legalizacao/empresas/{id}` — fluxo "seleciona o cliente e acessa
+      o documento" pedido pra ser usado por toda a equipe, não só o
+      Analista de Legalização (que já tinha acesso de qualquer forma via
+      `is_soma_staff() OR is_legalizacao_analista()`; o que faltava era
+      velocidade de navegação, não permissão)
+- [x] Lista de "vencendo em 45 dias" do dashboard deixou de ser uma lista
+      única misturando empresas e tipos de documento diferentes — agora
+      vem agrupada em seções por tipo (Alvará, CNES, Certidão, ...), cada
+      seção ordenada por dias até vencer
+- [x] Validado ao vivo com usuário descartável (`ANALISTA_LEGALIZACAO`):
+      marcar CNES como não aplicável pra uma empresa real fez o
+      formulário sumir e criou a linha esperada em
+      `legalizacao_tipos_nao_aplicaveis`; reverter apagou a linha; busca
+      rápida testada digitando parte do nome de uma empresa e conferindo
+      o link sugerido
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

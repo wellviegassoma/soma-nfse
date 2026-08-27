@@ -214,3 +214,24 @@ export async function alternarAtivoTipoDocumento(tipoId: string, ativo: boolean)
   revalidatePath("/legalizacao/tipos");
   revalidatePath("/legalizacao");
 }
+
+// Ausência de linha em legalizacao_tipos_nao_aplicaveis = tipo se aplica
+// normalmente à empresa (padrão). Uma linha aqui é a exceção: "essa empresa
+// não precisa controlar esse tipo de documento".
+export async function alternarTipoAplicavel(companyId: string, tipoId: string, aplicavel: boolean) {
+  await requireLegalizacaoAccess();
+  const supabase = await createClient();
+  if (aplicavel) {
+    await supabase
+      .from("legalizacao_tipos_nao_aplicaveis")
+      .delete()
+      .eq("company_id", companyId)
+      .eq("tipo_id", tipoId);
+  } else {
+    await supabase
+      .from("legalizacao_tipos_nao_aplicaveis")
+      .upsert({ company_id: companyId, tipo_id: tipoId }, { onConflict: "company_id,tipo_id" });
+  }
+  revalidatePath(`/legalizacao/empresas/${companyId}`);
+  revalidatePath("/legalizacao");
+}
