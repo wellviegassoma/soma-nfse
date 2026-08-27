@@ -1578,6 +1578,19 @@ autônomo) (concluído, 2026-08-27)**
       corretamente com `person_type`/`cpf`/regime especial certos; CPF com
       checksum inválido (`111.111.111-11`) rejeitado com a mensagem
       esperada; linha sem CNPJ nem CPF rejeitada com a mensagem esperada
+- [x] **Confirmado ao vivo em produção**: usuário reimportou a planilha com
+      as 67 linhas de CPF depois do ajuste e todas entraram — indicador
+      novo (ver ajuste seguinte) mostrando exatamente 67 empresas PF logo
+      em seguida
+
+**Ajuste — Indicador de CNPJ × CPF na Visão geral (concluído, 2026-08-27)**
+- [x] Card "Empresas cadastradas" da Visão geral (`/admin`) ganhou uma
+      linha de detalhamento "N CNPJ · M CPF" logo abaixo do total, contando
+      `person_type` de cada empresa — sem precisar abrir a lista pra saber
+      a proporção de clientes Pessoa Física
+- [x] Validado ao vivo contra dado real de produção: total de 273 empresas
+      detalhado corretamente como 206 CNPJ · 67 CPF (batendo com a
+      reimportação da planilha do ajuste anterior)
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.

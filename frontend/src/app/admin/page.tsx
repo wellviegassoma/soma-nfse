@@ -132,7 +132,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       supabase
         .from("companies")
         .select(
-          "id, legal_name, trade_name, created_at, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+          "id, legal_name, trade_name, person_type, created_at, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
         )
         .order("legal_name", { ascending: true }),
       buscarTudoPaginado<DpsRow>((from, to) =>
@@ -154,6 +154,8 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
     ]);
 
   const empresas = companies ?? [];
+  const empresasPJ = empresas.filter((e) => e.person_type !== "PF").length;
+  const empresasPF = empresas.filter((e) => e.person_type === "PF").length;
   const notasUnificadas = unificarNotasDeSaida(todasNotas, todasDistribuidas);
 
   // Controle de certificado digital — vencidos ou vencendo nos próximos 45
@@ -415,6 +417,9 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
         <Card className="p-4">
           <div className="text-xs text-foreground/50">Empresas cadastradas</div>
           <div className="mt-1 text-2xl font-semibold text-foreground">{empresas.length}</div>
+          <div className="mt-1 text-xs text-foreground/50">
+            {empresasPJ} CNPJ · {empresasPF} CPF
+          </div>
         </Card>
         <Card className="p-4">
           <div className="text-xs text-foreground/50">Notas emitidas</div>
