@@ -13,6 +13,7 @@ export type ExtratosActionState = { error?: string; success?: boolean } | undefi
 const contaBancariaSchema = z.object({
   companyId: uuidLike,
   banco: z.string().trim().min(1, "Informe o banco."),
+  codigoBanco: z.string().trim().optional(),
   agencia: z.string().trim().min(1, "Informe a agência."),
   conta: z.string().trim().min(1, "Informe a conta."),
 });
@@ -26,21 +27,22 @@ export async function criarContaBancaria(
   const parsed = contaBancariaSchema.safeParse({
     companyId: formData.get("companyId"),
     banco: formData.get("banco"),
+    codigoBanco: formData.get("codigoBanco") || undefined,
     agencia: formData.get("agencia"),
     conta: formData.get("conta"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
-  const { companyId, banco, agencia, conta } = parsed.data;
+  const { companyId, banco, codigoBanco, agencia, conta } = parsed.data;
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("extrato_contas_bancarias")
-    .insert({ company_id: companyId, banco, agencia, conta });
+    .insert({ company_id: companyId, banco, codigo_banco: codigoBanco || null, agencia, conta });
   if (error) return { error: "Não foi possível cadastrar a conta." };
 
-  await logAudit({ companyId, action: "CREATE", entity: "extrato_conta_bancaria", newValue: { banco, agencia, conta } });
+  await logAudit({ companyId, action: "CREATE", entity: "extrato_conta_bancaria", newValue: { banco, codigoBanco, agencia, conta } });
   revalidatePath(`/extratos/empresas/${companyId}`);
   revalidatePath("/extratos");
   return { success: true };

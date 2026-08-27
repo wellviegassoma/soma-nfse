@@ -1317,6 +1317,28 @@ empresas via CNPJ/planilha) (concluída)**
       na API pra usuário não-staff; histórico completamente isolado entre
       dois usuários staff diferentes
 
+**Ajuste — consulta/gerenciar em Extratos e autocomplete de banco (concluído, 2026-08-27)**
+- [x] Tela por empresa de Extratos dividida em consulta/gerenciar, mesmo
+      padrão já adotado em Legalização: `/extratos/empresas/{id}` virou
+      somente leitura (lista de contas + status de entrega do mês atual,
+      botão "Gerenciar contas e extratos" em destaque) e
+      `/extratos/empresas/{id}/gerenciar` ficou com o cadastro de conta e a
+      grade completa de 12 meses que já existia
+- [x] Cadastro de conta bancária ganhou autocomplete de banco
+      (`SelecionarBancoInput.tsx`, lista estática em `lib/bancos-brasil.ts`
+      com ~75 bancos e códigos COMPE/Febraban reais) — digita código ou
+      nome, seleciona, e só falta preencher agência e conta. Se o banco não
+      estiver na lista (cooperativa local, banco raro), ainda dá pra salvar
+      com o nome digitado, só sem código — não trava o cadastro
+- [x] Nova coluna `codigo_banco` (nullable) em `extrato_contas_bancarias` —
+      contas já cadastradas antes continuam funcionando sem código
+- [x] Validado ao vivo: autocomplete filtrando "itau" e mostrando as 3
+      entradas certas da lista; conta criada com banco selecionado da lista
+      salvando nome + código corretos no banco; conta com banco fora da
+      lista salvando só o nome (código null), confirmando o fallback; tela
+      de consulta refletindo as 3 contas com status "pendente este mês"
+      corretamente
+
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
    Project Settings → API.
 2. **Aplicar o schema**:

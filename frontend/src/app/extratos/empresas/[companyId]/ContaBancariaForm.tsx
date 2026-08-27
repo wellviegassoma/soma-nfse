@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Alert";
+import { SelecionarBancoInput } from "./SelecionarBancoInput";
 
 export function ContaBancariaForm({ companyId }: { companyId: string }) {
   const [state, formAction, pending] = useActionState(criarContaBancaria, undefined);
@@ -20,9 +21,7 @@ export function ContaBancariaForm({ companyId }: { companyId: string }) {
       <input type="hidden" name="companyId" value={companyId} />
       {state?.error && <Alert tone="danger">{state.error}</Alert>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-        <Field label="Banco" htmlFor="banco">
-          <Input id="banco" name="banco" required />
-        </Field>
+        <SelecionarBancoInput />
         <Field label="Agência" htmlFor="agencia">
           <Input id="agencia" name="agencia" required />
         </Field>
