@@ -32,6 +32,13 @@ const createCompanySchema = z.object({
     .transform((v) => (v ? v.replace(/\D/g, "") : undefined)),
   cnae: z.string().trim().optional(),
   municipalityIbgeCode: z.string().trim().optional(),
+  municipalityName: z.string().trim().optional(),
+  state: z.string().trim().optional(),
+  addressStreet: z.string().trim().optional(),
+  addressNumber: z.string().trim().optional(),
+  addressComplement: z.string().trim().optional(),
+  addressNeighborhood: z.string().trim().optional(),
+  addressZip: z.string().trim().optional(),
   taxRegime: taxRegimeEnum.optional().or(z.literal("")),
 });
 
@@ -48,6 +55,13 @@ export async function createCompany(
     cnpj: formData.get("cnpj") || undefined,
     cnae: formData.get("cnae") || undefined,
     municipalityIbgeCode: formData.get("municipalityIbgeCode") || undefined,
+    municipalityName: formData.get("municipalityName") || undefined,
+    state: formData.get("state") || undefined,
+    addressStreet: formData.get("addressStreet") || undefined,
+    addressNumber: formData.get("addressNumber") || undefined,
+    addressComplement: formData.get("addressComplement") || undefined,
+    addressNeighborhood: formData.get("addressNeighborhood") || undefined,
+    addressZip: formData.get("addressZip") || undefined,
     taxRegime: formData.get("taxRegime") || undefined,
   });
   if (!parsed.success) {
@@ -74,6 +88,13 @@ export async function createCompany(
       cnpj: parsed.data.cnpj || null,
       cnae: parsed.data.cnae || null,
       municipality_ibge_code: parsed.data.municipalityIbgeCode || null,
+      municipality_name: parsed.data.municipalityName || null,
+      state: parsed.data.state || null,
+      address_street: parsed.data.addressStreet || null,
+      address_number: parsed.data.addressNumber || null,
+      address_complement: parsed.data.addressComplement || null,
+      address_neighborhood: parsed.data.addressNeighborhood || null,
+      address_zip: parsed.data.addressZip || null,
       tax_regime: parsed.data.taxRegime || null,
     })
     .select("id")
@@ -277,6 +298,13 @@ export async function importarEmpresasPlanilha(
         cnpj: cnpjDigits,
         cnae: dados?.cnae || null,
         municipality_ibge_code: dados?.municipioIbge || null,
+        municipality_name: dados?.municipio || null,
+        state: dados?.uf || null,
+        address_street: dados?.logradouro || null,
+        address_number: dados?.numero || null,
+        address_complement: dados?.complemento || null,
+        address_neighborhood: dados?.bairro || null,
+        address_zip: dados?.cep || null,
         tax_regime: dados?.simplesNacional ? "SIMPLES_NACIONAL" : null,
       })
       .select("id")

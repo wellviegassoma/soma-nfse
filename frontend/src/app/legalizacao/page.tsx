@@ -14,6 +14,8 @@ type EmpresaComDocumentos = {
   id: string;
   legal_name: string;
   trade_name: string | null;
+  municipality_name: string | null;
+  state: string | null;
   legalizacao_documentos: { tipo_id: string; data_vencimento: string | null }[] | null;
 };
 
@@ -32,7 +34,9 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
     await Promise.all([
       supabase
         .from("companies")
-        .select("id, legal_name, trade_name, legalizacao_documentos(tipo_id, data_vencimento)")
+        .select(
+          "id, legal_name, trade_name, municipality_name, state, legalizacao_documentos(tipo_id, data_vencimento)",
+        )
         .order("legal_name", { ascending: true }),
       supabase.from("legalizacao_tipos_documento").select("id, nome, aplica_a_todas").eq("ativo", true),
       supabase.from("legalizacao_tipos_empresas_excecao").select("company_id, tipo_id, aplicavel"),
@@ -100,6 +104,20 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
     .filter((c) => c.empresaNome != null && c.dias <= DIAS_LIMITE)
     .sort((a, b) => a.dias - b.dias);
 
+  const empresasPorCidade = new Map<string, number>();
+  let semCidade = 0;
+  for (const empresa of empresas) {
+    if (!empresa.municipality_name) {
+      semCidade += 1;
+      continue;
+    }
+    const chave = empresa.state ? `${empresa.municipality_name}/${empresa.state}` : empresa.municipality_name;
+    empresasPorCidade.set(chave, (empresasPorCidade.get(chave) ?? 0) + 1);
+  }
+  const rankingCidades = [...empresasPorCidade.entries()]
+    .map(([cidade, total]) => ({ cidade, total }))
+    .sort((a, b) => b.total - a.total);
+
   const incompletasFiltradas = q
     ? incompletas.filter((p) => {
         const alvo = `${p.empresa.legal_name} ${p.empresa.trade_name ?? ""}`.toLowerCase();
@@ -140,6 +158,32 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
           <div className="mt-1 text-lg font-semibold text-warning">{totalVencendo}</div>
         </Card>
       </div>
+
+      <Card className="overflow-hidden">
+        <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
+          Ranking de empresas por cidade
+        </div>
+        {rankingCidades.length === 0 ? (
+          <div className="p-6 text-center text-sm text-foreground/50">
+            Nenhuma empresa com cidade cadastrada ainda.
+          </div>
+        ) : (
+          <div className="max-h-80 divide-y divide-border overflow-y-auto">
+            {rankingCidades.map(({ cidade, total }) => (
+              <div key={cidade} className="flex items-center justify-between gap-4 px-5 py-2.5">
+                <span className="truncate text-sm text-foreground">{cidade}</span>
+                <span className="shrink-0 text-sm font-medium text-foreground/70">{total}</span>
+              </div>
+            ))}
+            {semCidade > 0 && (
+              <div className="flex items-center justify-between gap-4 px-5 py-2.5">
+                <span className="truncate text-sm text-foreground/40">Sem cidade cadastrada</span>
+                <span className="shrink-0 text-sm font-medium text-foreground/40">{semCidade}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
 
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">

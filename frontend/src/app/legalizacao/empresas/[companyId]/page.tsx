@@ -4,7 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
-import { STATUS_PILL_CLASSES, formatarCnpj, statusDocumento, tipoAplicavel } from "@/app/legalizacao/status";
+import {
+  STATUS_PILL_CLASSES,
+  formatarCnpj,
+  formatarEndereco,
+  statusDocumento,
+  tipoAplicavel,
+} from "@/app/legalizacao/status";
 import { TAX_REGIME_LABELS, type Company } from "@/lib/types";
 
 export const metadata = { title: "Legalização — Empresa" };
@@ -19,7 +25,9 @@ export default async function LegalizacaoEmpresaPage(
     await Promise.all([
       supabase
         .from("companies")
-        .select("id, legal_name, trade_name, cnpj, tax_regime")
+        .select(
+          "id, legal_name, trade_name, cnpj, tax_regime, address_street, address_number, address_complement, address_neighborhood, address_zip, municipality_name, state",
+        )
         .eq("id", companyId)
         .single(),
       supabase
@@ -38,7 +46,18 @@ export default async function LegalizacaoEmpresaPage(
     ]);
 
   if (!company) notFound();
-  const empresa = company as Pick<Company, "cnpj" | "tax_regime">;
+  const empresa = company as Pick<
+    Company,
+    | "cnpj"
+    | "tax_regime"
+    | "address_street"
+    | "address_number"
+    | "address_complement"
+    | "address_neighborhood"
+    | "address_zip"
+    | "municipality_name"
+    | "state"
+  >;
 
   const documentoPorTipo = new Map((documentos ?? []).map((d) => [d.tipo_id, d]));
   const excecaoPorTipo = new Map((excecoes ?? []).map((r) => [r.tipo_id, r.aplicavel]));
@@ -77,6 +96,12 @@ export default async function LegalizacaoEmpresaPage(
           <div className="text-xs text-foreground/50">Regime tributário</div>
           <div className="text-sm font-medium text-foreground">
             {empresa.tax_regime ? TAX_REGIME_LABELS[empresa.tax_regime] : "Não cadastrado"}
+          </div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs text-foreground/50">Endereço</div>
+          <div className="text-sm font-medium text-foreground">
+            {formatarEndereco(empresa) ?? "Não cadastrado"}
           </div>
         </div>
       </Card>

@@ -20,6 +20,13 @@ export function NewCompanyForm() {
   const [tradeName, setTradeName] = useState("");
   const [cnae, setCnae] = useState("");
   const [municipalityIbgeCode, setMunicipalityIbgeCode] = useState("");
+  const [municipalityName, setMunicipalityName] = useState("");
+  const [uf, setUf] = useState("");
+  const [addressStreet, setAddressStreet] = useState("");
+  const [addressNumber, setAddressNumber] = useState("");
+  const [addressComplement, setAddressComplement] = useState("");
+  const [addressNeighborhood, setAddressNeighborhood] = useState("");
+  const [addressZip, setAddressZip] = useState("");
   const [taxRegime, setTaxRegime] = useState<TaxRegime | "">("");
 
   const [buscando, setBuscando] = useState(false);
@@ -49,6 +56,13 @@ export function NewCompanyForm() {
     if (dados.nomeFantasia) setTradeName(dados.nomeFantasia);
     if (dados.cnae) setCnae(dados.cnae);
     if (dados.municipioIbge) setMunicipalityIbgeCode(dados.municipioIbge);
+    if (dados.municipio) setMunicipalityName(dados.municipio);
+    if (dados.uf) setUf(dados.uf);
+    if (dados.logradouro) setAddressStreet(dados.logradouro);
+    if (dados.numero) setAddressNumber(dados.numero);
+    if (dados.complemento) setAddressComplement(dados.complemento);
+    if (dados.bairro) setAddressNeighborhood(dados.bairro);
+    if (dados.cep) setAddressZip(dados.cep);
     if (dados.simplesNacional) setTaxRegime("SIMPLES_NACIONAL");
     if (!organizationName) setOrganizationName(dados.nomeFantasia || dados.razaoSocial);
 
@@ -143,6 +157,13 @@ export function NewCompanyForm() {
         </div>
 
         <input type="hidden" name="municipalityIbgeCode" value={municipalityIbgeCode} />
+        <input type="hidden" name="municipalityName" value={municipalityName} />
+        <input type="hidden" name="state" value={uf} />
+        <input type="hidden" name="addressStreet" value={addressStreet} />
+        <input type="hidden" name="addressNumber" value={addressNumber} />
+        <input type="hidden" name="addressComplement" value={addressComplement} />
+        <input type="hidden" name="addressNeighborhood" value={addressNeighborhood} />
+        <input type="hidden" name="addressZip" value={addressZip} />
 
         <div className="mt-2 flex items-center gap-3">
           <Button type="submit" loading={pending}>

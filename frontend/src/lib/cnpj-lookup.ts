@@ -13,6 +13,11 @@ export type DadosCnpj = {
   municipioIbge: string | null;
   municipio: string | null;
   uf: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cep: string | null;
   situacaoCadastral: string | null;
   ativa: boolean;
   simplesNacional: boolean;
@@ -27,6 +32,11 @@ type BrasilApiCnpjResponse = {
   codigo_municipio_ibge: number | null;
   municipio: string | null;
   uf: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cep: string | null;
   descricao_situacao_cadastral: string | null;
   opcao_pelo_simples: boolean | null;
 };
@@ -73,6 +83,11 @@ export async function buscarDadosCnpj(
       municipioIbge: json.codigo_municipio_ibge != null ? String(json.codigo_municipio_ibge) : null,
       municipio: json.municipio || null,
       uf: json.uf || null,
+      logradouro: json.logradouro || null,
+      numero: json.numero || null,
+      complemento: json.complemento || null,
+      bairro: json.bairro || null,
+      cep: json.cep || null,
       situacaoCadastral: situacao || null,
       ativa: (situacao || "").toUpperCase() === "ATIVA",
       simplesNacional: json.opcao_pelo_simples === true,

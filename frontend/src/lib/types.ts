@@ -55,6 +55,13 @@ export type Company = {
   tax_regime: TaxRegime | null;
   cnae: string | null;
   municipality_ibge_code: string | null;
+  municipality_name: string | null;
+  state: string | null;
+  address_street: string | null;
+  address_number: string | null;
+  address_complement: string | null;
+  address_neighborhood: string | null;
+  address_zip: string | null;
   nfse_ambiente: NfseAmbiente;
   dps_series: string;
   dps_next_number: number;

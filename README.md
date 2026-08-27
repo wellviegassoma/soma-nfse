@@ -1166,6 +1166,39 @@ empresas via CNPJ/planilha) (concluída)**
       faltando, 1 vencido(s)"); card de CNPJ/regime tributário mostrando
       "65.064.501/0001-87" e "Simples Nacional" pra 2Z2S corretamente
 
+**Ajuste — endereço completo e ranking por cidade a partir da Receita Federal (concluído, 2026-08-27)**
+- [x] `companies` ganhou 7 colunas novas (`address_street`, `address_number`,
+      `address_complement`, `address_neighborhood`, `address_zip`,
+      `municipality_name`, `state`) — resolvendo a lacuna documentada no
+      ajuste anterior. `lib/cnpj-lookup.ts` passou a capturar
+      `logradouro`/`numero`/`complemento`/`bairro`/`cep` da resposta da
+      BrasilAPI (já vinham na resposta, só não eram usados); cadastro
+      manual de empresa (`NewCompanyForm.tsx`) e importação em lote
+      (`lib/actions/empresas.ts`) passam a persistir tudo isso a partir de
+      agora
+- [x] Rodado um backfill único (script descartável, apagado depois de
+      rodar) pras 205 empresas já cadastradas com CNPJ: consulta a
+      BrasilAPI por CNPJ com intervalo de 400ms entre chamadas (mesmo
+      padrão de `IMPORT_EMPRESAS_THROTTLE_MS` já usado na importação em
+      lote) e retry com backoff em caso de 429. Resultado: 204 de 205
+      atualizadas; 1 falha (CNPJ `36204726000166`, cadastrado pra
+      "ASSOSCIAÇÃO BRASILEIRA DE ESTUDOS E DOENÇAS IMUNO", devolveu HTTP
+      400 da BrasilAPI — provável CNPJ inválido/com dígito verificador
+      errado no cadastro; não mexi nele, fica como pendência pontual pra
+      confirmar o CNPJ certo dessa empresa)
+- [x] Tela de consulta por empresa (`/legalizacao/empresas/{id}`) ganhou
+      o campo Endereço no card de dados cadastrais, formatado como uma
+      linha só ("Rua, Número - Complemento — Bairro, Cidade/UF — CEP");
+      dashboard ganhou a seção "Ranking de empresas por cidade" (contagem
+      por `município/UF`, decrescente, com "Sem cidade cadastrada" à parte
+      pras que não têm)
+- [x] Validado ao vivo com usuário descartável: card de endereço da 2Z2S
+      mostrando "DOUTOR ALENCAR LIMA, 35 - SALA 1208 — CENTRO,
+      PETROPOLIS/RJ — CEP 25620-050" (bate com o CNPJ real na Receita);
+      ranking de cidade batendo com o perfil real da carteira de clientes
+      (Petrópolis/RJ 87, Rio de Janeiro/RJ 72, ...) — confirma que o
+      backfill populou os dados certos
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em
