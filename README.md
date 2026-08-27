@@ -1130,6 +1130,42 @@ empresas via CNPJ/planilha) (concluída)**
       empresa" — comportamento correto nos dois lados sem tocar em
       nenhuma empresa manualmente
 
+**Ajuste — indicadores do dashboard, certificados vencendo e dados cadastrais na consulta (concluído, 2026-08-27)**
+- [x] Card "Com algum documento" saiu; entrou "Empresas com tudo OK" —
+      conta empresas com pelo menos um tipo aplicável (não conta quem não
+      tem nenhum tipo aplicável) e ZERO pendência (nenhum tipo aplicável
+      faltando nem vencido). "Documentação incompleta" continua contando
+      o oposto
+- [x] A lista antes chamada "Sem nenhum documento cadastrado" virou
+      "Ranking de documentação incompleta" — ordenada por quantidade de
+      pendência (faltando + vencido) decrescente em vez de alfabética, e
+      cada linha mostra a contagem ("3 faltando, 1 vencido(s)", "4 de 4
+      faltando", etc.) em vez de só o nome
+- [x] Novo card + seção "Certificados digitais vencidos ou vencendo em
+      até 45 dias" no dashboard — como a tabela `certificates` guarda
+      campos cifrados (pfx e senha) e sua RLS é só `is_soma_staff()` de
+      propósito, criei a function `certificados_vencendo_legalizacao()`
+      (SECURITY DEFINER, mesmo padrão de `is_soma_staff()`) que devolve
+      só `company_id` e `expires_at` pra quem for staff OU Analista de
+      Legalização, sem abrir a tabela crua (e os campos cifrados) pra
+      esse papel
+- [x] Tela de consulta por empresa (`/legalizacao/empresas/{id}`) ganhou
+      um card "Dados cadastrais" (somente leitura) com CNPJ formatado e
+      regime tributário — únicos dois campos do cadastro da empresa que
+      já existem no banco hoje. Endereço completo (rua, bairro, CEP) e
+      nome de cidade/UF **não existem em lugar nenhum do sistema
+      atualmente** — a empresa só guarda um código IBGE do município
+      (`municipality_ibge_code`, sem nome legível) usado só na hora do
+      cadastro pra achar a alíquota de ISS; ficou como pendência em
+      aberto, junto do pedido de ranking de empresas por cidade que
+      depende do mesmo dado
+- [x] Validado ao vivo com usuário descartável: dashboard mostrando os
+      2 certificados reais vencendo (21 e 29 dias, batendo com os dados
+      de produção) linkando pra tela de consulta certa; ranking de
+      documentação incompleta ordenado certo (2Z2S no topo com "3
+      faltando, 1 vencido(s)"); card de CNPJ/regime tributário mostrando
+      "65.064.501/0001-87" e "Simples Nacional" pra 2Z2S corretamente
+
 ## Setup do zero
 
 1. **Criar o projeto no Supabase** (supabase.com) e pegar a connection info em

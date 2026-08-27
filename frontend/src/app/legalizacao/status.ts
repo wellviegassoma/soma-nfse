@@ -1,5 +1,12 @@
 export type StatusTone = "danger" | "warning" | "success" | "neutral";
 
+export function formatarCnpj(cnpj: string | null | undefined): string | null {
+  if (!cnpj) return null;
+  const digitos = cnpj.replace(/\D/g, "");
+  if (digitos.length !== 14) return cnpj;
+  return digitos.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+}
+
 export const STATUS_PILL_CLASSES: Record<StatusTone, string> = {
   danger: "bg-danger-soft text-danger",
   warning: "bg-warning-soft text-warning",

@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
-import { STATUS_PILL_CLASSES, statusDocumento, tipoAplicavel } from "@/app/legalizacao/status";
+import { STATUS_PILL_CLASSES, formatarCnpj, statusDocumento, tipoAplicavel } from "@/app/legalizacao/status";
+import { TAX_REGIME_LABELS, type Company } from "@/lib/types";
 
 export const metadata = { title: "Legalização — Empresa" };
 
@@ -16,7 +17,11 @@ export default async function LegalizacaoEmpresaPage(
 
   const [{ data: company }, { data: tipos }, { data: documentos }, { data: excecoes }] =
     await Promise.all([
-      supabase.from("companies").select("id, legal_name, trade_name").eq("id", companyId).single(),
+      supabase
+        .from("companies")
+        .select("id, legal_name, trade_name, cnpj, tax_regime")
+        .eq("id", companyId)
+        .single(),
       supabase
         .from("legalizacao_tipos_documento")
         .select("id, nome, aplica_a_todas")
@@ -33,6 +38,7 @@ export default async function LegalizacaoEmpresaPage(
     ]);
 
   if (!company) notFound();
+  const empresa = company as Pick<Company, "cnpj" | "tax_regime">;
 
   const documentoPorTipo = new Map((documentos ?? []).map((d) => [d.tipo_id, d]));
   const excecaoPorTipo = new Map((excecoes ?? []).map((r) => [r.tipo_id, r.aplicavel]));
@@ -59,6 +65,21 @@ export default async function LegalizacaoEmpresaPage(
           <Button variant="secondary">Gerenciar documentos</Button>
         </Link>
       </div>
+
+      <Card className="flex flex-wrap gap-x-8 gap-y-3 p-5">
+        <div>
+          <div className="text-xs text-foreground/50">CNPJ</div>
+          <div className="text-sm font-medium text-foreground">
+            {formatarCnpj(empresa.cnpj) ?? "Não cadastrado"}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-foreground/50">Regime tributário</div>
+          <div className="text-sm font-medium text-foreground">
+            {empresa.tax_regime ? TAX_REGIME_LABELS[empresa.tax_regime] : "Não cadastrado"}
+          </div>
+        </div>
+      </Card>
 
       <Card className="overflow-hidden">
         {tiposAplicaveis.length === 0 ? (
