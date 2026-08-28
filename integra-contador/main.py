@@ -33,6 +33,7 @@ from schemas import (
     DeclararPgdasOut,
     ExtratoDasOut,
     GerarDasOut,
+    ReciboDeclaracaoOut,
     SituacaoFiscalOut,
 )
 from serpro_client import ErroIntegraContador, chamar
@@ -184,6 +185,26 @@ def gerar_das(cnpj: str, periodo_apuracao: str):
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return GerarDasOut(contribuinte_cnpj=cnpj, periodo_apuracao=periodo_apuracao, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/simples/pgdas-d/recibo/{periodo_apuracao}",
+    response_model=ReciboDeclaracaoOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def consultar_recibo_declaracao(cnpj: str, periodo_apuracao: str):
+    """
+    Consulta a última declaração/recibo já transmitida pro período
+    (PGDASD.CONSULTIMADECREC14) — direto na Serpro, então recupera
+    declaração/recibo mesmo de uma transmissão feita antes desta feature
+    existir, ou pelo PGDAS-D Web. Isso substitui a necessidade de um
+    histórico próprio: a Serpro já é a fonte de verdade permanente.
+    """
+    try:
+        resposta = chamar("PGDASD", "CONSULTIMADECREC14", cnpj, {"periodoApuracao": periodo_apuracao})
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ReciboDeclaracaoOut(contribuinte_cnpj=cnpj, periodo_apuracao=periodo_apuracao, resposta=resposta)
 
 
 @app.get(

@@ -16,6 +16,18 @@ type DeclaracaoTransmitida = {
   darf?: string; // PDF base64
 };
 
+type ArquivoPdf = { nomeArquivo: string; pdf: string };
+
+// Resposta de CONSULTIMADECREC14 — consulta a última declaração/recibo já
+// transmitida direto na Serpro, funciona pra qualquer transmissão
+// (aqui, antes desta feature existir, ou pelo PGDAS-D Web).
+type ReciboConsultado = {
+  numeroDeclaracao: string;
+  recibo?: ArquivoPdf;
+  declaracao?: ArquivoPdf;
+  maed?: { nomeArquivoNotificacao?: string; pdfNotificacao?: string; nomeArquivoDarf?: string; pdfDarf?: string };
+};
+
 function formatMoney(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -55,7 +67,31 @@ export function DeclararPgdasCard({
   const [simulado, setSimulado] = useState<DeclaracaoTransmitida | null>(null);
   const [transmitido, setTransmitido] = useState<DeclaracaoTransmitida | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  const [consultandoRecibo, setConsultandoRecibo] = useState(false);
+  const [erroRecibo, setErroRecibo] = useState<string | null>(null);
+  const [reciboConsultado, setReciboConsultado] = useState<ReciboConsultado | null>(null);
   const periodoApuracao = competencia.replace("-", "");
+
+  async function buscarReciboJaTransmitido() {
+    setConsultandoRecibo(true);
+    setErroRecibo(null);
+    setReciboConsultado(null);
+    try {
+      const resposta = await fetch(
+        `/admin/empresas/${companyId}/integra-contador/simples/recibo/${periodoApuracao}`,
+      );
+      const corpo = await resposta.json();
+      if (!resposta.ok) {
+        setErroRecibo(corpo.error ?? "Não foi possível consultar.");
+        return;
+      }
+      setReciboConsultado(corpo.resultado);
+    } catch {
+      setErroRecibo("Não foi possível falar com o Integra Contador agora. Tente novamente.");
+    } finally {
+      setConsultandoRecibo(false);
+    }
+  }
 
   async function chamar(indicadorTransmissao: boolean) {
     setCarregando(indicadorTransmissao ? "transmitir" : "simular");
@@ -127,6 +163,80 @@ export function DeclararPgdasCard({
             Só funciona se essa competência já foi transmitida antes (aqui ou pelo PGDAS-D Web) —
             a Serpro recusa gerar guia de declaração inexistente.
           </p>
+
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-foreground">
+                  Já foi declarado antes? Buscar declaração/recibo
+                </div>
+                <p className="text-xs text-foreground/50">
+                  Consulta a última declaração já transmitida direto na Serpro (funciona mesmo
+                  pra transmissão feita antes desta tela existir, ou pelo PGDAS-D Web). Guardado
+                  por 180 dias sem custo — só paga uma consulta nova depois disso.
+                </p>
+              </div>
+              <Button variant="secondary" loading={consultandoRecibo} onClick={buscarReciboJaTransmitido}>
+                Buscar
+              </Button>
+            </div>
+            {erroRecibo && <Alert tone="warning">{erroRecibo}</Alert>}
+            {reciboConsultado && (
+              <div className="flex flex-col gap-2 rounded-lg bg-surface-muted p-3 text-sm">
+                <span className="text-foreground/70">
+                  Declaração nº {reciboConsultado.numeroDeclaracao}
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {reciboConsultado.declaracao?.pdf && (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() => abrirPdfBase64(reciboConsultado.declaracao!.pdf, reciboConsultado.declaracao!.nomeArquivo)}
+                    >
+                      Baixar declaração
+                    </Button>
+                  )}
+                  {reciboConsultado.recibo?.pdf && (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() => abrirPdfBase64(reciboConsultado.recibo!.pdf, reciboConsultado.recibo!.nomeArquivo)}
+                    >
+                      Baixar recibo
+                    </Button>
+                  )}
+                  {reciboConsultado.maed?.pdfNotificacao && (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() =>
+                        abrirPdfBase64(
+                          reciboConsultado.maed!.pdfNotificacao!,
+                          reciboConsultado.maed!.nomeArquivoNotificacao ?? `maed-notificacao-${competencia}.pdf`,
+                        )
+                      }
+                    >
+                      Baixar notificação MAED
+                    </Button>
+                  )}
+                  {reciboConsultado.maed?.pdfDarf && (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() =>
+                        abrirPdfBase64(
+                          reciboConsultado.maed!.pdfDarf!,
+                          reciboConsultado.maed!.nomeArquivoDarf ?? `maed-darf-${competencia}.pdf`,
+                        )
+                      }
+                    >
+                      Baixar DARF da multa
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {erro && <Alert tone="danger">{erro}</Alert>}
 

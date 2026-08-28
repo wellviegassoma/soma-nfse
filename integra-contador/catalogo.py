@@ -34,6 +34,13 @@ from dataclasses import dataclass
 
 UM_DIA_SEGUNDOS = 24 * 60 * 60
 UMA_HORA_SEGUNDOS = 60 * 60
+# Pra consultas sobre algo que já aconteceu e não muda mais na prática
+# (ex.: recibo/declaração de um período já transmitido) — TTL padrão de
+# 1 dia faria repetir a mesma consulta paga toda vez que alguém quisesse
+# ver de novo depois de um dia. Não é "pra sempre" de propósito: se um
+# dia existir retificadora nesse sistema, uma consulta feita bem depois
+# de uma retificação ainda deve eventualmente atualizar.
+CENTO_OITENTA_DIAS_SEGUNDOS = 180 * UM_DIA_SEGUNDOS
 
 
 @dataclass(frozen=True)
@@ -70,8 +77,14 @@ _registrar(
     _s("PGDASD", "TRANSDECLARACAO11", "Declarar", "1.0", procuracao_codigo="00146"),
     _s("PGDASD", "GERARDAS12", "Emitir", "1.0", procuracao_codigo="00146"),
     _s("PGDASD", "CONSDECLARACAO13", "Consultar", "1.0", procuracao_codigo="00146"),
-    _s("PGDASD", "CONSULTIMADECREC14", "Consultar", "1.0", procuracao_codigo="00146"),
-    _s("PGDASD", "CONSDECREC15", "Consultar", "1.0", procuracao_codigo="00146"),
+    _s(
+        "PGDASD", "CONSULTIMADECREC14", "Consultar", "1.0",
+        cache_ttl_segundos=CENTO_OITENTA_DIAS_SEGUNDOS, procuracao_codigo="00146",
+    ),
+    _s(
+        "PGDASD", "CONSDECREC15", "Consultar", "1.0",
+        cache_ttl_segundos=CENTO_OITENTA_DIAS_SEGUNDOS, procuracao_codigo="00146",
+    ),
     _s("PGDASD", "CONSEXTRATO16", "Consultar", "1.0", procuracao_codigo="00146"),
     _s("PGDASD", "GERARDASCOBRANCA17", "Emitir", "1.0", procuracao_codigo="00146"),
     _s("PGDASD", "GERARDASPROCESSO18", "Emitir", "1.0", procuracao_codigo="00146"),

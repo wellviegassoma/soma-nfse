@@ -51,3 +51,9 @@ class GerarDasOut(BaseModel):
     contribuinte_cnpj: str
     periodo_apuracao: str
     resposta: dict
+
+
+class ReciboDeclaracaoOut(BaseModel):
+    contribuinte_cnpj: str
+    periodo_apuracao: str
+    resposta: dict
