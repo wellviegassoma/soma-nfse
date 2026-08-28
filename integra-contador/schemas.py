@@ -36,3 +36,12 @@ class ChamarServicoOut(BaseModel):
 class CndOut(BaseModel):
     contribuinte_cnpj: str
     resposta: dict
+
+
+class DeclararPgdasIn(BaseModel):
+    dados: dict
+
+
+class DeclararPgdasOut(BaseModel):
+    contribuinte_cnpj: str
+    resposta: dict

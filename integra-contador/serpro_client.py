@@ -87,12 +87,18 @@ def chamar(id_sistema: str, id_servico: str, contribuinte_cnpj: str, dados: dict
         raise ErroIntegraContador(str(e))
     inicio = time.monotonic()
 
-    cacheado = cache.buscar(id_sistema, id_servico, contribuinte_cnpj, dados, servico.cache_ttl_segundos)
-    if cacheado is not None:
-        _logar(
-            id_sistema, id_servico, contribuinte_cnpj, cacheado["status"], True, int((time.monotonic() - inicio) * 1000)
-        )
-        return cacheado["resposta"]
+    # Rota "Declarar" tem efeito legal real (ex.: TRANSDECLARACAO11) — nunca
+    # serve de cache: cada chamada tem que bater na Serpro de verdade, senão
+    # um retry com o mesmo payload arriscaria "confirmar" uma transmissão
+    # sem ela realmente ter acontecido de novo. A ESCRITA no cache continua
+    # normal logo abaixo — é o único registro que sobra do recibo/DARF.
+    if servico.rota != "Declarar":
+        cacheado = cache.buscar(id_sistema, id_servico, contribuinte_cnpj, dados, servico.cache_ttl_segundos)
+        if cacheado is not None:
+            _logar(
+                id_sistema, id_servico, contribuinte_cnpj, cacheado["status"], True, int((time.monotonic() - inicio) * 1000)
+            )
+            return cacheado["resposta"]
 
     envelope = {
         "contratante": {"numero": _soma_cnpj(), "tipo": _TIPO_PJ},

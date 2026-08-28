@@ -24,7 +24,16 @@ import scheduler
 from auth import exigir_token_interno
 from catalogo import CATALOGO
 from cnd import ErroCnd, consultar_cnd
-from schemas import CndOut, ChamarServicoIn, ChamarServicoOut, DeclaracoesPeriodoOut, ExtratoDasOut, SituacaoFiscalOut
+from schemas import (
+    ChamarServicoIn,
+    ChamarServicoOut,
+    CndOut,
+    DeclaracoesPeriodoOut,
+    DeclararPgdasIn,
+    DeclararPgdasOut,
+    ExtratoDasOut,
+    SituacaoFiscalOut,
+)
 from serpro_client import ErroIntegraContador, chamar
 from sitfis import ErroSitfis, obter_situacao_fiscal
 
@@ -132,6 +141,28 @@ def consultar_declaracoes_periodo(cnpj: str, periodo_apuracao: str):
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return DeclaracoesPeriodoOut(contribuinte_cnpj=cnpj, periodo_apuracao=periodo_apuracao, resposta=resposta)
+
+
+@app.post(
+    "/contribuintes/{cnpj}/simples/pgdas-d/declarar",
+    response_model=DeclararPgdasOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def declarar_pgdas_d(cnpj: str, corpo: DeclararPgdasIn):
+    """
+    Transmite (ou simula, se `dados.indicadorTransmissao` for false) uma
+    Declaração do Simples Nacional (PGDASD.TRANSDECLARACAO11). Diferente
+    dos outros endpoints deste arquivo, isso tem efeito legal real — nunca
+    serve do cache (ver comentário em serpro_client.chamar()); cada
+    chamada com indicadorTransmissao=true bate na Serpro de verdade. O
+    payload em `dados` já vem pronto do frontend (monta a partir do
+    faturamento segregado por atividade) — este endpoint só repassa.
+    """
+    try:
+        resposta = chamar("PGDASD", "TRANSDECLARACAO11", cnpj, corpo.dados)
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return DeclararPgdasOut(contribuinte_cnpj=cnpj, resposta=resposta)
 
 
 @app.get(

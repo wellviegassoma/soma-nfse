@@ -112,6 +112,12 @@ export type NotaPorAtividade = {
   // classificação já confirmada — usado só pra sinalizar na UI que vale a
   // pena conferir.
   viaSugestao: boolean;
+  // tpRetISSQN (services.tipo_retencao_issqn) — 1 = não retido, 2/3 =
+  // retido pelo tomador/intermediário. Usado pra resolver o idAtividade
+  // numérico do PGDAS-D (ver pgdas-declaracao.ts), que distingue atividade
+  // com e sem retenção de ISS. Notas distribuídas sem serviço cadastrado
+  // aqui não têm como saber isso — default 1 (não retido).
+  tipoRetencaoIssqn: number;
 };
 
 // Resolve a atividade do Simples Nacional de uma nota que não está
@@ -149,18 +155,21 @@ export async function buscarFaturamentoPorAtividade(
   supabase: SupabaseClient<any, any, any>,
   companyId: string,
 ): Promise<NotaPorAtividade[]> {
+  type ServicoDaNota = {
+    name: string;
+    national_tax_code: string | null;
+    atividade_simples_nacional: string | null;
+    tipo_retencao_issqn: number;
+  };
   type DpsComServicoRow = DpsRow & {
-    services:
-      | { name: string; national_tax_code: string | null; atividade_simples_nacional: string | null }
-      | { name: string; national_tax_code: string | null; atividade_simples_nacional: string | null }[]
-      | null;
+    services: ServicoDaNota | ServicoDaNota[] | null;
   };
 
   const [{ data: notas }, { data: distribuidas }, { data: todosServicos }] = await Promise.all([
     supabase
       .from("dps")
       .select(
-        "valor, status, data_competencia, services(name, national_tax_code, atividade_simples_nacional), nfse(status, access_key)",
+        "valor, status, data_competencia, services(name, national_tax_code, atividade_simples_nacional, tipo_retencao_issqn), nfse(status, access_key)",
       )
       .eq("company_id", companyId),
     supabase
@@ -212,6 +221,7 @@ export async function buscarFaturamentoPorAtividade(
       descricao: servico?.name ?? "Serviço não identificado no cadastro",
       atividadeId: atividadeDoServico,
       viaSugestao: false,
+      tipoRetencaoIssqn: servico?.tipo_retencao_issqn ?? 1,
     });
   }
 
@@ -230,6 +240,9 @@ export async function buscarFaturamentoPorAtividade(
       descricao: nota.descricao_servico ?? "Nota distribuída (sem serviço cadastrado)",
       atividadeId,
       viaSugestao,
+      // Sem serviço próprio ligado, não há como saber a retenção de ISS
+      // real dessa nota — assume não retido (o caso mais comum).
+      tipoRetencaoIssqn: 1,
     });
   }
 
@@ -245,17 +258,18 @@ export type AtividadeAgrupada = {
   viaSugestao: boolean;
 };
 
-// Agrupa por código de tributação nacional (LC 116) — mesmo código pode
-// ter descrições ligeiramente diferentes entre serviços cadastrados e
-// notas distribuídas, então a descrição mostrada é a da primeira nota
-// encontrada do grupo. Notas sem código viram um grupo próprio por
-// descrição (evita misturar serviços diferentes só porque nenhum tem
-// código identificado).
+// Agrupa pela classificação do Simples Nacional já resolvida (atividadeId
+// — ver resolverAtividadeNota), não pelo código LC 116 bruto: é essa
+// segregação (por Anexo III / Fator R / Anexo IV) que o PGDAS-D realmente
+// exige, e vários códigos LC 116 diferentes podem cair no mesmo Anexo.
+// Notas SEM classificação resolvida continuam agrupadas por código/
+// descrição bruta da própria nota — nesse caso agrupar pela "não
+// classificação" genérica esconderia justamente o que falta cadastrar.
 export function agruparPorAtividade(notas: NotaPorAtividade[], competencia: string): AtividadeAgrupada[] {
   const mapa = new Map<string, AtividadeAgrupada>();
   for (const nota of notas) {
     if (nota.cancelada || nota.competencia !== competencia) continue;
-    const chave = nota.codigo ?? `desc:${nota.descricao}`;
+    const chave = nota.atividadeId ? `ativ:${nota.atividadeId}` : `nc:${nota.codigo ?? `desc:${nota.descricao}`}`;
     const atual =
       mapa.get(chave) ??
       ({
@@ -267,6 +281,10 @@ export function agruparPorAtividade(notas: NotaPorAtividade[], competencia: stri
         viaSugestao: nota.viaSugestao,
       } satisfies AtividadeAgrupada);
     atual.valor += nota.valor;
+    // Se qualquer nota do grupo ainda depende só da sugestão automática
+    // (não confirmada em nenhum cadastro), sinaliza o grupo inteiro —
+    // mesmo que outra nota do mesmo grupo já tenha vindo confirmada.
+    if (nota.viaSugestao) atual.viaSugestao = true;
     mapa.set(chave, atual);
   }
   return Array.from(mapa.values()).sort((a, b) => b.valor - a.valor);

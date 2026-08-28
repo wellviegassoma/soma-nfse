@@ -20,11 +20,19 @@ import {
 import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { calcularLucroPresumido, calcularSimplesNacional } from "@/lib/calculo-impostos";
 import { buscarAtividade, type TratamentoAtividade } from "@/lib/simples-nacional-atividades";
+import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
+import { DeclararPgdasCard } from "./DeclararPgdasCard";
 
 const BADGE_POR_TRATAMENTO: Record<TratamentoAtividade, string> = {
   ANEXO_III_FIXO: "bg-green-100 text-green-900",
   FATOR_R: "bg-amber-100 text-amber-900",
   ANEXO_IV_FIXO: "bg-orange-100 text-orange-900",
+};
+
+const LABEL_POR_TRATAMENTO: Record<TratamentoAtividade, string> = {
+  ANEXO_III_FIXO: "Anexo III fixo",
+  FATOR_R: "Sujeita ao Fator R",
+  ANEXO_IV_FIXO: "Anexo IV fixo",
 };
 
 export const metadata = { title: "Impostos — Painel SOMA" };
@@ -60,7 +68,7 @@ export default async function ImpostosPage(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+      "id, cnpj, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
     )
     .eq("id", companyId)
     .single();
@@ -128,10 +136,13 @@ export default async function ImpostosPage(
       dataAbertura: company.data_abertura,
     });
 
+    // Buscado sempre (não só quando sujeito_fator_r) — folhasSalario é um
+    // campo opcional útil no PGDAS-D independente do Anexo do serviço.
+    const folhaMensal = await buscarFolhaMensal(supabase, companyId);
+    const folhaPorMes = new Map(folhaMensal.map((f) => [f.competencia, totalFolhaComEncargos(f)]));
+
     let fatorRPercentual: number | null = null;
     if (company.sujeito_fator_r) {
-      const folhaMensal = await buscarFolhaMensal(supabase, companyId);
-      const folhaPorMes = new Map(folhaMensal.map((f) => [f.competencia, totalFolhaComEncargos(f)]));
       const { fp12 } = resolverFp12({
         competencia,
         folhaPorMes: (mes) => folhaPorMes.get(mes),
@@ -139,6 +150,17 @@ export default async function ImpostosPage(
       });
       fatorRPercentual = resolverFatorR(fp12, rbt12);
     }
+
+    const declaracaoPgdas = company.cnpj
+      ? montarDeclaracaoPgdasD({
+          cnpj: company.cnpj,
+          competencia,
+          indicadorTransmissao: false,
+          notas: notasPorAtividade,
+          receitaPorMes,
+          folhaPorMes: (mes) => folhaPorMes.get(mes),
+        })
+      : { dados: null, bloqueios: ["Essa empresa não tem CNPJ cadastrado."] };
 
     const resultado = calcularSimplesNacional({
       receitaMes,
@@ -264,10 +286,10 @@ export default async function ImpostosPage(
             Faturamento por atividade — {formatCompetencia(competencia)}
           </div>
           <p className="border-b border-border bg-surface-muted px-5 py-2 text-xs text-foreground/50">
-            Visão preparatória — o PGDAS-D oficial exige receita segregada por atividade (não um
-            total único). Notas de serviço cadastrado usam a atividade escolhida nele; notas
-            distribuídas (sem cadastro aqui) tentam reaproveitar a classificação de outro serviço
-            com o mesmo código, ou a sugestão automática pelo código LC 116.
+            Segregado pela classificação do Simples Nacional (Anexo III / Fator R / Anexo IV) —
+            é essa a segregação que o PGDAS-D oficial exige, não o código LC 116 bruto. Notas
+            ainda sem classificação resolvida aparecem por código/descrição da própria nota, pra
+            você identificar o que falta cadastrar.
           </p>
           {atividadesDoMes.length === 0 ? (
             <div className="px-5 py-4 text-sm text-foreground/50">
@@ -283,8 +305,10 @@ export default async function ImpostosPage(
                     className="flex items-center justify-between gap-3 px-5 py-3 text-sm"
                   >
                     <div>
-                      <div className="text-foreground/70">{atividade.descricao}</div>
-                      {atividade.codigo && (
+                      <div className="text-foreground/70">
+                        {resolvida ? resolvida.descricao : atividade.descricao}
+                      </div>
+                      {!resolvida && atividade.codigo && (
                         <div className="text-xs text-foreground/40">Código LC 116: {atividade.codigo}</div>
                       )}
                       <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -292,7 +316,7 @@ export default async function ImpostosPage(
                           <span
                             className={`rounded px-2 py-0.5 text-xs font-medium ${BADGE_POR_TRATAMENTO[resolvida.tratamento]}`}
                           >
-                            {resolvida.descricao}
+                            {LABEL_POR_TRATAMENTO[resolvida.tratamento]}
                             {atividade.viaSugestao ? " (sugestão automática — conferir)" : ""}
                           </span>
                         ) : (
@@ -313,6 +337,12 @@ export default async function ImpostosPage(
             </div>
           )}
         </Card>
+
+        <DeclararPgdasCard
+          companyId={companyId}
+          competencia={competencia}
+          bloqueios={declaracaoPgdas.bloqueios}
+        />
       </div>
     );
   }
