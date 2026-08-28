@@ -55,6 +55,7 @@ export function DeclararPgdasCard({
   const [simulado, setSimulado] = useState<DeclaracaoTransmitida | null>(null);
   const [transmitido, setTransmitido] = useState<DeclaracaoTransmitida | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  const periodoApuracao = competencia.replace("-", "");
 
   async function chamar(indicadorTransmissao: boolean) {
     setCarregando(indicadorTransmissao ? "transmitir" : "simular");
@@ -110,6 +111,21 @@ export function DeclararPgdasCard({
             Simular pede pra Receita calcular os valores devidos, sem nenhum efeito legal — é
             seguro repetir quantas vezes quiser. Transmitir é definitivo: uma vez enviado, só se
             corrige com retificadora.
+          </p>
+
+          <a
+            href={`/admin/empresas/${companyId}/integra-contador/simples/das/${periodoApuracao}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="self-start"
+          >
+            <Button variant="secondary" size="md">
+              Baixar guia do DAS (pra enviar ao cliente)
+            </Button>
+          </a>
+          <p className="-mt-2 text-xs text-foreground/40">
+            Só funciona se essa competência já foi transmitida antes (aqui ou pelo PGDAS-D Web) —
+            a Serpro recusa gerar guia de declaração inexistente.
           </p>
 
           {erro && <Alert tone="danger">{erro}</Alert>}

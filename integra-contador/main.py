@@ -32,6 +32,7 @@ from schemas import (
     DeclararPgdasIn,
     DeclararPgdasOut,
     ExtratoDasOut,
+    GerarDasOut,
     SituacaoFiscalOut,
 )
 from serpro_client import ErroIntegraContador, chamar
@@ -163,6 +164,26 @@ def declarar_pgdas_d(cnpj: str, corpo: DeclararPgdasIn):
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return DeclararPgdasOut(contribuinte_cnpj=cnpj, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/simples/pgdas-d/das/{periodo_apuracao}",
+    response_model=GerarDasOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def gerar_das(cnpj: str, periodo_apuracao: str):
+    """
+    Gera a guia do DAS (PGDASD.GERARDAS12) — o documento que o cliente
+    paga — de uma declaração já transmitida pro período informado. Ao
+    contrário de declarar_pgdas_d, isso é só leitura (a Serpro só relê os
+    valores já apurados na transmissão), então serve do cache normalmente:
+    gerar de novo no mesmo dia não gasta chamada nova.
+    """
+    try:
+        resposta = chamar("PGDASD", "GERARDAS12", cnpj, {"periodoApuracao": periodo_apuracao})
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return GerarDasOut(contribuinte_cnpj=cnpj, periodo_apuracao=periodo_apuracao, resposta=resposta)
 
 
 @app.get(

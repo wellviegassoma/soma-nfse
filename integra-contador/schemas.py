@@ -45,3 +45,9 @@ class DeclararPgdasIn(BaseModel):
 class DeclararPgdasOut(BaseModel):
     contribuinte_cnpj: str
     resposta: dict
+
+
+class GerarDasOut(BaseModel):
+    contribuinte_cnpj: str
+    periodo_apuracao: str
+    resposta: dict
