@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 supabase/.temp/
 backend/.env
+backups/
