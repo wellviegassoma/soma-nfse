@@ -27,6 +27,10 @@ export async function POST(
   const corpo = await request.json().catch(() => null);
   const competencia = typeof corpo?.competencia === "string" ? corpo.competencia : null;
   const indicadorTransmissao = corpo?.indicadorTransmissao === true;
+  // Decisão explícita do contador (checkbox na UI) — nunca detectado
+  // sozinho a partir de um erro da Serpro dizendo que já existe
+  // declaração pro período.
+  const tipoDeclaracao: 1 | 2 = corpo?.retificadora === true ? 2 : 1;
   if (!competencia || !COMPETENCIA_REGEX.test(competencia)) {
     return NextResponse.json({ error: "Competência inválida." }, { status: 400 });
   }
@@ -57,6 +61,7 @@ export async function POST(
     cnpj: company.cnpj,
     competencia,
     indicadorTransmissao,
+    tipoDeclaracao,
     notas: notasPorAtividade,
     receitaPorMes,
     folhaPorMes: (mes) => folhaPorMesMapa.get(mes),

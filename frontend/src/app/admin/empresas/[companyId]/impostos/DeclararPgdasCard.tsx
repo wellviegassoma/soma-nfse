@@ -70,6 +70,7 @@ export function DeclararPgdasCard({
   const [consultandoRecibo, setConsultandoRecibo] = useState(false);
   const [erroRecibo, setErroRecibo] = useState<string | null>(null);
   const [reciboConsultado, setReciboConsultado] = useState<ReciboConsultado | null>(null);
+  const [retificadora, setRetificadora] = useState(false);
   const periodoApuracao = competencia.replace("-", "");
 
   async function buscarReciboJaTransmitido() {
@@ -102,7 +103,7 @@ export function DeclararPgdasCard({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ competencia, indicadorTransmissao }),
+          body: JSON.stringify({ competencia, indicadorTransmissao, retificadora }),
         },
       );
       const corpo = await resposta.json();
@@ -148,6 +149,26 @@ export function DeclararPgdasCard({
             seguro repetir quantas vezes quiser. Transmitir é definitivo: uma vez enviado, só se
             corrige com retificadora.
           </p>
+
+          <label className="flex items-start gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={retificadora}
+              onChange={(e) => {
+                setRetificadora(e.target.checked);
+                setSimulado(null);
+                setTransmitido(null);
+                setConfirmando(false);
+                setErro(null);
+              }}
+              className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+            />
+            <span>
+              Já existe declaração transmitida pra essa competência — enviar como{" "}
+              <strong>retificadora</strong> (usa os dados que estão no sistema agora, sem
+              comparar com a declaração anterior). Deixe desmarcado pra declaração original.
+            </span>
+          </label>
 
           <a
             href={`/admin/empresas/${companyId}/integra-contador/simples/das/${periodoApuracao}`}
@@ -277,7 +298,9 @@ export function DeclararPgdasCard({
             <>
               {simulado && (
                 <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface-muted p-4 text-sm">
-                  <div className="font-semibold text-foreground">Valores calculados pela Receita (simulação):</div>
+                  <div className="font-semibold text-foreground">
+                    Valores calculados pela Receita (simulação{retificadora ? " — retificadora" : ""}):
+                  </div>
                   {simulado.valoresDevidos && simulado.valoresDevidos.length > 0 ? (
                     <ul className="flex flex-col gap-1">
                       {simulado.valoresDevidos.map((v) => (
@@ -304,7 +327,7 @@ export function DeclararPgdasCard({
 
                 {simulado && !confirmando && (
                   <Button variant="danger" onClick={() => setConfirmando(true)}>
-                    Transmitir de verdade
+                    {retificadora ? "Transmitir retificadora de verdade" : "Transmitir de verdade"}
                   </Button>
                 )}
               </div>
@@ -313,9 +336,16 @@ export function DeclararPgdasCard({
                 <Alert tone="danger">
                   <div className="flex flex-col gap-3">
                     <span>
-                      Isso vai <strong>transmitir oficialmente</strong> a declaração do PGDAS-D pra
-                      competência {competencia} — efeito legal real e irreversível (só se corrige
-                      depois com retificadora). Confirma?
+                      Isso vai <strong>transmitir oficialmente</strong>{" "}
+                      {retificadora ? (
+                        <>
+                          uma <strong>declaração retificadora</strong> do PGDAS-D
+                        </>
+                      ) : (
+                        "a declaração do PGDAS-D"
+                      )}{" "}
+                      pra competência {competencia} — efeito legal real e irreversível
+                      {!retificadora && " (só se corrige depois com retificadora)"}. Confirma?
                     </span>
                     <div className="flex gap-2">
                       <Button variant="danger" loading={carregando === "transmitir"} onClick={() => chamar(true)}>

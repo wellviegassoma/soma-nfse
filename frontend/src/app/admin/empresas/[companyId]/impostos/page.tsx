@@ -156,6 +156,7 @@ export default async function ImpostosPage(
           cnpj: company.cnpj,
           competencia,
           indicadorTransmissao: false,
+          tipoDeclaracao: 1,
           notas: notasPorAtividade,
           receitaPorMes,
           folhaPorMes: (mes) => folhaPorMes.get(mes),

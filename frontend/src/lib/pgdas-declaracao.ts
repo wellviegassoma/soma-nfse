@@ -36,15 +36,26 @@ export type DeclaracaoPgdasResultado =
 // declarar/route.ts). Bloqueia (não monta nada) se sobrar nota sem
 // atividade resolvida na competência: declarar com receita faltando
 // seria uma declaração errada de verdade, não uma aproximação aceitável.
+//
+// Retificadora (tipoDeclaracao:2) sempre usa os MESMOS dados atuais do
+// sistema (mesma função, mesmo cálculo) — nunca tenta reconstruir ou
+// diferenciar contra a declaração anterior. É uma decisão explícita do
+// contador (checkbox na UI), nunca automática a partir de um erro da
+// Serpro.
 export function montarDeclaracaoPgdasD(params: {
   cnpj: string;
   competencia: string; // "YYYY-MM"
   indicadorTransmissao: boolean;
+  // 1 = original, 2 = retificadora — a Serpro rejeita 1 se já existir
+  // declaração transmitida pro período (regra oficial: qualquer reenvio
+  // tem que ser retificadora). Decisão de marcar como retificadora é do
+  // contador (checkbox na UI), nunca automática.
+  tipoDeclaracao: 1 | 2;
   notas: NotaPorAtividade[];
   receitaPorMes: (mes: string) => number;
   folhaPorMes: (mes: string) => number | undefined;
 }): DeclaracaoPgdasResultado {
-  const { cnpj, competencia, indicadorTransmissao, notas, receitaPorMes, folhaPorMes } = params;
+  const { cnpj, competencia, indicadorTransmissao, tipoDeclaracao, notas, receitaPorMes, folhaPorMes } = params;
   const cnpjLimpo = cnpj.replace(/\D/g, "");
   const [ano, mes] = competencia.split("-").map(Number);
   const pa = ano * 100 + mes;
@@ -96,7 +107,7 @@ export function montarDeclaracaoPgdasD(params: {
       indicadorTransmissao,
       indicadorComparacao: false,
       declaracao: {
-        tipoDeclaracao: 1, // original — ver limitação: sem retificadora automática
+        tipoDeclaracao,
         receitaPaCompetenciaInterno: receitaTotal,
         receitaPaCompetenciaExterno: 0,
         receitasBrutasAnteriores,
