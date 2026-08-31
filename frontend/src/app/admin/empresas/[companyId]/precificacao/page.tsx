@@ -35,6 +35,9 @@ export default async function AdminPrecificacaoPage(
           )}
         </p>
         <div className="flex gap-2">
+          <Link href={`${basePath}/modelos`}>
+            <Button variant="secondary">Modelos prontos</Button>
+          </Link>
           <Link href={`${basePath}/insumos`}>
             <Button variant="secondary">Insumos</Button>
           </Link>
@@ -46,6 +49,16 @@ export default async function AdminPrecificacaoPage(
           </Link>
         </div>
       </div>
+
+      {rows.length === 0 && (
+        <Alert tone="success">
+          Comece do zero com &quot;+ Novo procedimento&quot;, ou{" "}
+          <Link href={`${basePath}/modelos`} className="underline">
+            use um modelo pronto
+          </Link>{" "}
+          da equipe SOMA pra adiantar o cadastro.
+        </Alert>
+      )}
 
       {!parametrosConfigurados && (
         <Alert tone="warning">

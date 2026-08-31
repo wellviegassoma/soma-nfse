@@ -8,6 +8,7 @@ const TABS = [
   { href: "/admin", label: "Visão geral", exact: true },
   { href: "/admin/empresas", label: "Empresas" },
   { href: "/admin/certificados", label: "Certificados" },
+  { href: "/admin/precificacao-modelos", label: "Modelos de Precificação" },
   { href: "/admin/fechamento", label: "Fechamento" },
   { href: "/admin/erros", label: "Erros" },
   { href: "/admin/logs", label: "Logs" },

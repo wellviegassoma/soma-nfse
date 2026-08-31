@@ -256,3 +256,42 @@ export type PrecificacaoProcedimento = {
 export type PrecificacaoProcedimentoComReceita = PrecificacaoProcedimento & {
   itens: (PrecificacaoProcedimentoInsumo & { insumo: PrecificacaoInsumo })[];
 };
+
+// Biblioteca de modelos ("SOMA Odontologia" etc.) — não são escopados por
+// empresa; qualquer empresa pode importar uma cópia editável pro próprio
+// catálogo (ver lib/actions/precificacao-modelos.ts: importarModelo).
+export type PrecificacaoModelo = {
+  id: string;
+  nome: string;
+  especialidade: string | null;
+  descricao: string | null;
+  ativo: boolean;
+};
+
+export type PrecificacaoModeloComContagem = PrecificacaoModelo & {
+  totalInsumos: number;
+  totalProcedimentos: number;
+};
+
+export type PrecificacaoModeloInsumo = {
+  id: string;
+  modelo_id: string;
+  nome: string;
+  unidade_compra: string | null;
+  quantidade_por_compra: number;
+  valor_compra: number;
+  observacoes: string | null;
+};
+
+export type PrecificacaoModeloProcedimento = {
+  id: string;
+  modelo_id: string;
+  nome: string;
+  especialidade: string | null;
+  tempo_atendimento_horas: number;
+  preco_venda: number;
+  custo_laboratorio: number;
+  honorario_profissional_fixo: number;
+  percentual_retrabalho: number;
+  ativo: boolean;
+};
