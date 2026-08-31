@@ -1,3 +1,14 @@
+const formatadorMoeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+export function formatarMoeda(valor: number): string {
+  return formatadorMoeda.format(valor);
+}
+
+/** Recebe uma fração (0.05) e formata como percentual (5,0%). */
+export function formatarPercentual(fracao: number, casasDecimais = 1): string {
+  return `${(fracao * 100).toFixed(casasDecimais).replace(".", ",")}%`;
+}
+
 export type StatusTone = "danger" | "warning" | "success" | "neutral";
 
 export const STATUS_PILL_CLASSES: Record<StatusTone, string> = {

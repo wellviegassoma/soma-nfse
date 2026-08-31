@@ -9,6 +9,7 @@ const TABS = [
   { href: "certificado", label: "Certificado" },
   { href: "integra-contador", label: "Integra Contador" },
   { href: "servicos", label: "Serviços" },
+  { href: "precificacao", label: "Precificação" },
   { href: "usuarios", label: "Usuários" },
   { href: "contatos", label: "Contatos" },
   { href: "cofre-senhas", label: "Cofre de senhas" },

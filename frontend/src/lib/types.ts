@@ -205,3 +205,54 @@ export type Customer = {
   city: string | null;
   state: string | null;
 };
+
+export type PrecificacaoParametros = {
+  id: string;
+  company_id: string;
+  carga_horaria_mensal: number;
+  aliquota_imposto: number;
+  taxa_cartao: number;
+  desconto_padrao: number;
+};
+
+export type PrecificacaoCustoFixo = {
+  id: string;
+  company_id: string;
+  descricao: string;
+  valor_mensal: number;
+  ativo: boolean;
+};
+
+export type PrecificacaoInsumo = {
+  id: string;
+  company_id: string;
+  nome: string;
+  unidade_compra: string | null;
+  quantidade_por_compra: number;
+  valor_compra: number;
+  observacoes: string | null;
+};
+
+export type PrecificacaoProcedimentoInsumo = {
+  id: string;
+  procedimento_id: string;
+  insumo_id: string;
+  quantidade: number;
+};
+
+export type PrecificacaoProcedimento = {
+  id: string;
+  company_id: string;
+  nome: string;
+  especialidade: string | null;
+  tempo_atendimento_horas: number;
+  preco_venda: number;
+  custo_laboratorio: number;
+  honorario_profissional_fixo: number;
+  percentual_retrabalho: number;
+  ativo: boolean;
+};
+
+export type PrecificacaoProcedimentoComReceita = PrecificacaoProcedimento & {
+  itens: (PrecificacaoProcedimentoInsumo & { insumo: PrecificacaoInsumo })[];
+};

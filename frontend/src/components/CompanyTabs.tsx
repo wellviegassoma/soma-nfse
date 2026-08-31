@@ -11,6 +11,7 @@ export function CompanyTabs({ companyId }: { companyId: string }) {
     { href: base, label: "Visão geral" },
     { href: `${base}/notas`, label: "Notas" },
     { href: `${base}/tomadores`, label: "Tomadores" },
+    { href: `${base}/precificacao`, label: "Precificação" },
   ];
 
   return (

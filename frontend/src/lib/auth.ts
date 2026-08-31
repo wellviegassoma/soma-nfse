@@ -72,6 +72,17 @@ export async function requireExtratosAccess() {
   if (!ok) redirect("/");
 }
 
+// Precificação é usada lado a lado por staff e cliente (ambos editam o
+// mesmo catálogo) — diferente de requireLegalizacaoAccess/requireExtratosAccess,
+// que restringem a papéis específicos de analista. Aqui basta ter algum
+// vínculo com a empresa (qualquer role em user_companies) ou ser staff SOMA.
+export async function requirePrecificacaoAccess(companyId: string) {
+  await requireUser();
+  if (await isSomaStaff()) return;
+  const access = await getCompanyAccess(companyId);
+  if (!access) redirect("/");
+}
+
 export async function getCompanyAccess(
   companyId: string,
 ): Promise<CompanyAccess | null> {
