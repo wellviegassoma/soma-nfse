@@ -1698,6 +1698,39 @@ autônomo) (concluído, 2026-08-27)**
    A partir daí, esse usuário pode cadastrar empresas e convidar os demais
    pela própria interface (`/admin/empresas`).
 
+**Correção — "Buscar últimos 12 meses (todas)" estourando o tempo limite do
+servidor (concluído, 2026-08-31)**
+- [x] Com 138 empresas já com certificado cadastrado, o botão "Buscar
+      últimos 12 meses (todas)" em `/admin/fechamento` passou a falhar com
+      um erro genérico de página ("This page couldn't load"). Causa: a
+      Server Action `buscarHistoricoTodasAgora` escaneava as ~140 empresas
+      em sequência dentro de uma ÚNICA requisição — cada empresa pode levar
+      dezenas de segundos (histórico de 12 meses + retry em caso de
+      instabilidade do `adn.nfse.gov.br`), então o total passou do tempo
+      limite de execução da função serverless (`maxDuration = 300`, na
+      página) assim que o número de empresas cresceu o suficiente
+- [x] Reescrito pra rodar uma empresa por vez a partir do navegador
+      (`BuscarHistoricoTodasButton.tsx` chama a Server Action já existente
+      `buscarHistoricoAgora` — a mesma usada pelo botão de uma empresa só —
+      em loop sequencial), com barra de progresso ("X/138 — nome da
+      empresa") em vez de uma tela travada até o fim. Nenhuma requisição
+      individual passa perto do tempo limite, então o problema não volta
+      nem com o número de empresas continuando a crescer. A Server Action
+      antiga que fazia tudo de uma vez foi removida (ficou inútil e
+      arriscada de reintroduzir o mesmo bug)
+- [x] **Ajuste correlato, ainda não corrigido**: o botão "Buscar todas
+      agora" (mês corrente, não o histórico de 12 meses) usa o mesmo padrão
+      antigo — mais leve por escanear só um mês, mas sujeito ao mesmo
+      problema conforme o número de empresas continuar crescendo. Mesma
+      solução se aplicaria lá quando for necessário
+- [x] Validado ao vivo com usuário descartável: as 138 empresas passaram
+      uma por vez, progresso atualizando em tempo real, resumo final
+      correto. Como o teste rodou contra o backend local (não disponível),
+      todas retornaram erro esperado — isso também sujou o campo "última
+      sincronização" das 138 empresas reais no banco (mesmo projeto do
+      `.env.local` de produção); restaurado o valor original de cada uma a
+      partir do backup de `backups/2026-08-28_0041/` feito horas antes
+
 ## Backend (Fase C em diante)
 
 ```bash

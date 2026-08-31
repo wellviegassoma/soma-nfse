@@ -121,19 +121,6 @@ export async function buscarHistoricoAgora(
   return { resultado };
 }
 
-export async function buscarHistoricoTodasAgora(
-  _prevState: BuscarTodasState,
-): Promise<BuscarTodasState> {
-  await requireSomaStaff();
-  const resultados = await syncAllCompanies(
-    createAdminClient(),
-    undefined,
-    MESES_ANTERIORES_HISTORICO,
-  );
-  revalidatePath("/admin/fechamento");
-  return { resultados };
-}
-
 export type ImportarFechamentoState =
   | {
       error?: string;

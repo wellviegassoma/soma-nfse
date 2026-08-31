@@ -28,12 +28,20 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
       : mesCorrenteBrasilia();
 
   const supabase = await createClient();
-  const { data: companies } = await supabase
-    .from("companies")
-    .select(
-      "id, legal_name, trade_name, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
-    )
-    .order("legal_name");
+  const [{ data: companies }, { data: certs }] = await Promise.all([
+    supabase
+      .from("companies")
+      .select(
+        "id, legal_name, trade_name, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
+      )
+      .order("legal_name"),
+    supabase.from("certificates").select("company_id"),
+  ]);
+
+  const idsComCertificado = new Set((certs ?? []).map((c) => c.company_id));
+  const empresasComCertificado = (companies ?? [])
+    .filter((c) => idsComCertificado.has(c.id))
+    .map((c) => ({ id: c.id, nome: c.trade_name || c.legal_name }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -71,7 +79,7 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
           relatório mensal consolidado. Pode demorar um pouco dependendo do volume.
         </p>
         <div className="mt-4 flex justify-end border-t border-border pt-4">
-          <BuscarHistoricoTodasButton />
+          <BuscarHistoricoTodasButton empresas={empresasComCertificado} />
         </div>
       </Card>
 
