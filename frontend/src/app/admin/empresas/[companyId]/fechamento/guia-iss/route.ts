@@ -7,6 +7,11 @@ import { documentoEmpresa } from "@/lib/formatters";
 // pra empresas estabelecidas nessa cidade.
 const IBGE_RIO_DE_JANEIRO = "3304557";
 
+// O fluxo real (login + eventual emissão da guia + exportar PDF) passa
+// por um Chromium de verdade (ver nota-carioca-service) e pode levar
+// mais de 1 minuto num site historicamente lento — folga generosa.
+export const maxDuration = 120;
+
 export async function GET(
   request: Request,
   props: { params: Promise<{ companyId: string }> },
@@ -54,11 +59,11 @@ export async function GET(
 
   let response: Response;
   try {
-    response = await fetch(`${process.env.NFSE_ENGINE_URL}/nota-carioca/guia-iss`, {
+    response = await fetch(`${process.env.NOTA_CARIOCA_SERVICE_URL}/guia-iss`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Internal-Token": process.env.NFSE_ENGINE_INTERNAL_TOKEN ?? "",
+        "X-Internal-Token": process.env.NOTA_CARIOCA_INTERNAL_TOKEN ?? "",
       },
       body: JSON.stringify({
         certificado: { pfx_base64: pfxBase64, senha },

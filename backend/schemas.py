@@ -178,8 +178,3 @@ class ParametrosServicoRequest(BaseModel):
     ambiente: Literal["producao", "producao_restrita"] = "producao_restrita"
     codigo_municipio: str
     codigo_servico: str
-
-
-class GuiaIssNotaCariocaRequest(BaseModel):
-    certificado: CertificadoIn
-    competencia: Optional[str] = None  # "YYYY-MM" — None = guia mais recente disponível

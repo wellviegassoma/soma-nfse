@@ -1,0 +1,14 @@
+# Serviço separado do nfse-engine principal (backend/) de propósito — só
+# esse serviço precisa de um Chromium real (Playwright), que é uma
+# dependência de build/runtime bem mais pesada (~300MB+, bibliotecas de
+# sistema via apt) do que o resto do projeto. Isolar num serviço próprio
+# evita que uma falha de build ou um pico de memória do Chromium afete o
+# nfse-engine (emissão de NFS-e, que já está em produção).
+#
+# Fase extra que roda DEPOIS da fase "install" padrão do provider Python
+# do Nixpacks (que já faz `pip install -r requirements.txt`), sem
+# substituir/reimplementar essa fase — só adiciona o passo de baixar o
+# Chromium e suas dependências de sistema (--with-deps chama apt-get).
+[phases.playwright_install]
+dependsOn = ["install"]
+cmds = ["playwright install --with-deps chromium"]

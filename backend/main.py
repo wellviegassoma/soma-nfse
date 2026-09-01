@@ -38,7 +38,6 @@ from auth import exigir_token_interno
 from certificado import carregar_certificado_pfx, limpar_certificado_temporario
 from certificado_temp import certificado_temporario
 from nfse_client import ClienteNFSeNacional
-from nota_carioca_client import ClienteNotaCarioca, ErroNotaCarioca
 from schemas import (
     BuscarNotasRequest,
     BuscarNotasResponse,
@@ -48,7 +47,6 @@ from schemas import (
     DiagnosticoBuscaOut,
     EmitirNotaRequest,
     EmitirNotaResponse,
-    GuiaIssNotaCariocaRequest,
     NotaEncontradaOut,
     ParametrosServicoRequest,
     RelatorioFaturamentoRequest,
@@ -227,18 +225,7 @@ def consultar_parametros_servico(req: ParametrosServicoRequest):
         raise HTTPException(status_code=422, detail=str(e))
 
 
-@app.post("/nota-carioca/guia-iss", dependencies=[Depends(exigir_token_interno)])
-def buscar_guia_iss_nota_carioca(req: GuiaIssNotaCariocaRequest):
-    pfx_bytes = base64.b64decode(req.certificado.pfx_base64)
-    try:
-        with certificado_temporario(pfx_bytes) as caminho_pfx:
-            cert_path, key_path = carregar_certificado_pfx(caminho_pfx, req.certificado.senha)
-            try:
-                with ClienteNotaCarioca(cert_path, key_path) as cliente:
-                    pdf_bytes = cliente.buscar_guia_iss(req.competencia)
-            finally:
-                limpar_certificado_temporario(cert_path, key_path)
-    except ErroNotaCarioca as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-    return Response(content=pdf_bytes, media_type="application/pdf")
+# A busca de guia de ISS (Nota Carioca) mudou pra um serviço separado —
+# ver nota-carioca-service/ na raiz do monorepo. Precisa de um Chromium
+# real (Playwright) pra contornar bloqueio de fingerprint TLS do site da
+# Prefeitura, dependência pesada demais pra colocar nesse serviço.
