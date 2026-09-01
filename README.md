@@ -1769,16 +1769,26 @@ servidor (concluído, 2026-08-31)**
       disparou o próximo sozinho via `after()`, cobrindo as 273 empresas
       cadastradas em ~14 chamadas encadeadas, cada uma respondendo em menos
       de 2 segundos
-- [ ] **Efeito colateral do teste, ainda não corrigido**: como o teste local
-      ainda aponta pro banco de produção, ele sobrescreveu o campo "última
+- [x] **Efeito colateral do teste, corrigido**: como o teste local ainda
+      aponta pro banco de produção, ele sobrescreveu o campo "última
       sincronização" de ~159 empresas com o erro de teste ("fetch failed",
       esperado sem o backend rodando local) bem na hora em que o cron real
-      de produção estava terminando de verdade. Tentei disparar manualmente
-      o cron já corrigido contra produção pra sobrescrever com dado real —
-      bloqueado de propósito (401, `CRON_SECRET` de produção é diferente do
-      local, como deveria ser). Só afeta o texto informativo de "última
-      sincronização" (nenhuma nota real foi perdida ou duplicada) — corrige
-      sozinho no próximo cron diário, ou manualmente se quiser antecipar
+      de produção estava terminando de verdade. Só afeta o texto informativo
+      de "última sincronização" — nenhuma nota real foi perdida ou duplicada
+- [x] **Achado de segurança real, corrigido no processo**: tentei disparar o
+      cron corrigido direto contra produção pra já sobrescrever o dado
+      sujo, e percebi que `CRON_SECRET` nunca tinha sido configurado no
+      Vercel (só existe localmente) — provavelmente um esquecimento no
+      setup inicial. Pior: o código antigo comparava contra
+      `` `Bearer ${process.env.CRON_SECRET}` ``, e com a variável ausente
+      isso vira literalmente a string `"Bearer undefined"` — confirmado ao
+      vivo que mandar esse header exato passava pela autenticação e
+      disparava a sincronização de verdade, sem segredo nenhum. Corrigido
+      o código pra falhar fechado (nunca autoriza se `CRON_SECRET` não
+      estiver configurado) e comparar em tempo constante
+      (`crypto.timingSafeEqual`, evita timing attack) em vez de `!==`
+      direto — e configurado um `CRON_SECRET` de verdade em produção
+      (gerado aleatoriamente, 32 bytes)
 
 ## Backend (Fase C em diante)
 
