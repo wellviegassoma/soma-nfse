@@ -1865,10 +1865,25 @@ servidor (concluído, 2026-08-31)**
       função escrita DEPOIS da Fase Q — eu esqueci de aplicar o mesmo
       helper (`documentoEmpresa()`) que já uso em `notas.ts`/`sync-notas.ts`
       pra esse exato problema
-- [ ] Corrigido: `gerarZipDaEmpresa` e o select de `processarEmpresaExportacao`
-      passaram a considerar `cpf` também, via `documentoEmpresa()` —
-      validação ao vivo (rodar de novo contra produção e confirmar que as
-      18 PF entram) ainda em andamento
+- [x] Corrigido: `gerarZipDaEmpresa` e o select de `processarEmpresaExportacao`
+      passaram a considerar `cpf` também, via `documentoEmpresa()`
+- [x] Validado ao vivo: rodado "Baixar tudo (ZIP)" de novo contra produção
+      pra agosto/2026 — `exportacoes_fechamento` fechou em 117/117
+      (`progresso_atual = progresso_total`, sem nenhuma falha), e conferido
+      byte a byte que o ZIP final contém a pasta das 17 empresas PF que
+      antes falhavam e que de fato têm nota em agosto (a 18ª do diagnóstico
+      original, "Mauriano Machado Ferraz (CEI)", conferida direto no banco:
+      zero notas em agosto — corretamente fora do ZIP, mesmo comportamento
+      que qualquer empresa PJ sem nota no mês teria)
+- [x] Achado à parte durante essa validação (não é do escopo desta
+      correção, sinalizado como próximo passo): duas empresas com
+      `trade_name`/`legal_name` idênticos ("CLINICA MEDICA AMILCAR MARTINS
+      BETTINI LTDA", cadastros diferentes) fazem `gerarZipDaEmpresa` colidir
+      no mesmo nome de pasta dentro do ZIP final — `zip.folder(nomeArquivo(...))`
+      não desambigua por `company.id`. Não perde dado (os arquivos das duas
+      entram, só ficam misturados na mesma pasta), mas confunde quem abre o
+      ZIP. Ajuste natural: incluir um sufixo curto do `company.id` no nome
+      da pasta quando houver colisão
 
 ## Backend (Fase C em diante)
 
