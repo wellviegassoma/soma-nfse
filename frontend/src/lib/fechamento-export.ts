@@ -1,6 +1,7 @@
 import "server-only";
 import JSZip from "jszip";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 
 export function nomeArquivo(texto: string): string {
   return (
@@ -23,6 +24,33 @@ export function primeiroDiaMesSeguinte(competencia: string): string {
 
 type CompanyExport = { id: string; cnpj: string | null; legal_name: string; trade_name: string | null };
 
+type NotaExport = {
+  nsu: string | number;
+  chave_acesso: string | null;
+  data_emissao: string | null;
+  xml: string;
+  prestador_cnpj: string | null;
+  tomador_cnpj: string | null;
+  numero: string | null;
+  competencia: string | null;
+  tomador_nome: string | null;
+  prestador_nome: string | null;
+  descricao_servico: string | null;
+  local_incidencia: string | null;
+  codigo_trib_nacional: string | null;
+  codigo_nbs: string | null;
+  aliquota_issqn: number | null;
+  valor_servico: number | null;
+  valor_issqn: number | null;
+  valor_pis: number | null;
+  valor_cofins: number | null;
+  valor_ret_cp: number | null;
+  valor_ret_irrf: number | null;
+  cancelada: boolean;
+  motivo_cancelamento: string | null;
+  bate_competencia: boolean;
+};
+
 /**
  * Gera o ZIP de UMA empresa (XML + PDF de cada nota + relatório
  * consolidado) pra competência pedida. Retorna null se a empresa não tem
@@ -43,16 +71,22 @@ export async function gerarZipDaEmpresa(
   const ano = Number(anoStr);
   const mes = Number(mesStr);
 
-  const { data: notas } = await supabase
-    .from("notas_distribuidas")
-    .select(
-      "nsu, chave_acesso, data_emissao, xml, prestador_cnpj, tomador_cnpj, numero, competencia, tomador_nome, prestador_nome, descricao_servico, local_incidencia, codigo_trib_nacional, codigo_nbs, aliquota_issqn, valor_servico, valor_issqn, valor_pis, valor_cofins, valor_ret_cp, valor_ret_irrf, cancelada, motivo_cancelamento, bate_competencia",
-    )
-    .eq("company_id", company.id)
-    .gte("competencia", `${competencia}-01`)
-    .lt("competencia", primeiroDiaMesSeguinte(competencia));
+  // Paginado — mesmo raciocínio de `iniciarExportacaoFechamento`: uma
+  // empresa isolada não deveria chegar perto de 1000 notas num mês hoje,
+  // mas nada garante isso pra sempre, e o custo de paginar aqui é zero.
+  const notas = await buscarTudoPaginado<NotaExport>((from, to) =>
+    supabase
+      .from("notas_distribuidas")
+      .select(
+        "nsu, chave_acesso, data_emissao, xml, prestador_cnpj, tomador_cnpj, numero, competencia, tomador_nome, prestador_nome, descricao_servico, local_incidencia, codigo_trib_nacional, codigo_nbs, aliquota_issqn, valor_servico, valor_issqn, valor_pis, valor_cofins, valor_ret_cp, valor_ret_irrf, cancelada, motivo_cancelamento, bate_competencia",
+      )
+      .eq("company_id", company.id)
+      .gte("competencia", `${competencia}-01`)
+      .lt("competencia", primeiroDiaMesSeguinte(competencia))
+      .range(from, to),
+  );
 
-  if (!notas || notas.length === 0) return null;
+  if (notas.length === 0) return null;
 
   const zip = new JSZip();
   const pastaEmpresa = zip.folder(nomeArquivo(company.trade_name || company.legal_name));

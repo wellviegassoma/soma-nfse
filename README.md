@@ -1816,12 +1816,37 @@ servidor (concluído, 2026-08-31)**
 - [x] `ExportarZipButton.tsx` mostra "X/Y empresas" durante o processamento
       e um link de download quando terminar — a rota antiga
       (`/admin/fechamento/exportar`, tudo numa chamada só) foi removida
-- [x] Validado ao vivo contra dado real de produção (agosto/2026, 26
-      empresas com nota): job completo do início ao fim, ZIP final de
-      6,7MB baixado com sucesso (sem os PDFs — backend local não estava
-      disponível pro teste, mas o XML de cada nota, que é o documento
-      fiscal válido, saiu certo), confirmado que os ZIPs intermediários de
-      cada empresa foram apagados do Blob depois da junção. Job e arquivo
+- [x] Validado ao vivo contra dado real de produção (agosto/2026): job
+      completo do início ao fim, ZIP final baixado com sucesso (sem os
+      PDFs — backend local não estava disponível pro teste, mas o XML de
+      cada nota, que é o documento fiscal válido, saiu certo), confirmado
+      que os ZIPs intermediários de cada empresa foram apagados do Blob
+      depois da junção
+
+**Correção — exportação perdendo empresa silenciosamente (concluído,
+2026-09-01)**
+- [x] Usuário reportou que o ZIP de agosto/2026 só trouxe 26 empresas —
+      número exatamente igual ao do meu teste de validação, o que já era
+      suspeito. Causa: `iniciarExportacaoFechamento` buscava as empresas
+      com nota via um `.select("company_id")` sem paginar contra
+      `notas_distribuidas` — e o PostgREST (por trás do Supabase) corta
+      silenciosamente qualquer consulta sem `.range()` em 1000 linhas. Com
+      3.603 notas em agosto, só as primeiras 1000 (26 empresas) entravam
+      na exportação — as outras 91 empresas ficavam de fora sem erro
+      nenhum. Esse é o mesmo bug já documentado em `lib/supabase/
+      paginacao.ts`, que existe justamente por essa tabela já ter causado
+      isso antes na Visão geral — eu simplesmente não usei o helper que já
+      existia pra isso
+- [x] Corrigido usando `buscarTudoPaginado` (já usado em outros lugares do
+      projeto) tanto na consulta de "quais empresas têm nota" quanto na
+      consulta de notas por empresa dentro de `gerarZipDaEmpresa` (essa
+      segunda não tinha esse problema ainda — nenhuma empresa isolada
+      passou de 1000 notas num mês —, mas corrigida por segurança, já que o
+      custo de paginar é zero)
+- [x] Validado ao vivo: reconferido o número certo de empresas com nota em
+      agosto/2026 direto no banco com paginação manual (117, não 26) e
+      rodado o "Baixar tudo (ZIP)" de novo do zero — progresso foi
+      corretamente até 117/117 e o ZIP final saiu com todas. Job e arquivo
       de teste removidos depois de validado
 
 ## Backend (Fase C em diante)

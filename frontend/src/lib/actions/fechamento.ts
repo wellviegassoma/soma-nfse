@@ -11,6 +11,7 @@ import {
 import { classificarDirecao } from "@/lib/notas-distribuidas";
 import { extrairNotaDeXml, type NotaExtraidaXml } from "@/lib/xml-nota";
 import { gerarZipDaEmpresa } from "@/lib/fechamento-export";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { put, del, get } from "@vercel/blob";
 import JSZip from "jszip";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -324,14 +325,21 @@ export async function iniciarExportacaoFechamento(
   const admin = createAdminClient();
 
   // Só as empresas que de fato têm nota nessa competência — evita
-  // desperdiçar uma chamada por empresa sem nada pra exportar.
-  const { data: notas } = await admin
-    .from("notas_distribuidas")
-    .select("company_id")
-    .gte("competencia", `${competencia}-01`)
-    .lt("competencia", primeiroDiaMesSeguinteLocal(competencia));
+  // desperdiçar uma chamada por empresa sem nada pra exportar. Paginado
+  // (`buscarTudoPaginado`) porque `notas_distribuidas` já cruzou o limite
+  // padrão de 1000 linhas por requisição do PostgREST — sem isso, um mês
+  // com muita nota perde empresa da exportação silenciosamente (mesmo
+  // problema já visto antes na Visão geral, ver `lib/supabase/paginacao.ts`).
+  const notas = await buscarTudoPaginado<{ company_id: string }>((from, to) =>
+    admin
+      .from("notas_distribuidas")
+      .select("company_id")
+      .gte("competencia", `${competencia}-01`)
+      .lt("competencia", primeiroDiaMesSeguinteLocal(competencia))
+      .range(from, to),
+  );
 
-  const idsComNota = [...new Set((notas ?? []).map((n) => n.company_id))];
+  const idsComNota = [...new Set(notas.map((n) => n.company_id))];
   if (idsComNota.length === 0) {
     return { error: "Nenhuma nota encontrada nessa competência." };
   }
