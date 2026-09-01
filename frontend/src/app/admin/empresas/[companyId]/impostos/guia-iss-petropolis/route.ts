@@ -64,6 +64,8 @@ export async function GET(
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="guia-iss-petropolis-${competencia ?? "atual"}.pdf"`,
+      "X-Valor-Servicos": response.headers.get("X-Valor-Servicos") ?? "",
+      "X-Valor-Iss": response.headers.get("X-Valor-Iss") ?? "",
     },
   });
 }

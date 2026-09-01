@@ -32,6 +32,12 @@ configuradas via variável de ambiente, nunca a senha em texto.
 4. POST emissao_boleto.php?st_cartao=1 com esses campos + bt_boleto=0 —
    devolve o PDF da guia diretamente (confirmado: PDF válido com linha
    digitável real).
+5. GET iss-consulta_periodos.php?mesano=MMAAAA — mostra um resumo por
+   tipo de tributação (TRIB.M, ISENTO, TRIB.F, IMUNE, SUSP.J, SUSP.A),
+   cada linha com valor de serviços + ISS da coluna "Normal". A soma
+   dessas linhas bate exatamente com o "Valor Total"/"Valor Imposto"
+   mostrado na tela de consolidação — é o valor de serviços que gerou a
+   guia, útil pra conferir contra o faturamento já registrado no SOMA.
 
 IMPORTANTE — isso só busca guia de um período JÁ CONSOLIDADO. A
 consolidação do período (fechamento do movimento econômico do mês,
@@ -73,19 +79,29 @@ def _somente_digitos(texto: str) -> str:
     return re.sub(r"\D", "", texto)
 
 
-def _mes_esperado_do_vencimento(vencimento: str) -> int | None:
+def _valor_para_float(texto: str) -> float:
+    """'55.300,00' -> 55300.0"""
+    return float(texto.strip().replace(".", "").replace(",", "."))
+
+
+_REGEX_DATA = re.compile(r"^\d{2}/\d{2}/\d{4}$")
+
+
+def _competencia_do_vencimento(vencimento: str) -> tuple[int, int] | None:
     """
     ISS Variável em Petrópolis vence no dia 10 do mês seguinte à
     competência (confirmado ao vivo: competência 08/2026 → vencimento
-    10/09/2026) — usado só como heurística pra casar "competência
-    pedida" com a linha certa quando há mais de um débito em aberto.
+    10/09/2026) — usado como heurística pra casar "competência pedida"
+    com a linha certa quando há mais de um débito em aberto. Devolve
+    (ano, mes) da competência, não do vencimento.
     """
     m = re.match(r"\d{2}/(\d{2})/(\d{4})", vencimento)
     if not m:
         return None
     mes_vencimento, ano_vencimento = int(m.group(1)), int(m.group(2))
-    mes_competencia = mes_vencimento - 1 if mes_vencimento > 1 else 12
-    return mes_competencia
+    if mes_vencimento > 1:
+        return ano_vencimento, mes_vencimento - 1
+    return ano_vencimento - 1, 12
 
 
 class ClientePetropolis:
@@ -96,7 +112,8 @@ class ClientePetropolis:
 
     Uso:
         with ClientePetropolis() as cliente:
-            pdf_bytes = cliente.buscar_guia_iss(cnpj_empresa, "2026-08")
+            pdf_bytes, resumo = cliente.buscar_guia_iss(cnpj_empresa, "2026-08")
+            # resumo = {"valor_servicos": 55300.0, "valor_iss": 1106.0}
     """
 
     def __init__(self):
@@ -147,11 +164,21 @@ class ClientePetropolis:
         empresa_id = opcoes[0].get("value")
         self._sessao.post(LOGIN_URL, data={"clientes": empresa_id}, timeout=30)
 
-    def _extrair_linha_debito(self, html: str, mes_alvo: int | None) -> dict[str, str] | None:
+    def _extrair_linha_debito(
+        self, html: str, ano_mes_alvo: tuple[int, int] | None
+    ) -> tuple[dict[str, str], tuple[int, int]] | None:
+        """
+        Devolve (campos_do_form, (ano, mes)_da_competencia) da linha de
+        débito escolhida. A competência de cada linha é derivada do
+        "Vencimento" VISÍVEL na tabela (não do campo oculto dt_corrige,
+        que é só a data de hoje usada pra cálculo de correção — mesmo
+        valor em todas as linhas, não identifica a linha).
+        """
         tree = lxml_html.fromstring(html)
-        formularios = tree.xpath("//form[@name='AForm']")
-        candidatos = []
-        for form in formularios:
+        linhas = tree.xpath("//tr[.//form[@name='AForm']]")
+        candidatos: list[tuple[dict[str, str], tuple[int, int]]] = []
+        for linha in linhas:
+            form = linha.xpath(".//form[@name='AForm']")[0]
             campos = {}
             for nome in _CAMPOS_BOLETO:
                 els = form.xpath(f".//input[@name='{nome}']")
@@ -159,22 +186,56 @@ class ClientePetropolis:
                     break
                 campos[nome] = els[0].get("value", "")
             else:
-                candidatos.append(campos)
+                textos = linha.xpath(".//td/div[@align='center']/text()")
+                datas = [t.strip() for t in textos if _REGEX_DATA.match(t.strip())]
+                if not datas:
+                    continue
+                competencia_linha = _competencia_do_vencimento(datas[0])
+                if competencia_linha is not None:
+                    candidatos.append((campos, competencia_linha))
 
         if not candidatos:
             return None
-        if mes_alvo is None:
+        if ano_mes_alvo is None:
             return candidatos[0]
-        for campos in candidatos:
-            if _mes_esperado_do_vencimento(campos["dt_corrige"]) == mes_alvo:
-                return campos
+        for campos, competencia_linha in candidatos:
+            if competencia_linha == ano_mes_alvo:
+                return campos, competencia_linha
         return None
 
-    def buscar_guia_iss(self, cnpj: str, competencia: str | None = None) -> bytes:
-        mes_alvo: int | None = None
+    def _consultar_resumo_periodo(self, ano: int, mes: int) -> dict[str, float]:
+        """
+        Soma, por tipo de tributação (TRIB.M/ISENTO/TRIB.F/IMUNE/SUSP.J/
+        SUSP.A), a coluna "Normal" de valor de serviços e ISS — o total
+        bate com o que a tela de consolidação mostrou como "Valor Total"
+        e "Valor Imposto" (confirmado ao vivo).
+        """
+        mesano = f"{mes:02d}{ano:04d}"
+        resp = self._sessao.get(
+            f"{BASE_URL}/iss-consulta_periodos.php", params={"mesano": mesano}, timeout=30
+        )
+        tree = lxml_html.fromstring(resp.text)
+        linhas = tree.xpath("//tr[td/div/strong]")
+        total_servicos = 0.0
+        total_iss = 0.0
+        for linha in linhas:
+            tds = linha.xpath("./td")
+            if len(tds) < 3:
+                continue
+            try:
+                total_servicos += _valor_para_float(tds[1].text_content())
+                total_iss += _valor_para_float(tds[2].text_content())
+            except ValueError:
+                continue
+        return {"valor_servicos": total_servicos, "valor_iss": total_iss}
+
+    def buscar_guia_iss(
+        self, cnpj: str, competencia: str | None = None
+    ) -> tuple[bytes, dict[str, float]]:
+        ano_mes_alvo: tuple[int, int] | None = None
         if competencia:
-            _, mes_str = competencia.split("-")
-            mes_alvo = int(mes_str)
+            ano_str, mes_str = competencia.split("-")
+            ano_mes_alvo = (int(ano_str), int(mes_str))
 
         self._selecionar_empresa_por_cnpj(cnpj)
 
@@ -189,12 +250,13 @@ class ClientePetropolis:
                 "consolidado manualmente no site antes de gerar a guia."
             )
 
-        campos = self._extrair_linha_debito(resp.text, mes_alvo)
-        if campos is None:
+        resultado = self._extrair_linha_debito(resp.text, ano_mes_alvo)
+        if resultado is None:
             raise ErroPetropolis(
                 f"Nenhuma guia pendente encontrada para a competência "
                 f"{competencia or 'atual'}."
             )
+        campos, (ano, mes) = resultado
 
         r = self._sessao.post(
             f"{BASE_URL}/emissao_boleto.php",
@@ -204,4 +266,6 @@ class ClientePetropolis:
         )
         if "pdf" not in r.headers.get("content-type", "").lower():
             raise ErroPetropolis("Não foi possível gerar o PDF da guia de ISS.")
-        return r.content
+
+        resumo = self._consultar_resumo_periodo(ano, mes)
+        return r.content, resumo

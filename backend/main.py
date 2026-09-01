@@ -237,8 +237,15 @@ def consultar_parametros_servico(req: ParametrosServicoRequest):
 def buscar_guia_iss_petropolis(req: GuiaIssPetropolisRequest):
     try:
         with ClientePetropolis() as cliente:
-            pdf_bytes = cliente.buscar_guia_iss(req.cnpj, req.competencia)
+            pdf_bytes, resumo = cliente.buscar_guia_iss(req.cnpj, req.competencia)
     except ErroPetropolis as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    return Response(content=pdf_bytes, media_type="application/pdf")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "X-Valor-Servicos": f"{resumo['valor_servicos']:.2f}",
+            "X-Valor-Iss": f"{resumo['valor_iss']:.2f}",
+        },
+    )

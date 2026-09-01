@@ -110,7 +110,11 @@ export default async function ImpostosPage(
         <BuscarGuiaIssButton companyId={companyId} competencia={competencia} />
       )}
       {company.municipality_ibge_code === IBGE_PETROPOLIS && (
-        <BuscarGuiaIssPetropolisButton companyId={companyId} competencia={competencia} />
+        <BuscarGuiaIssPetropolisButton
+          companyId={companyId}
+          competencia={competencia}
+          faturamentoSoma={receitaMes}
+        />
       )}
     </>
   );
