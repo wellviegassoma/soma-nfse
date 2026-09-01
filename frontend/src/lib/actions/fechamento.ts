@@ -379,17 +379,31 @@ export async function processarEmpresaExportacao(
     .single();
   if (!company) return { error: "Empresa não encontrada." };
 
-  try {
-    const zipBytes = await gerarZipDaEmpresa(admin, company, competencia);
-    if (zipBytes) {
-      await put(`fechamento-export/${exportacaoId}/${companyId}.zip`, Buffer.from(zipBytes), {
-        access: "private",
-        addRandomSuffix: false,
-      });
+  // Retry curto — visto em produção que uma pequena fração das empresas
+  // falha numa passada só (provável instabilidade pontual na consulta ao
+  // banco ou na geração do PDF), derrubando a empresa da exportação
+  // silenciosamente. Poucas tentativas já resolve a maioria dos casos.
+  const MAX_TENTATIVAS = 3;
+  let ultimoErro: string = "Falha ao gerar o ZIP da empresa.";
+  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+    try {
+      const zipBytes = await gerarZipDaEmpresa(admin, company, competencia);
+      if (zipBytes) {
+        await put(`fechamento-export/${exportacaoId}/${companyId}.zip`, Buffer.from(zipBytes), {
+          access: "private",
+          addRandomSuffix: false,
+        });
+      }
+      ultimoErro = "";
+      break;
+    } catch (e) {
+      ultimoErro = e instanceof Error ? e.message : "Falha ao gerar o ZIP da empresa.";
+      if (tentativa < MAX_TENTATIVAS) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * tentativa));
+      }
     }
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "Falha ao gerar o ZIP da empresa." };
   }
+  if (ultimoErro) return { error: ultimoErro };
 
   const { data: atual } = await admin
     .from("exportacoes_fechamento")
@@ -408,18 +422,22 @@ export async function finalizarExportacaoFechamento(
   exportacaoId: string,
   competencia: string,
   empresaIds: string[],
-): Promise<{ ok: true } | { error: string }> {
+): Promise<{ ok: true; empresasFaltando: string[] } | { error: string }> {
   await requireSomaStaff();
   const admin = createAdminClient();
 
   const zipFinal = new JSZip();
   const pathnamesParaApagar: string[] = [];
+  const empresasFaltando: string[] = [];
 
   for (const companyId of empresaIds) {
     const pathname = `fechamento-export/${exportacaoId}/${companyId}.zip`;
     try {
       const blob = await get(pathname, { access: "private" });
-      if (!blob || blob.statusCode !== 200) continue;
+      if (!blob || blob.statusCode !== 200) {
+        empresasFaltando.push(companyId);
+        continue;
+      }
       const chunks: Uint8Array[] = [];
       const reader = blob.stream.getReader();
       while (true) {
@@ -435,7 +453,10 @@ export async function finalizarExportacaoFechamento(
       }
       pathnamesParaApagar.push(pathname);
     } catch {
-      // Empresa sem ZIP gerado (sem nota, ou falhou antes) — segue sem ela.
+      // Falha lendo/juntando o ZIP dessa empresa — reportada, não some em
+      // silêncio (empresa sem nota nenhuma nunca chega a ter um ZIP
+      // gerado pra começo de conversa, então não aparece aqui).
+      empresasFaltando.push(companyId);
     }
   }
 
@@ -450,7 +471,7 @@ export async function finalizarExportacaoFechamento(
 
   await Promise.all(pathnamesParaApagar.map((p) => del(p).catch(() => {})));
 
-  return { ok: true };
+  return { ok: true, empresasFaltando };
 }
 
 // Cópia local — evita importar de fechamento-export.ts só por causa dessa
