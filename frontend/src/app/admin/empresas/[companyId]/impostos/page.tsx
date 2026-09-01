@@ -23,12 +23,14 @@ import { buscarAtividade, type TratamentoAtividade } from "@/lib/simples-naciona
 import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
 import { DeclararPgdasCard } from "./DeclararPgdasCard";
 import { BuscarGuiaIssButton } from "./BuscarGuiaIssButton";
+import { BuscarGuiaIssPetropolisButton } from "./BuscarGuiaIssPetropolisButton";
 
 // Código IBGE do município do Rio de Janeiro — o Nota Carioca só existe
 // pra empresas estabelecidas nessa cidade, e só pra quem paga ISS por
 // guia própria (Lucro Presumido/Real) — quem é Simples Nacional paga o
 // ISS embutido no DAS, não gera guia separada.
 const IBGE_RIO_DE_JANEIRO = "3304557";
+const IBGE_PETROPOLIS = "3303906";
 
 const BADGE_POR_TRATAMENTO: Record<TratamentoAtividade, string> = {
   ANEXO_III_FIXO: "bg-green-100 text-green-900",
@@ -99,10 +101,18 @@ export default async function ImpostosPage(
     </Card>
   );
 
-  // Só existe guia própria de ISS no Nota Carioca pra empresa do Rio que
-  // não seja Simples Nacional (Simples paga o ISS embutido no DAS).
-  const guiaIssBotao = company.municipality_ibge_code === IBGE_RIO_DE_JANEIRO && (
-    <BuscarGuiaIssButton companyId={companyId} competencia={competencia} />
+  // Só existe guia própria de ISS pra empresa que não seja Simples
+  // Nacional (Simples paga o ISS embutido no DAS) — o sistema usado
+  // depende do município.
+  const guiaIssBotao = (
+    <>
+      {company.municipality_ibge_code === IBGE_RIO_DE_JANEIRO && (
+        <BuscarGuiaIssButton companyId={companyId} competencia={competencia} />
+      )}
+      {company.municipality_ibge_code === IBGE_PETROPOLIS && (
+        <BuscarGuiaIssPetropolisButton companyId={companyId} competencia={competencia} />
+      )}
+    </>
   );
 
   if (!company.tax_regime) {

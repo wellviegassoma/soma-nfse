@@ -38,6 +38,7 @@ from auth import exigir_token_interno
 from certificado import carregar_certificado_pfx, limpar_certificado_temporario
 from certificado_temp import certificado_temporario
 from nfse_client import ClienteNFSeNacional
+from petropolis_client import ClientePetropolis, ErroPetropolis
 from schemas import (
     BuscarNotasRequest,
     BuscarNotasResponse,
@@ -47,6 +48,7 @@ from schemas import (
     DiagnosticoBuscaOut,
     EmitirNotaRequest,
     EmitirNotaResponse,
+    GuiaIssPetropolisRequest,
     NotaEncontradaOut,
     ParametrosServicoRequest,
     RelatorioFaturamentoRequest,
@@ -229,3 +231,14 @@ def consultar_parametros_servico(req: ParametrosServicoRequest):
 # ver nota-carioca-service/ na raiz do monorepo. Precisa de um Chromium
 # real (Playwright) pra contornar bloqueio de fingerprint TLS do site da
 # Prefeitura, dependência pesada demais pra colocar nesse serviço.
+
+
+@app.post("/petropolis/guia-iss", dependencies=[Depends(exigir_token_interno)])
+def buscar_guia_iss_petropolis(req: GuiaIssPetropolisRequest):
+    try:
+        with ClientePetropolis() as cliente:
+            pdf_bytes = cliente.buscar_guia_iss(req.cnpj, req.competencia)
+    except ErroPetropolis as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return Response(content=pdf_bytes, media_type="application/pdf")
