@@ -1789,6 +1789,40 @@ servidor (concluído, 2026-08-31)**
       (`crypto.timingSafeEqual`, evita timing attack) em vez de `!==`
       direto — e configurado um `CRON_SECRET` de verdade em produção
       (gerado aleatoriamente, 32 bytes)
+- [x] Disparei o cron corrigido contra produção pra reprocessar as ~159
+      empresas sujas pelo teste — confirmado que corrigiu todas (verificado
+      contra o banco em tempo real, acompanhando o progresso)
+
+**Correção — "Baixar tudo (ZIP)" também estourava o tempo limite (concluído,
+2026-09-01)**
+- [x] Mesmo dia, mesmo padrão: usuário reportou 504 Gateway Timeout ao
+      clicar em "Baixar tudo (ZIP)" no Fechamento. Causa raiz diferente das
+      anteriores (não é rede instável, é volume real): a rota gerava um PDF
+      (DANFSe) por nota chamando o backend sequencialmente, uma de cada vez
+      — e agosto/2026 sozinho já tem **3.603 notas**. Nenhuma quantidade de
+      paralelismo dentro de uma única resposta HTTP resolveria isso de
+      forma duradoura, então virou um job em lotes por empresa, com
+      progresso, em vez de tentar tudo numa chamada só
+- [x] Nova tabela `exportacoes_fechamento` (status, progresso, caminho do
+      ZIP final no Blob). `iniciarExportacaoFechamento` cria o job listando
+      só as empresas que têm nota na competência (evita processar quem não
+      tem nada pra exportar). `processarEmpresaExportacao` — chamada uma
+      empresa por vez a partir do navegador, mesmo padrão dos outros
+      consertos de hoje — gera o ZIP daquela empresa (XML + PDF de cada
+      nota, com até 8 chamadas de PDF em paralelo já que é renderização
+      local no backend, não bate em servidor do governo) e guarda no Vercel
+      Blob. `finalizarExportacaoFechamento` junta os ZIPs de cada empresa
+      num ZIP final, apaga os intermediários, e marca o job como pronto
+- [x] `ExportarZipButton.tsx` mostra "X/Y empresas" durante o processamento
+      e um link de download quando terminar — a rota antiga
+      (`/admin/fechamento/exportar`, tudo numa chamada só) foi removida
+- [x] Validado ao vivo contra dado real de produção (agosto/2026, 26
+      empresas com nota): job completo do início ao fim, ZIP final de
+      6,7MB baixado com sucesso (sem os PDFs — backend local não estava
+      disponível pro teste, mas o XML de cada nota, que é o documento
+      fiscal válido, saiu certo), confirmado que os ZIPs intermediários de
+      cada empresa foram apagados do Blob depois da junção. Job e arquivo
+      de teste removidos depois de validado
 
 ## Backend (Fase C em diante)
 

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { BuscarTodasButton } from "./BuscarTodasButton";
 import { BuscarHistoricoTodasButton } from "./BuscarHistoricoTodasButton";
+import { ExportarZipButton } from "./ExportarZipButton";
 
 export const metadata = { title: "Fechamento — Painel SOMA" };
 export const maxDuration = 300;
@@ -61,11 +62,7 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
               </Field>
             </div>
             <Button type="submit">Aplicar</Button>
-            <a href={`/admin/fechamento/exportar?competencia=${competencia}`}>
-              <Button type="button" variant="secondary">
-                Baixar tudo (ZIP)
-              </Button>
-            </a>
+            <ExportarZipButton competencia={competencia} />
             <a href="/admin/fechamento/importar">
               <Button type="button" variant="secondary">
                 Importar XML
