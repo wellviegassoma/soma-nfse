@@ -23,6 +23,7 @@ import base64
 import tempfile
 from pathlib import Path
 
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()  # só facilita rodar localmente com backend/.env — em produção
@@ -38,6 +39,7 @@ from auth import exigir_token_interno
 from certificado import carregar_certificado_pfx, limpar_certificado_temporario
 from certificado_temp import certificado_temporario
 from nfse_client import ClienteNFSeNacional
+from nota_carioca_client import ClienteNotaCarioca, ErroNotaCarioca
 from schemas import (
     BuscarNotasRequest,
     BuscarNotasResponse,
@@ -47,6 +49,7 @@ from schemas import (
     DiagnosticoBuscaOut,
     EmitirNotaRequest,
     EmitirNotaResponse,
+    GuiaIssNotaCariocaRequest,
     NotaEncontradaOut,
     ParametrosServicoRequest,
     RelatorioFaturamentoRequest,
@@ -223,3 +226,61 @@ def consultar_parametros_servico(req: ParametrosServicoRequest):
                 limpar_certificado_temporario(cert_path, key_path)
     except ErroSefinNacional as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+# TEMPORÁRIO — diagnóstico do bloqueio de TLS visto no notacarioca.rio.gov.br
+# a partir do ambiente de dev local (ConnectionResetError no handshake com
+# certificado). Serve só pra confirmar se o Railway (rede de produção) tem o
+# mesmo problema ou não. Remover depois de concluído o diagnóstico.
+@app.post("/nota-carioca/diagnostico", dependencies=[Depends(exigir_token_interno)])
+def diagnostico_tls_nota_carioca(req: GuiaIssNotaCariocaRequest | None = None):
+    import nota_carioca_client as ncc
+
+    resultado: dict = {}
+
+    sessao_sem_cert = requests.Session()
+    sessao_sem_cert.mount("https://", ncc._AdaptadorTLS12())
+    sessao_sem_cert.headers.update({"User-Agent": ncc._USER_AGENT})
+    try:
+        r = sessao_sem_cert.get(ncc.LOGIN_URL, timeout=20)
+        resultado["sem_certificado"] = {"status": r.status_code, "tamanho": len(r.text)}
+    except Exception as e:
+        resultado["sem_certificado"] = {"erro": repr(e)}
+
+    if req is not None:
+        pfx_bytes = base64.b64decode(req.certificado.pfx_base64)
+        with certificado_temporario(pfx_bytes) as caminho_pfx:
+            cert_path, key_path = carregar_certificado_pfx(caminho_pfx, req.certificado.senha)
+            try:
+                sessao_com_cert = requests.Session()
+                sessao_com_cert.cert = (cert_path, key_path)
+                sessao_com_cert.mount("https://", ncc._AdaptadorTLS12())
+                sessao_com_cert.headers.update({"User-Agent": ncc._USER_AGENT})
+                r2 = sessao_com_cert.get(ncc.LOGIN_URL, timeout=20)
+                resultado["com_certificado"] = {
+                    "status": r2.status_code,
+                    "identificado": "identificado com sucesso" in r2.text.lower(),
+                }
+            except Exception as e:
+                resultado["com_certificado"] = {"erro": repr(e)}
+            finally:
+                limpar_certificado_temporario(cert_path, key_path)
+
+    return resultado
+
+
+@app.post("/nota-carioca/guia-iss", dependencies=[Depends(exigir_token_interno)])
+def buscar_guia_iss_nota_carioca(req: GuiaIssNotaCariocaRequest):
+    pfx_bytes = base64.b64decode(req.certificado.pfx_base64)
+    try:
+        with certificado_temporario(pfx_bytes) as caminho_pfx:
+            cert_path, key_path = carregar_certificado_pfx(caminho_pfx, req.certificado.senha)
+            try:
+                with ClienteNotaCarioca(cert_path, key_path) as cliente:
+                    pdf_bytes = cliente.buscar_guia_iss(req.competencia)
+            finally:
+                limpar_certificado_temporario(cert_path, key_path)
+    except ErroNotaCarioca as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return Response(content=pdf_bytes, media_type="application/pdf")

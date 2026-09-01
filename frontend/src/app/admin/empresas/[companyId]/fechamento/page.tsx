@@ -7,6 +7,11 @@ import { Alert } from "@/components/ui/Alert";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { BuscarAgoraButton } from "./BuscarAgoraButton";
 import { BuscarHistoricoButton } from "./BuscarHistoricoButton";
+import { BuscarGuiaIssButton } from "./BuscarGuiaIssButton";
+
+// Código IBGE do município do Rio de Janeiro — o Nota Carioca só existe
+// pra empresas estabelecidas nessa cidade.
+const IBGE_RIO_DE_JANEIRO = "3304557";
 
 export const metadata = { title: "Fechamento — Painel SOMA" };
 export const maxDuration = 300;
@@ -56,7 +61,7 @@ export default async function AdminFechamentoPage(
     supabase
       .from("companies")
       .select(
-        "cnpj, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
+        "cnpj, municipality_ibge_code, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
       )
       .eq("id", companyId)
       .single(),
@@ -122,7 +127,12 @@ export default async function AdminFechamentoPage(
             <BuscarAgoraButton companyId={companyId} competencia={competencia} />
           </div>
         </div>
-        <div className="mt-4 flex justify-end border-t border-border pt-4">
+        <div className="mt-4 flex items-start justify-between gap-4 border-t border-border pt-4">
+          {company?.municipality_ibge_code === IBGE_RIO_DE_JANEIRO ? (
+            <BuscarGuiaIssButton companyId={companyId} competencia={competencia} />
+          ) : (
+            <span />
+          )}
           <BuscarHistoricoButton companyId={companyId} />
         </div>
       </Card>
