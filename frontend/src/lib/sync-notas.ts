@@ -209,17 +209,35 @@ export async function syncOneCompany(
   }
 }
 
+export type ResultadoLoteSincronizacao = {
+  resultados: ResultadoSincronizacao[];
+  totalEmpresas: number;
+  temMais: boolean;
+};
+
+// Paginação opcional: sem ela, processa TODAS as empresas na mesma
+// chamada (uso antigo). Com ela, processa só a fatia pedida e informa se
+// ainda sobra empresa — usado pelo cron pra se encadear em lotes, sem
+// nenhuma chamada individual chegar perto do tempo limite da função
+// serverless (ver `app/api/cron/sync-notas/route.ts`).
 export async function syncAllCompanies(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: SupabaseClient<any, any, any>,
   competencia?: string, // "YYYY-MM" — se omitido, usa o mês corrente
   mesesAnteriores?: number, // >0 = busca de histórico pra todas
-): Promise<ResultadoSincronizacao[]> {
-  const { data: companies } = await admin
+  paginacao?: { offset: number; limite: number },
+): Promise<ResultadoLoteSincronizacao> {
+  let query = admin
     .from("companies")
     .select(
       "id, cnpj, cpf, nfse_ambiente, ultimo_nsu_distribuicao, certificates(encrypted_file, encrypted_password, expires_at)",
-    );
+      { count: "exact" },
+    )
+    .order("id");
+  if (paginacao) {
+    query = query.range(paginacao.offset, paginacao.offset + paginacao.limite - 1);
+  }
+  const { data: companies, count } = await query;
 
   const resultados: ResultadoSincronizacao[] = [];
   for (const company of companies ?? []) {
@@ -227,7 +245,10 @@ export async function syncAllCompanies(
       await syncOneCompany(admin, company as CompanyParaSincronizar, competencia, mesesAnteriores),
     );
   }
-  return resultados;
+
+  const totalEmpresas = count ?? resultados.length;
+  const temMais = paginacao ? paginacao.offset + paginacao.limite < totalEmpresas : false;
+  return { resultados, totalEmpresas, temMais };
 }
 
 export { MESES_ANTERIORES_HISTORICO };

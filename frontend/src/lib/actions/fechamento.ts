@@ -5,7 +5,6 @@ import { requireSomaStaff } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   syncOneCompany,
-  syncAllCompanies,
   MESES_ANTERIORES_HISTORICO,
   type ResultadoSincronizacao,
 } from "@/lib/sync-notas";
@@ -80,22 +79,6 @@ export async function buscarAgora(
   const resultado = await syncOneCompany(admin, company, competencia);
   revalidatePath(`/admin/empresas/${companyId}/fechamento`);
   return { resultado };
-}
-
-export type BuscarTodasState =
-  | { resultados?: ResultadoSincronizacao[]; error?: string }
-  | undefined;
-
-export async function buscarTodasAgora(
-  _prevState: BuscarTodasState,
-  formData: FormData,
-): Promise<BuscarTodasState> {
-  await requireSomaStaff();
-  const competenciaRaw = formData.get("competencia");
-  const competencia = typeof competenciaRaw === "string" ? competenciaRaw : undefined;
-  const resultados = await syncAllCompanies(createAdminClient(), competencia);
-  revalidatePath("/admin/fechamento");
-  return { resultados };
 }
 
 export async function buscarHistoricoAgora(

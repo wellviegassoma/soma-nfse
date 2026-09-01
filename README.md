@@ -1731,6 +1731,53 @@ servidor (concluído, 2026-08-31)**
       `.env.local` de produção); restaurado o valor original de cada uma a
       partir do backup de `backups/2026-08-28_0041/` feito horas antes
 
+**Correção — mesmo problema no "Buscar todas agora" e no cron diário
+(concluído, 2026-09-01)**
+- [x] Usuário reportou o mesmo erro de tempo limite no botão "Buscar todas
+      agora" (mês corrente, ao lado do de 12 meses) — corrigido do mesmo
+      jeito: `BuscarTodasButton.tsx` passou a rodar uma empresa por vez a
+      partir do navegador (reaproveitando a Server Action `buscarAgora` já
+      existente), com progresso em tempo real. A Server Action antiga
+      (`buscarTodasAgora`, que escaneava tudo numa chamada só) foi removida
+- [x] **Investigando o botão, achei o mesmo problema também no cron
+      diário** (`/api/cron/sync-notas`, roda 1x por dia via
+      `vercel.json`) — e aqui **corrigi minha própria conclusão em tempo
+      real**: a primeira leitura (105 de 183 empresas sincronizadas,
+      parado havia ~30min) parecia confirmar que o cron trava no limite de
+      300s e abandona o resto silenciosamente. Investigando mais fundo
+      (checando de novo minutos depois), o cron antigo continuava
+      avançando — ele não estava travado, só **extremamente lento**: uma
+      única execução rodando havia mais de 40 minutos, bem além do
+      `maxDuration = 300` declarado no código (o valor real permitido
+      nesse ambiente aparentemente é maior, ou não é estritamente
+      aplicado a Cron Jobs). Ele de fato terminou sozinho, chegando a
+      182 de 183. Ainda assim, depender de uma única execução de 40+
+      minutos é frágil (qualquer instabilidade no meio derruba o processo
+      inteiro sem nenhum progresso salvo), então a correção (lotes
+      encadeados) segue válida e foi mantida
+- [x] `syncAllCompanies` (`lib/sync-notas.ts`) ganhou paginação opcional
+      (`{ offset, limite }`) — sem ela, comportamento idêntico a antes,
+      compatível com qualquer outro uso futuro. `app/api/cron/sync-notas/
+      route.ts` passou a processar lotes de 20 empresas por chamada e,
+      antes de responder, agenda a chamada do próximo lote via `after()`
+      (API nativa do Next.js 16 pra trabalho em segundo plano depois da
+      resposta) — nenhuma chamada individual nem chega perto do tempo
+      limite, e o processo continua mesmo se uma chamada específica falhar
+      (só aquele lote fica incompleto, não a sincronização inteira)
+- [x] Validado ao vivo: disparado manualmente contra o servidor local,
+      confirmado nos logs que cada lote (offset 0, 20, 40... até 260)
+      disparou o próximo sozinho via `after()`, cobrindo as 273 empresas
+      cadastradas em ~14 chamadas encadeadas, cada uma respondendo em menos
+      de 2 segundos
+- [x] **Efeito colateral do teste, corrigido**: como o teste local ainda
+      aponta pro banco de produção, ele sobrescreveu o campo "última
+      sincronização" de ~159 empresas com o erro de teste ("fetch failed",
+      esperado sem o backend rodando local) bem na hora em que o cron real
+      de produção estava terminando de verdade — disparada uma sincronização
+      real contra produção logo depois do deploy pra corrigir esses
+      registros com dado de verdade em vez de deixar o erro de teste
+      registrado até o cron de amanhã
+
 ## Backend (Fase C em diante)
 
 ```bash
