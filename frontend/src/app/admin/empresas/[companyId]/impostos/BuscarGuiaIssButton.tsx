@@ -19,7 +19,7 @@ export function BuscarGuiaIssButton({
     setErro(null);
     try {
       const resp = await fetch(
-        `/admin/empresas/${companyId}/fechamento/guia-iss?competencia=${competencia}`,
+        `/admin/empresas/${companyId}/impostos/guia-iss?competencia=${competencia}`,
       );
       if (!resp.ok) {
         const corpo = await resp.json().catch(() => null);

@@ -22,6 +22,13 @@ import { calcularLucroPresumido, calcularSimplesNacional } from "@/lib/calculo-i
 import { buscarAtividade, type TratamentoAtividade } from "@/lib/simples-nacional-atividades";
 import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
 import { DeclararPgdasCard } from "./DeclararPgdasCard";
+import { BuscarGuiaIssButton } from "./BuscarGuiaIssButton";
+
+// Código IBGE do município do Rio de Janeiro — o Nota Carioca só existe
+// pra empresas estabelecidas nessa cidade, e só pra quem paga ISS por
+// guia própria (Lucro Presumido/Real) — quem é Simples Nacional paga o
+// ISS embutido no DAS, não gera guia separada.
+const IBGE_RIO_DE_JANEIRO = "3304557";
 
 const BADGE_POR_TRATAMENTO: Record<TratamentoAtividade, string> = {
   ANEXO_III_FIXO: "bg-green-100 text-green-900",
@@ -68,7 +75,7 @@ export default async function ImpostosPage(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, cnpj, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+      "id, cnpj, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao, municipality_ibge_code",
     )
     .eq("id", companyId)
     .single();
@@ -90,6 +97,12 @@ export default async function ImpostosPage(
         <Button type="submit">Aplicar</Button>
       </form>
     </Card>
+  );
+
+  // Só existe guia própria de ISS no Nota Carioca pra empresa do Rio que
+  // não seja Simples Nacional (Simples paga o ISS embutido no DAS).
+  const guiaIssBotao = company.municipality_ibge_code === IBGE_RIO_DE_JANEIRO && (
+    <BuscarGuiaIssButton companyId={companyId} competencia={competencia} />
   );
 
   if (!company.tax_regime) {
@@ -115,6 +128,7 @@ export default async function ImpostosPage(
           Cálculo de imposto para Lucro Real ainda não é suportado aqui — apura sobre o lucro
           contábil ajustado, não só sobre o faturamento.
         </Alert>
+        {guiaIssBotao}
       </div>
     );
   }
@@ -458,6 +472,8 @@ export default async function ImpostosPage(
           </div>
         </div>
       </Card>
+
+      {guiaIssBotao}
     </div>
   );
 }
