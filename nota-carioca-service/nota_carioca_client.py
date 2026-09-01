@@ -39,12 +39,14 @@ entregar pro Playwright.
      tela de CONFIRMAÇÃO (mostra valores, "Número da Guia: *****",
      status PENDENTE) com um botão final #ctl00_cphCabMenu_btGerarGuia
      que de fato emite a guia (cria o documento oficial, com vencimento e
-     linha digitável) e redireciona pra guiaprint.aspx?guia=<numero>.
-   - Se já existe (emitida ou já paga): o link deve ir direto pra
-     guiaprint.aspx?guia=<numero> (mesmo padrão, sem passo de
-     confirmação) — inferido a partir do texto informativo da própria
-     tela ("re-imprimir... clique em IMPRIMIR GUIA"), não testado ao vivo
-     ainda contra uma guia já existente.
+     linha digitável).
+   - Se já existe (emitida, ainda que não paga): o link é o próprio
+     número da guia, aponta pra guianacional.aspx?guia=<numero> — mesma
+     tela, mas com botão #ctl00_cphCabMenu_btVisualizarGuia ("IMPRIMIR
+     GUIA") no lugar de btGerarGuia, sem criar nada novo.
+   Os dois botões levam pra guiaprint.aspx?guia=<numero>. Confirmado ao
+   vivo nos dois casos (competência ago/2026 da COE: primeiro emitida do
+   zero, depois reaberta já existente).
 4. guiaprint.aspx mostra a guia como imagem (guiaprintimg.aspx) — mas tem
    um botão real "Exportar para .PDF" (#ctl00_cphBase_btExportar) que
    dispara o download do PDF de verdade. Confirmado ao vivo: PDF válido,
@@ -227,17 +229,24 @@ class ClienteNotaCarioca:
 
         self._page.goto(f"{BASE_URL}/contribuinte/{href}", timeout=45_000, wait_until="load")
 
-        # Tela de confirmação (guia ainda não emitida) — clicar no botão
-        # final que de fato gera o documento oficial.
-        if self._page.locator("#ctl00_cphCabMenu_btGerarGuia").count() > 0:
-            try:
-                self._page.click("#ctl00_cphCabMenu_btGerarGuia", timeout=20_000)
-            except PlaywrightTimeoutError:
-                pass
-            try:
-                self._page.wait_for_load_state("load", timeout=45_000)
-            except PlaywrightTimeoutError:
-                raise ErroNotaCarioca("Emissão da guia não completou a tempo — tente novamente.")
+        # Tela de confirmação em guianacional.aspx — o botão muda conforme
+        # a guia já existe ou não:
+        #   - btGerarGuia ("EMITIR GUIA"): guia ainda não existe, esse
+        #     clique de fato cria o documento oficial.
+        #   - btVisualizarGuia ("IMPRIMIR GUIA"): guia já emitida
+        #     anteriormente, esse clique só abre a via já existente.
+        # Os dois levam pra guiaprint.aspx do mesmo jeito.
+        for seletor_botao in ("#ctl00_cphCabMenu_btGerarGuia", "#ctl00_cphCabMenu_btVisualizarGuia"):
+            if self._page.locator(seletor_botao).count() > 0:
+                try:
+                    self._page.click(seletor_botao, timeout=20_000)
+                except PlaywrightTimeoutError:
+                    pass
+                try:
+                    self._page.wait_for_load_state("load", timeout=45_000)
+                except PlaywrightTimeoutError:
+                    raise ErroNotaCarioca("Abrir a guia não completou a tempo — tente novamente.")
+                break
 
         if "guiaprint.aspx" not in self._page.url:
             raise ErroNotaCarioca(
