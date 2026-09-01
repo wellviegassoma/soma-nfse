@@ -1769,14 +1769,16 @@ servidor (concluído, 2026-08-31)**
       disparou o próximo sozinho via `after()`, cobrindo as 273 empresas
       cadastradas em ~14 chamadas encadeadas, cada uma respondendo em menos
       de 2 segundos
-- [x] **Efeito colateral do teste, corrigido**: como o teste local ainda
-      aponta pro banco de produção, ele sobrescreveu o campo "última
+- [ ] **Efeito colateral do teste, ainda não corrigido**: como o teste local
+      ainda aponta pro banco de produção, ele sobrescreveu o campo "última
       sincronização" de ~159 empresas com o erro de teste ("fetch failed",
       esperado sem o backend rodando local) bem na hora em que o cron real
-      de produção estava terminando de verdade — disparada uma sincronização
-      real contra produção logo depois do deploy pra corrigir esses
-      registros com dado de verdade em vez de deixar o erro de teste
-      registrado até o cron de amanhã
+      de produção estava terminando de verdade. Tentei disparar manualmente
+      o cron já corrigido contra produção pra sobrescrever com dado real —
+      bloqueado de propósito (401, `CRON_SECRET` de produção é diferente do
+      local, como deveria ser). Só afeta o texto informativo de "última
+      sincronização" (nenhuma nota real foi perdida ou duplicada) — corrige
+      sozinho no próximo cron diário, ou manualmente se quiser antecipar
 
 ## Backend (Fase C em diante)
 
