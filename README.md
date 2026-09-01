@@ -1849,6 +1849,27 @@ servidor (concluído, 2026-08-31)**
       corretamente até 117/117 e o ZIP final saiu com todas. Job e arquivo
       de teste removidos depois de validado
 
+**Correção — clientes Pessoa Física ficando de fora da exportação de ZIP
+(concluído, 2026-09-01)**
+- [x] Rodando contra o backend real em produção pra validar o retry acima,
+      117/117 empresas foram processadas mas **18 continuaram fora do ZIP
+      mesmo depois de 3 tentativas cada** — não era mais falha transitória
+      (retry não resolve algo estrutural). As 18 eram todas clientes
+      Pessoa Física (confirmado no banco: `cnpj: null, cpf: <valor>,
+      person_type: 'PF'`)
+- [x] Causa: `gerarZipDaEmpresa` (`lib/fechamento-export.ts`) tinha
+      `if (!company.cnpj) return null` — rejeitava silenciosamente
+      qualquer cliente PF, mesmo que sinceramente tivesse nota de verdade
+      naquele mês. Exatamente o tipo de lacuna já sinalizada na Fase Q
+      ("fechamento.ts... continua assumindo CNPJ"), só que dessa vez numa
+      função escrita DEPOIS da Fase Q — eu esqueci de aplicar o mesmo
+      helper (`documentoEmpresa()`) que já uso em `notas.ts`/`sync-notas.ts`
+      pra esse exato problema
+- [ ] Corrigido: `gerarZipDaEmpresa` e o select de `processarEmpresaExportacao`
+      passaram a considerar `cpf` também, via `documentoEmpresa()` —
+      validação ao vivo (rodar de novo contra produção e confirmar que as
+      18 PF entram) ainda em andamento
+
 ## Backend (Fase C em diante)
 
 ```bash

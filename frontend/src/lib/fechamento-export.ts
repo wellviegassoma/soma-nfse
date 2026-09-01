@@ -2,6 +2,7 @@ import "server-only";
 import JSZip from "jszip";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
+import { documentoEmpresa } from "@/lib/formatters";
 
 export function nomeArquivo(texto: string): string {
   return (
@@ -22,7 +23,13 @@ export function primeiroDiaMesSeguinte(competencia: string): string {
   return `${proximoAno}-${String(proximoMes).padStart(2, "0")}-01`;
 }
 
-type CompanyExport = { id: string; cnpj: string | null; legal_name: string; trade_name: string | null };
+type CompanyExport = {
+  id: string;
+  cnpj: string | null;
+  cpf: string | null;
+  legal_name: string;
+  trade_name: string | null;
+};
 
 type NotaExport = {
   nsu: string | number;
@@ -65,7 +72,8 @@ export async function gerarZipDaEmpresa(
   company: CompanyExport,
   competencia: string,
 ): Promise<Uint8Array | null> {
-  if (!company.cnpj) return null;
+  const documento = documentoEmpresa(company);
+  if (!documento) return null;
 
   const [anoStr, mesStr] = competencia.split("-");
   const ano = Number(anoStr);
@@ -136,7 +144,7 @@ export async function gerarZipDaEmpresa(
       },
       body: JSON.stringify({
         nome_empresa: company.trade_name || company.legal_name,
-        cnpj_empresa: company.cnpj,
+        cnpj_empresa: documento,
         ano,
         mes,
         notas: notas.map((n) => ({ ...n, nsu: String(n.nsu) })),

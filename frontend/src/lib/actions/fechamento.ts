@@ -374,7 +374,7 @@ export async function processarEmpresaExportacao(
 
   const { data: company } = await admin
     .from("companies")
-    .select("id, cnpj, legal_name, trade_name")
+    .select("id, cnpj, cpf, legal_name, trade_name")
     .eq("id", companyId)
     .single();
   if (!company) return { error: "Empresa não encontrada." };
