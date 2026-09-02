@@ -4,7 +4,6 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { Alert } from "@/components/ui/Alert";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import {
   buscarFaturamentoMensal,
@@ -14,16 +13,11 @@ import {
   somarRetencoes,
 } from "@/lib/faturamento";
 import { calcularLucroPresumido, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
-import { EnviarMitLoteButton } from "./EnviarMitLoteButton";
-import { BaixarGuiasMitLoteButton } from "./BaixarGuiasMitLoteButton";
+import { MitLoteComSelecao } from "./MitLoteComSelecao";
 
 export const metadata = { title: "Central MIT — Painel SOMA" };
 
 const COMPETENCIA_REGEX = /^\d{4}-\d{2}$/;
-
-function formatMoney(value: number) {
-  return value === 0 ? "-" : value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 const SITUACOES_JA_ENVIADO = new Set(["ENVIADO", "ENCERRADA"]);
 
@@ -101,9 +95,6 @@ export default async function CentralMitPage(props: PageProps<"/admin/fechamento
     }),
   );
 
-  const empresasParaEnviar = linhas.filter((l) => !l.jaEnviado).map((l) => ({ id: l.id, nome: l.nome }));
-  const todasAsEmpresas = linhas.map((l) => ({ id: l.id, nome: l.nome }));
-
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -117,94 +108,17 @@ export default async function CentralMitPage(props: PageProps<"/admin/fechamento
       </div>
 
       <Card className="p-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <form className="flex flex-wrap items-end gap-3">
-            <div className="w-[160px]">
-              <Field label="Competência" htmlFor="competencia">
-                <Input id="competencia" name="competencia" type="month" defaultValue={competencia} />
-              </Field>
-            </div>
-            <Button type="submit">Aplicar</Button>
-          </form>
-          <div className="flex flex-wrap items-center gap-3">
-            <EnviarMitLoteButton competencia={competencia} empresas={empresasParaEnviar} />
-            <BaixarGuiasMitLoteButton competencia={competencia} empresas={todasAsEmpresas} />
+        <form className="flex flex-wrap items-end gap-3">
+          <div className="w-[160px]">
+            <Field label="Competência" htmlFor="competencia">
+              <Input id="competencia" name="competencia" type="month" defaultValue={competencia} />
+            </Field>
           </div>
-        </div>
-        <p className="mt-3 text-xs text-foreground/50">
-          A coluna <strong className="text-danger">MIT</strong> é o que de fato é declarado — já líquido
-          de retenção e considerando se IRPJ/CSLL estão no mês de fechamento do trimestre.
-        </p>
+          <Button type="submit">Aplicar</Button>
+        </form>
       </Card>
 
-      {linhas.length === 0 ? (
-        <Alert tone="warning">Nenhuma empresa Lucro Presumido com CNPJ cadastrada.</Alert>
-      ) : (
-        <Card className="overflow-x-auto">
-          <table className="w-full min-w-[1200px] text-sm">
-            <thead>
-              <tr className="text-xs text-foreground/50">
-                <th rowSpan={2} className="border-b border-border px-3 py-2 text-left align-bottom">
-                  Nome
-                </th>
-                <th rowSpan={2} className="border-b border-border px-3 py-2 text-right align-bottom">
-                  Faturamento Mês
-                </th>
-                <th rowSpan={2} className="border-b border-border px-3 py-2 text-right align-bottom">
-                  Faturamento Trimestre
-                </th>
-                <th colSpan={2} className="border-b border-border px-3 py-1 text-center">
-                  Impostos retidos
-                </th>
-                <th colSpan={4} className="border-b border-border px-3 py-1 text-center">
-                  Referente a Competência
-                </th>
-                <th colSpan={4} className="border-b border-border px-3 py-1 text-center text-danger">
-                  MIT
-                </th>
-              </tr>
-              <tr className="text-xs text-foreground/50">
-                <th className="border-b border-border px-3 py-1 text-right">IRRF</th>
-                <th className="border-b border-border px-3 py-1 text-right">Trib. federais</th>
-                <th className="border-b border-border px-3 py-1 text-right">IRPJ</th>
-                <th className="border-b border-border px-3 py-1 text-right">CSLL</th>
-                <th className="border-b border-border px-3 py-1 text-right">PIS</th>
-                <th className="border-b border-border px-3 py-1 text-right">COFINS</th>
-                <th className="border-b border-border px-3 py-1 text-right text-danger">IRPJ</th>
-                <th className="border-b border-border px-3 py-1 text-right text-danger">CSLL</th>
-                <th className="border-b border-border px-3 py-1 text-right text-danger">PIS</th>
-                <th className="border-b border-border px-3 py-1 text-right text-danger">COFINS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {linhas.map((linha) => (
-                <tr key={linha.id}>
-                  <td className="whitespace-nowrap px-3 py-2">
-                    {linha.nome}
-                    {linha.jaEnviado && (
-                      <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">
-                        enviado
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">{formatMoney(linha.receitaMes)}</td>
-                  <td className="px-3 py-2 text-right">{formatMoney(linha.receitaTrimestre)}</td>
-                  <td className="px-3 py-2 text-right">{formatMoney(linha.retencaoIrrf)}</td>
-                  <td className="px-3 py-2 text-right">{formatMoney(linha.retencaoFederal)}</td>
-                  <td className="px-3 py-2 text-right">{formatMoney(linha.competenciaIrpj)}</td>
-                  <td className="px-3 py-2 text-right">{formatMoney(linha.competenciaCsll)}</td>
-                  <td className="px-3 py-2 text-right">{formatMoney(linha.competenciaPis)}</td>
-                  <td className="px-3 py-2 text-right">{formatMoney(linha.competenciaCofins)}</td>
-                  <td className="px-3 py-2 text-right font-medium text-danger">{formatMoney(linha.mitIrpj)}</td>
-                  <td className="px-3 py-2 text-right font-medium text-danger">{formatMoney(linha.mitCsll)}</td>
-                  <td className="px-3 py-2 text-right font-medium text-danger">{formatMoney(linha.mitPis)}</td>
-                  <td className="px-3 py-2 text-right font-medium text-danger">{formatMoney(linha.mitCofins)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      )}
+      <MitLoteComSelecao linhas={linhas} competencia={competencia} />
     </div>
   );
 }
