@@ -153,6 +153,28 @@ export function calcularLucroPresumido(params: {
 
 export type ValoresDevidosMit = { irpj: number; csll: number; pis: number; cofins: number };
 
+// Retenção sofrida pela empresa (a empresa é a PRESTADORA, retenção feita
+// pelo tomador) — dado real vindo das notas (ver `buscarRetencoesMensal`/
+// `somarRetencoes` em lib/faturamento.ts). `contribuicoesSociais` é a
+// SOMA de PIS+COFINS+CSLL retidos (vRetCSLL do layout nacional, código de
+// receita 5952/IN RFB 1234/2012) — o layout nacional não separa por
+// tributo, só devolve o total combinado.
+export type Retencao = { irrf: number; contribuicoesSociais: number };
+
+const RETENCAO_SEM_VALOR: Retencao = { irrf: 0, contribuicoesSociais: 0 };
+
+// Proporção padrão da retenção combinada de PIS+COFINS+CSLL (código 5952):
+// 0,65% + 3% + 1% = 4,65% no total. Usada só pra SEPARAR o valor único
+// retido em 3 parcelas (uma por tributo) — a Receita não manda isso já
+// separado. Assume a alíquota combinada padrão da IN RFB 1234/2012;
+// revisar se algum cliente tiver uma combinação de alíquotas diferente
+// da usual (o valor total abatido não muda, só a proporção entre PIS/
+// COFINS/CSLL individualmente).
+const RETENCAO_COMBINADA_TOTAL = 0.0065 + 0.03 + 0.01;
+const RETENCAO_PIS_PARTE = 0.0065 / RETENCAO_COMBINADA_TOTAL;
+const RETENCAO_COFINS_PARTE = 0.03 / RETENCAO_COMBINADA_TOTAL;
+const RETENCAO_CSLL_PARTE = 0.01 / RETENCAO_COMBINADA_TOTAL;
+
 // `calcularLucroPresumido()` acima SEMPRE mostra a estimativa de IRPJ/CSLL
 // do mês, mesmo em empresa de apuração trimestral — é proposital pra
 // exibição (ver comentário na função). Mas isso não é o valor realmente
@@ -160,30 +182,83 @@ export type ValoresDevidosMit = { irpj: number; csll: number; pis: number; cofin
 // só existe débito de IRPJ/CSLL de verdade no 3º mês do trimestre (base =
 // trimestre inteiro, não só o mês) — nos outros dois meses o débito é
 // zero. PIS/COFINS continuam sempre mensais, em qualquer regime de
-// apuração. Resultado pensado pra alimentar `montarDeclaracaoMit()`
-// (`lib/mit-declaracao.ts`) — nunca pra exibição direta ao usuário (pra
-// isso, use `calcularLucroPresumido` mesmo).
-export function valoresDevidosNoPeriodoMit(resultado: ResultadoLucroPresumido): ValoresDevidosMit {
+// apuração. Já vem líquido de retenção sofrida (IRRF abate IRPJ; a
+// retenção combinada de PIS/COFINS/CSLL abate cada um proporcionalmente)
+// — retencaoMes sempre usada pra PIS/COFINS (mensais em qualquer regime),
+// retencaoTrimestre usada pra IRPJ/CSLL só no mês de fechamento (mesma
+// janela usada pra calcular a base). Resultado pensado pra alimentar
+// `montarDeclaracaoMit()` (`lib/mit-declaracao.ts`) E a exibição da UI —
+// é a fonte única pras duas coisas, pra nunca mostrar um valor e declarar
+// outro.
+export function valoresDevidosNoPeriodoMit(
+  resultado: ResultadoLucroPresumido,
+  retencaoMes: Retencao = RETENCAO_SEM_VALOR,
+  retencaoTrimestre: Retencao = RETENCAO_SEM_VALOR,
+): ValoresDevidosMit {
+  const pis = Math.max(0, resultado.pis - retencaoMes.contribuicoesSociais * RETENCAO_PIS_PARTE);
+  const cofins = Math.max(0, resultado.cofins - retencaoMes.contribuicoesSociais * RETENCAO_COFINS_PARTE);
+
   const semDebitoDeFechamento = !resultado.apuracaoMensal && !resultado.ehUltimoMesDoTrimestre;
   if (semDebitoDeFechamento) {
-    return { irpj: 0, csll: 0, pis: resultado.pis, cofins: resultado.cofins };
+    return { irpj: 0, csll: 0, pis, cofins };
   }
 
   // Mês de fechamento do trimestre (apuração mensal ou não): reconcilia
   // sobre a base do TRIMESTRE inteiro, não só a fatia do mês — mesmo
-  // valor que sairia numa guia trimestral tradicional.
+  // valor que sairia numa guia trimestral tradicional. A retenção
+  // relevante pra abater também é a acumulada do trimestre inteiro, não
+  // só a do mês de fechamento.
   if (resultado.ehUltimoMesDoTrimestre) {
+    const irpjBruto = resultado.baseTrimestreIrpj * IRPJ_ALIQUOTA + resultado.irpjAdicional;
+    const csllBruto = resultado.baseTrimestreIrpj * CSLL_ALIQUOTA; // presunção de CSLL == presunção de IRPJ pra serviços neste sistema
     return {
-      irpj: resultado.baseTrimestreIrpj * IRPJ_ALIQUOTA + resultado.irpjAdicional,
-      csll: resultado.baseTrimestreIrpj * CSLL_ALIQUOTA, // presunção de CSLL == presunção de IRPJ pra serviços neste sistema
-      pis: resultado.pis,
-      cofins: resultado.cofins,
+      irpj: Math.max(0, irpjBruto - retencaoTrimestre.irrf),
+      csll: Math.max(0, csllBruto - retencaoTrimestre.contribuicoesSociais * RETENCAO_CSLL_PARTE),
+      pis,
+      cofins,
     };
   }
 
   // Apuração mensal, meses 1-2 do trimestre: usa a base do próprio mês
   // (resultado.irpj/csll já vêm calculados assim quando não é fechamento).
-  return { irpj: resultado.irpj, csll: resultado.csll, pis: resultado.pis, cofins: resultado.cofins };
+  return {
+    irpj: Math.max(0, resultado.irpj - retencaoMes.irrf),
+    csll: Math.max(0, resultado.csll - retencaoMes.contribuicoesSociais * RETENCAO_CSLL_PARTE),
+    pis,
+    cofins,
+  };
+}
+
+export type ResultadoSimplesLiquido = {
+  dasTotal: number;
+  partilha: ResultadoSimplesNacional["partilha"];
+  retencaoAplicada: number;
+};
+
+// Equivalente do valoresDevidosNoPeriodoMit, mas pro DAS do Simples
+// Nacional — sempre mensal (não existe trimestre no Simples), então só
+// precisa de uma janela de retenção. Abate IRRF do irpj da partilha e a
+// retenção combinada de PIS/COFINS/CSLL de cada um proporcionalmente,
+// reduzindo o dasTotal pelo mesmo montante abatido (o ISS e a CPP da
+// partilha não são afetados — essa retenção é só sobre tributos
+// federais).
+export function abaterRetencaoDoDas(
+  resultado: ResultadoSimplesNacional,
+  retencaoMes: Retencao = RETENCAO_SEM_VALOR,
+): ResultadoSimplesLiquido {
+  const irpj = Math.max(0, resultado.partilha.irpj - retencaoMes.irrf);
+  const csll = Math.max(0, resultado.partilha.csll - retencaoMes.contribuicoesSociais * RETENCAO_CSLL_PARTE);
+  const pis = Math.max(0, resultado.partilha.pis - retencaoMes.contribuicoesSociais * RETENCAO_PIS_PARTE);
+  const cofins = Math.max(0, resultado.partilha.cofins - retencaoMes.contribuicoesSociais * RETENCAO_COFINS_PARTE);
+
+  const retencaoAplicada =
+    resultado.partilha.irpj - irpj + (resultado.partilha.csll - csll) + (resultado.partilha.pis - pis) + (resultado.partilha.cofins - cofins);
+
+  return {
+    dasTotal: Math.max(0, resultado.dasTotal - retencaoAplicada),
+    partilha: { ...resultado.partilha, irpj, csll, pis, cofins },
+    retencaoAplicada,
+  };
 }
 
 export type ResumoImposto = { aliquotaEfetiva: number; valor: number };

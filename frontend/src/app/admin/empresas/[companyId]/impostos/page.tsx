@@ -12,13 +12,20 @@ import {
   buscarFaturamentoMensal,
   buscarFaturamentoPorAtividade,
   buscarReceitaManual,
+  buscarRetencoesMensal,
   competenciasTrimestre,
   receitaComManual,
   resolverRbt12,
   somarFaturamento,
+  somarRetencoes,
 } from "@/lib/faturamento";
 import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
-import { calcularLucroPresumido, calcularSimplesNacional, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
+import {
+  abaterRetencaoDoDas,
+  calcularLucroPresumido,
+  calcularSimplesNacional,
+  valoresDevidosNoPeriodoMit,
+} from "@/lib/calculo-impostos";
 import { buscarAtividade, type TratamentoAtividade } from "@/lib/simples-nacional-atividades";
 import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
 import { DeclararPgdasCard } from "./DeclararPgdasCard";
@@ -200,6 +207,10 @@ export default async function ImpostosPage(
       fatorRPercentual,
     });
 
+    const retencoesSimples = await buscarRetencoesMensal(supabase, companyId);
+    const retencaoMesSimples = somarRetencoes(retencoesSimples, [competencia]);
+    const dasLiquido = abaterRetencaoDoDas(resultado, retencaoMesSimples);
+
     return (
       <div className="flex flex-col gap-6">
         {competenciaFilterForm}
@@ -305,9 +316,21 @@ export default async function ImpostosPage(
               </div>
             ))}
             <div className="flex items-center justify-between bg-surface-muted px-5 py-3 text-sm font-semibold">
-              <span>Total do DAS</span>
+              <span>Total do DAS (bruto)</span>
               <span>{formatMoney(resultado.dasTotal)}</span>
             </div>
+            {dasLiquido.retencaoAplicada > 0 && (
+              <>
+                <div className="flex items-center justify-between px-5 py-3 text-sm text-danger">
+                  <span>Retenções sofridas (IRRF + PIS/COFINS/CSLL, das notas do mês)</span>
+                  <span className="font-medium">-{formatMoney(dasLiquido.retencaoAplicada)}</span>
+                </div>
+                <div className="flex items-center justify-between bg-surface-muted px-5 py-3 text-sm font-semibold">
+                  <span>Total do DAS (líquido)</span>
+                  <span>{formatMoney(dasLiquido.dasTotal)}</span>
+                </div>
+              </>
+            )}
           </div>
         </Card>
 
@@ -390,6 +413,16 @@ export default async function ImpostosPage(
     aliquotaIss: company.iss_aliquota_padrao,
   });
 
+  const retencoesLp = await buscarRetencoesMensal(supabase, companyId);
+  const retencaoMesLp = somarRetencoes(retencoesLp, [competencia]);
+  const retencaoTrimestreLp = somarRetencoes(retencoesLp, mesesTrimestre);
+  // Fonte única do valor líquido — a mesma função (e os mesmos números)
+  // usados aqui pra exibir também alimentam o payload real do MIT (ver
+  // DeclararMitCard abaixo), pra nunca mostrar um valor e declarar outro.
+  const valoresLiquidos = valoresDevidosNoPeriodoMit(resultado, retencaoMesLp, retencaoTrimestreLp);
+  const totalLiquidoLp = valoresLiquidos.irpj + valoresLiquidos.csll + valoresLiquidos.pis + valoresLiquidos.cofins;
+  const temRetencaoLp = retencaoMesLp.irrf > 0 || retencaoMesLp.contribuicoesSociais > 0;
+
   // Melhor esforço — se a tabela de histórico (Fase U) ainda não existir
   // ou a consulta falhar por qualquer motivo, trata como "nunca
   // encerrado" em vez de quebrar a página.
@@ -413,8 +446,9 @@ export default async function ImpostosPage(
       {competenciaFilterForm}
 
       <Alert tone="warning">
-        Estimativa com base no faturamento registrado no sistema — não desconta retenções na
-        fonte (IRRF/PIS/COFINS/CSLL retidos) nem substitui a apuração oficial.
+        Estimativa com base no faturamento registrado no sistema — já desconta retenções na fonte
+        sofridas nas notas (IRRF/PIS/COFINS/CSLL retidos pelo tomador), mas não substitui a
+        apuração oficial.
       </Alert>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -500,16 +534,41 @@ export default async function ImpostosPage(
             </span>
           </div>
           <div className="flex items-center justify-between bg-surface-muted px-5 py-3 text-sm font-semibold">
-            <span>Total</span>
+            <span>Total (bruto)</span>
             <span>{formatMoney(resultado.total)}</span>
           </div>
         </div>
       </Card>
 
+      {temRetencaoLp && (
+        <Card className="overflow-hidden">
+          <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
+            Retenções sofridas ({formatCompetencia(competencia)})
+          </div>
+          <div className="divide-y divide-border">
+            <div className="flex items-center justify-between px-5 py-3 text-sm">
+              <span className="text-foreground/70">IRRF retido</span>
+              <span className="font-medium text-foreground">{formatMoney(retencaoMesLp.irrf)}</span>
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 text-sm">
+              <span className="text-foreground/70">PIS/COFINS/CSLL retidos (combinado)</span>
+              <span className="font-medium text-foreground">
+                {formatMoney(retencaoMesLp.contribuicoesSociais)}
+              </span>
+            </div>
+          </div>
+          <p className="border-t border-border bg-surface-muted px-5 py-2 text-xs text-foreground/50">
+            Vem das notas do mês (retenção sofrida pela empresa como prestadora). Já abatido do
+            IRPJ/CSLL/PIS/COFINS acima — {formatMoney(totalLiquidoLp)} é o total líquido realmente
+            devido nesse período.
+          </p>
+        </Card>
+      )}
+
       <DeclararMitCard
         companyId={companyId}
         competencia={competencia}
-        valoresDevidos={valoresDevidosNoPeriodoMit(resultado)}
+        valoresDevidos={valoresLiquidos}
         encerramentoExistente={
           encerramentoExistente
             ? {

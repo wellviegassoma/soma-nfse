@@ -316,6 +316,63 @@ export function receitaComManual(
   return { receitaPorMes, mesesComDados, mesesManuais };
 }
 
+export type RetencaoPorMes = {
+  competencia: string; // "YYYY-MM"
+  irrf: number;
+  // Soma de PIS+COFINS+CSLL retidos (vRetCSLL do layout nacional, código
+  // de receita 5952/IN RFB 1234/2012) — vem sempre combinado, o layout
+  // nacional não separa por tributo.
+  contribuicoesSociais: number;
+};
+
+// Diferente de buscarFaturamentoMensal, não precisa dedup contra `dps`:
+// a tabela de emissão própria não guarda retenção nenhuma (só
+// notas_distribuidas tem, populada pela sincronização diária do Sefin
+// Nacional — inclusive pras notas emitidas por este sistema, uma vez
+// sincronizadas). Só considera notas de SAÍDA (a empresa é a prestadora
+// — retenção sofrida pela empresa, não a que ela mesma fez como tomadora
+// de terceiros).
+export async function buscarRetencoesMensal(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any, any, any>,
+  companyId: string,
+): Promise<RetencaoPorMes[]> {
+  const { data } = await supabase
+    .from("notas_distribuidas")
+    .select("competencia, valor_ret_irrf, valor_ret_csll, cancelada, direcao")
+    .eq("company_id", companyId)
+    .eq("direcao", "saida")
+    .eq("cancelada", false);
+
+  const porMes = new Map<string, RetencaoPorMes>();
+  for (const n of (data ?? []) as {
+    competencia: string | null;
+    valor_ret_irrf: number | null;
+    valor_ret_csll: number | null;
+  }[]) {
+    if (!n.competencia) continue;
+    const competencia = n.competencia.slice(0, 7); // "YYYY-MM-DD" -> "YYYY-MM"
+    const atual = porMes.get(competencia) ?? { competencia, irrf: 0, contribuicoesSociais: 0 };
+    atual.irrf += n.valor_ret_irrf ?? 0;
+    atual.contribuicoesSociais += n.valor_ret_csll ?? 0;
+    porMes.set(competencia, atual);
+  }
+  return [...porMes.values()];
+}
+
+export function somarRetencoes(
+  retencoes: RetencaoPorMes[],
+  competencias: string[],
+): { irrf: number; contribuicoesSociais: number } {
+  const alvo = new Set(competencias);
+  return retencoes
+    .filter((r) => alvo.has(r.competencia))
+    .reduce(
+      (acc, r) => ({ irrf: acc.irrf + r.irrf, contribuicoesSociais: acc.contribuicoesSociais + r.contribuicoesSociais }),
+      { irrf: 0, contribuicoesSociais: 0 },
+    );
+}
+
 // "YYYY-MM" dos 12 meses ANTERIORES à competência informada (RBT12 nunca
 // inclui o próprio mês de apuração — regra oficial do Simples Nacional).
 export function competenciasRbt12(competenciaAlvo: string): string[] {

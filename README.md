@@ -1948,6 +1948,53 @@ servidor (concluído, 2026-08-31)**
 - [ ] Validação ao vivo contra produção (ambiente de demonstração
       primeiro) do fluxo completo — encerrar, acompanhar o status até
       ENCERRADA, baixar a guia — ainda não feita
+- [x] **Correção**: primeiro teste real (empresa ORTOP) foi recusado pela
+      Serpro (HTTP 400) duas vezes seguidas — primeiro por
+      `ResponsavelApuracao` vazio (env vars nunca configuradas no
+      Railway, resolvido movendo pra `configuracao_contador_responsavel`
+      dentro do app), depois por faltar `DadosIniciais.VariacoesMonetarias`
+      (campo obrigatório que a doc pública do MIT não deixa claro — valor
+      `2` confirmado direto em apurações reais já encerradas da própria
+      ORTOP). De quebra, corrigido `serpro_client.py` pra extrair o array
+      `mensagens` da resposta de erro em vez de cortar em 1000 caracteres
+      (o eco do envelope de requisição sozinho já passa disso, escondendo
+      a mensagem de validação de verdade — foi assim que os dois motivos
+      acima puderam ser diagnosticados ao vivo)
+
+**Fase V — Retenções na fonte abatidas do imposto apurado (concluído,
+02/09/2026)**
+- [x] Pedido: resumir as retenções (IRRF/PIS/COFINS/CSLL) que aparecem
+      nas notas do mês e abater do imposto apurado, tanto no Lucro
+      Presumido quanto no Simples Nacional — a aba Impostos já avisava
+      "não desconta retenções" desde que existe, isso resolve a lacuna
+- [x] `notas_distribuidas` já guardava `valor_ret_cp` (INSS) e
+      `valor_ret_irrf`, mas faltava `valor_ret_csll` — apesar do nome,
+      esse é o campo `vRetCSLL` do layout nacional, que é a SOMA de
+      PIS+COFINS+CSLL retidos (código de receita 5952, IN RFB 1234/2012),
+      não só CSLL. Adicionado em `backend/nfse_client.py` (sincronização
+      diária), `frontend/src/lib/xml-nota.ts` (importação manual de XML)
+      e a coluna nova via migration
+- [x] `lib/calculo-impostos.ts`: `valoresDevidosNoPeriodoMit()` (já usada
+      pelo MIT) passou a abater retenção — IRRF do IRPJ, e a retenção
+      combinada de PIS/COFINS/CSLL dividida proporcionalmente (0,65% /
+      3% / 1%, a alíquota padrão da retenção combinada — assumida, pode
+      precisar de ajuste se algum cliente tiver uma combinação diferente)
+      entre PIS/COFINS/CSLL. PIS/COFINS sempre abatidos com a retenção do
+      MÊS (são sempre mensais); IRPJ/CSLL abatidos com a retenção do
+      MÊS ou do TRIMESTRE, dependendo de qual base foi usada pro valor
+      bruto — nunca mistura janela errada. Essa função virou fonte única
+      pro valor mostrado na aba Impostos E pro que é realmente declarado
+      no MIT, pra nunca mostrar um valor e declarar outro
+- [x] Nova `abaterRetencaoDoDas()` faz o equivalente pro DAS do Simples
+      Nacional (sempre mensal, sem conceito de trimestre)
+- [ ] **Fora desta rodada**: a retenção NÃO foi encaixada no payload de
+      transmissão do PGDAS-D (`montarDeclaracaoPgdasD`) — só na exibição
+      da aba Impostos pro Simples Nacional. Antes de declarar isso de
+      verdade pro Simples, preciso confirmar contra a documentação oficial
+      (ou apurações reais, mesmo processo usado pro MIT) os campos exatos
+      que a Serpro espera pra informar retenção no PGDAS-D — não é
+      seguro adivinhar isso numa declaração com efeito legal real, mesma
+      lição do MIT acima
 
 ## Backend (Fase C em diante)
 

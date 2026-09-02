@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff, requireUser } from "@/lib/auth";
-import { buscarFaturamentoMensal, competenciasTrimestre, somarFaturamento } from "@/lib/faturamento";
+import {
+  buscarFaturamentoMensal,
+  buscarRetencoesMensal,
+  competenciasTrimestre,
+  somarFaturamento,
+  somarRetencoes,
+} from "@/lib/faturamento";
 import { calcularLucroPresumido, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
 import { montarDeclaracaoMit } from "@/lib/mit-declaracao";
 import { buscarContadorResponsavel } from "@/lib/actions/configuracoes";
@@ -55,7 +61,11 @@ export async function POST(
     apuracaoMensal: company.irpj_csll_apuracao_mensal,
     aliquotaIss: null,
   });
-  const valoresDevidos = valoresDevidosNoPeriodoMit(resultado);
+
+  const retencoes = await buscarRetencoesMensal(supabase, companyId);
+  const retencaoMes = somarRetencoes(retencoes, [competencia]);
+  const retencaoTrimestre = somarRetencoes(retencoes, mesesTrimestre);
+  const valoresDevidos = valoresDevidosNoPeriodoMit(resultado, retencaoMes, retencaoTrimestre);
 
   const contador = await buscarContadorResponsavel();
   if (!contador?.cpf || !contador.crc_uf || !contador.crc_numero || !contador.telefone_ddd || !contador.telefone_numero || !contador.email) {

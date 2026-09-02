@@ -30,7 +30,7 @@ export async function GET(
   const { data: notas } = await supabase
     .from("notas_distribuidas")
     .select(
-      "nsu, chave_acesso, data_emissao, xml, prestador_cnpj, tomador_cnpj, numero, competencia, tomador_nome, prestador_nome, descricao_servico, local_incidencia, codigo_trib_nacional, codigo_nbs, aliquota_issqn, valor_servico, valor_issqn, valor_pis, valor_cofins, valor_ret_cp, valor_ret_irrf, cancelada, motivo_cancelamento, bate_competencia",
+      "nsu, chave_acesso, data_emissao, xml, prestador_cnpj, tomador_cnpj, numero, competencia, tomador_nome, prestador_nome, descricao_servico, local_incidencia, codigo_trib_nacional, codigo_nbs, aliquota_issqn, valor_servico, valor_issqn, valor_pis, valor_cofins, valor_ret_cp, valor_ret_irrf, valor_ret_csll, cancelada, motivo_cancelamento, bate_competencia",
     )
     .eq("company_id", companyId)
     .gte("competencia", `${competencia}-01`)

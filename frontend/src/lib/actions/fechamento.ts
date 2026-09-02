@@ -49,6 +49,7 @@ async function salvarNotaImportada(
     valor_cofins: nota.valorCofins,
     valor_ret_cp: nota.valorRetCp,
     valor_ret_irrf: nota.valorRetIrrf,
+    valor_ret_csll: nota.valorRetCsll,
     xml: nota.xml,
   });
 

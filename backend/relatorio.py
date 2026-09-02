@@ -187,7 +187,8 @@ def _tabela_totais(notas_ativas: list) -> Table:
     total_cofins = sum(n.valor_cofins or 0 for n in notas_ativas)
     total_ret_cp = sum(n.valor_ret_cp or 0 for n in notas_ativas)
     total_ret_irrf = sum(n.valor_ret_irrf or 0 for n in notas_ativas)
-    total_retencoes = total_ret_cp + total_ret_irrf
+    total_ret_csll = sum(n.valor_ret_csll or 0 for n in notas_ativas)
+    total_retencoes = total_ret_cp + total_ret_irrf + total_ret_csll
     total_liquido = total_servico - total_retencoes
 
     tabela = Table([

@@ -141,6 +141,7 @@ class NotaEncontradaOut(BaseModel):
     valor_cofins: Optional[float] = None
     valor_ret_cp: Optional[float] = None
     valor_ret_irrf: Optional[float] = None
+    valor_ret_csll: Optional[float] = None
     cancelada: bool = False
     motivo_cancelamento: Optional[str] = None
     bate_competencia: bool = True

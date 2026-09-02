@@ -57,6 +57,7 @@ type NotaBuscada = {
   valor_cofins: number | null;
   valor_ret_cp: number | null;
   valor_ret_irrf: number | null;
+  valor_ret_csll: number | null;
   cancelada: boolean;
   motivo_cancelamento: string | null;
   bate_competencia: boolean;
@@ -170,6 +171,7 @@ export async function syncOneCompany(
         valor_cofins: n.valor_cofins,
         valor_ret_cp: n.valor_ret_cp,
         valor_ret_irrf: n.valor_ret_irrf,
+        valor_ret_csll: n.valor_ret_csll,
         xml: n.xml,
       }));
 

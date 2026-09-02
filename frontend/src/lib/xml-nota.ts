@@ -51,6 +51,7 @@ export type NotaExtraidaXml = {
   valorCofins: number | undefined;
   valorRetCp: number | undefined;
   valorRetIrrf: number | undefined;
+  valorRetCsll: number | undefined;
   xml: string;
 };
 
@@ -96,6 +97,7 @@ export function extrairNotaDeXml(xml: string): NotaExtraidaXml | null {
     valorCofins: extrairNumero(xml, "vCofins"),
     valorRetCp: extrairNumero(xml, "vRetCP"),
     valorRetIrrf: extrairNumero(xml, "vRetIRRF"),
+    valorRetCsll: extrairNumero(xml, "vRetCSLL"),
     xml,
   };
 }
