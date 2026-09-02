@@ -68,6 +68,11 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
                 Importar XML
               </Button>
             </a>
+            <a href="/admin/fechamento/mit">
+              <Button type="button" variant="secondary">
+                Central MIT
+              </Button>
+            </a>
           </form>
           <BuscarTodasButton competencia={competencia} empresas={empresasComCertificado} />
         </div>
