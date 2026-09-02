@@ -44,6 +44,20 @@ export async function requireSomaStaff() {
   if (!(await isSomaStaff())) redirect("/");
 }
 
+// Mais restrito que requireSomaStaff() — ADMIN_SOMA não passa aqui. Usado
+// pra configurações sensíveis compartilhadas por todo o sistema (ex.:
+// dados do contador responsável usados em toda declaração do MIT), onde
+// só o dono/sócio (SUPER_ADMIN) deve poder mexer.
+export async function isSuperAdmin() {
+  const companies = await getUserCompanies();
+  return companies.some((c) => c.role === "SUPER_ADMIN");
+}
+
+export async function requireSuperAdmin() {
+  await requireUser();
+  if (!(await isSuperAdmin())) redirect("/");
+}
+
 // Cada módulo novo (Legalização, Extratos) é restrito ao próprio papel —
 // diferente de requireSomaStaff(), que dá acesso a tudo em /admin. Staff
 // completo (SUPER_ADMIN/ADMIN_SOMA) também passa, pra continuar

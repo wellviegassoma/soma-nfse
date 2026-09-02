@@ -15,21 +15,31 @@ const CODIGO_DEBITO_CSLL = "237201";
 const CODIGO_DEBITO_PIS = "810902";
 const CODIGO_DEBITO_COFINS = "217201";
 
+export type ResponsavelApuracao = {
+  cpf: string;
+  crcUf: string;
+  crcNumero: string;
+  telefoneDdd: string;
+  telefoneNumero: string;
+  email: string;
+};
+
 export type DeclaracaoMitResultado = { dados: Record<string, unknown> };
 
 // Monta o corpo do campo `dados` de MIT.ENCAPURACAO314 (ver
 // apicenter.estaleiro.serpro.gov.br/.../mit/servicos/encerrar_apuracao/).
 // Função pura — quem chama já rodou `calcularLucroPresumido` +
-// `valoresDevidosNoPeriodoMit` antes (ver mit/declarar/route.ts). Não
-// inclui `ResponsavelApuracao` — isso é preenchido no backend
-// (integra-contador/main.py), que é o único lugar com acesso às env vars
-// do contador responsável da SOMA.
+// `valoresDevidosNoPeriodoMit` antes (ver mit/declarar/route.ts).
+// `responsavelApuracao` vem da configuração única do contador responsável
+// da SOMA (tabela `configuracao_contador_responsavel`, só SUPER_ADMIN
+// edita) — o mesmo valor em toda empresa, não é dado da empresa cliente.
 export function montarDeclaracaoMit(params: {
   competencia: string; // "YYYY-MM"
   valoresDevidos: ValoresDevidosMit;
+  responsavelApuracao: ResponsavelApuracao;
   transmissaoImediata: boolean;
 }): DeclaracaoMitResultado {
-  const { competencia, valoresDevidos, transmissaoImediata } = params;
+  const { competencia, valoresDevidos, responsavelApuracao, transmissaoImediata } = params;
   const [ano, mes] = competencia.split("-").map(Number);
   const { irpj, csll, pis, cofins } = valoresDevidos;
 
@@ -58,6 +68,18 @@ export function montarDeclaracaoMit(params: {
         QualificacaoPj: QUALIFICACAO_PJ,
         TributacaoLucro: TRIBUTACAO_LUCRO_PRESUMIDO,
         RegimePisCofins: REGIME_PIS_COFINS_CUMULATIVO,
+        ResponsavelApuracao: {
+          CpfResponsavel: responsavelApuracao.cpf,
+          TelResponsavel: {
+            Ddd: responsavelApuracao.telefoneDdd,
+            NumTelefone: responsavelApuracao.telefoneNumero,
+          },
+          EmailResponsavel: responsavelApuracao.email,
+          RegistroCrc: {
+            UfRegistro: responsavelApuracao.crcUf,
+            NumRegistro: responsavelApuracao.crcNumero,
+          },
+        },
       },
       ...(semMovimento ? {} : { Debitos: debitos }),
       TransmissaoImediata: transmissaoImediata,

@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 
-const TABS = [
+type Tab = { href: string; label: string; exact?: boolean };
+
+const TABS: Tab[] = [
   { href: "/admin", label: "Visão geral", exact: true },
   { href: "/admin/empresas", label: "Empresas" },
   { href: "/admin/certificados", label: "Certificados" },
@@ -15,12 +17,19 @@ const TABS = [
   { href: "/admin/chat", label: "Chat IA" },
 ];
 
-export function AdminNav() {
+const TAB_SUPER_ADMIN: Tab = { href: "/admin/configuracoes/contador-responsavel", label: "Configurações" };
+
+// `isSuperAdmin` vem do layout (server component) — a aba só some da UI
+// pra quem não é Super Admin; a página em si também é protegida por
+// requireSuperAdmin(), então isso aqui é só uma questão de não poluir a
+// navegação de quem não pode usar, não a proteção de verdade.
+export function AdminNav({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const pathname = usePathname();
+  const tabs = isSuperAdmin ? [...TABS, TAB_SUPER_ADMIN] : TABS;
 
   return (
     <nav className="flex gap-1 border-b border-border">
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
         return (
           <Link

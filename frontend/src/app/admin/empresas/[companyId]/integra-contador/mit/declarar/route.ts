@@ -4,6 +4,7 @@ import { requireSomaStaff, requireUser } from "@/lib/auth";
 import { buscarFaturamentoMensal, competenciasTrimestre, somarFaturamento } from "@/lib/faturamento";
 import { calcularLucroPresumido, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
 import { montarDeclaracaoMit } from "@/lib/mit-declaracao";
+import { buscarContadorResponsavel } from "@/lib/actions/configuracoes";
 
 const COMPETENCIA_REGEX = /^\d{4}-\d{2}$/;
 
@@ -55,7 +56,31 @@ export async function POST(
     aliquotaIss: null,
   });
   const valoresDevidos = valoresDevidosNoPeriodoMit(resultado);
-  const { dados } = montarDeclaracaoMit({ competencia, valoresDevidos, transmissaoImediata });
+
+  const contador = await buscarContadorResponsavel();
+  if (!contador?.cpf || !contador.crc_uf || !contador.crc_numero || !contador.telefone_ddd || !contador.telefone_numero || !contador.email) {
+    return NextResponse.json(
+      {
+        error:
+          "O contador responsável ainda não está configurado — peça pra um Super Admin preencher em Configurações > Contador responsável antes de declarar o MIT.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const { dados } = montarDeclaracaoMit({
+    competencia,
+    valoresDevidos,
+    transmissaoImediata,
+    responsavelApuracao: {
+      cpf: contador.cpf,
+      crcUf: contador.crc_uf,
+      crcNumero: contador.crc_numero,
+      telefoneDdd: contador.telefone_ddd,
+      telefoneNumero: contador.telefone_numero,
+      email: contador.email,
+    },
+  });
 
   let response: Response;
   try {

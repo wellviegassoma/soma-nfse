@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireSomaStaff, getCurrentProfileName } from "@/lib/auth";
+import { requireSomaStaff, getCurrentProfileName, isSuperAdmin } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
 import { LogoutButton } from "@/components/LogoutButton";
 import { AdminNav } from "@/components/AdminNav";
@@ -9,6 +9,7 @@ export default async function AdminLayout({
 }: LayoutProps<"/admin">) {
   await requireSomaStaff();
   const userName = await getCurrentProfileName();
+  const superAdmin = await isSuperAdmin();
 
   return (
     <div className="min-h-dvh bg-background">
@@ -51,7 +52,7 @@ export default async function AdminLayout({
         </div>
       </header>
       <div className="mx-auto max-w-5xl px-4 py-8">
-        <AdminNav />
+        <AdminNav isSuperAdmin={superAdmin} />
         <div className="pt-6">{children}</div>
       </div>
     </div>

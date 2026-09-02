@@ -13,8 +13,6 @@ Toda rota exige o header X-Internal-Token (ver auth.py).
 
 from __future__ import annotations
 
-import os
-
 from dotenv import load_dotenv
 
 load_dotenv()  # só facilita rodar localmente — em produção (Railway) as
@@ -262,30 +260,24 @@ def consultar_apuracao_mit(cnpj: str, id_apuracao: int):
     return ConsultarApuracaoMitOut(contribuinte_cnpj=cnpj, id_apuracao=id_apuracao, resposta=resposta)
 
 
-def _preencher_responsavel_apuracao(dados: dict) -> dict:
+def _validar_responsavel_apuracao(dados: dict) -> None:
     """
-    O frontend nunca vê as env vars deste serviço, então o bloco
     `ResponsavelApuracao` (contador responsável da SOMA perante a Receita
-    — CPF, CRC, contato) é preenchido aqui, não em `lib/mit-declaracao.ts`.
-    Só adiciona se o frontend não tiver mandado nada em `DadosIniciais`
-    (não deveria mandar, mas não sobrescreve por engano se um dia mandar).
+    — CPF, CRC, contato) é um dado único configurável no app (tabela
+    `configuracao_contador_responsavel`, só SUPER_ADMIN edita — ver
+    `lib/actions/configuracoes.ts` no frontend), não uma env var deste
+    serviço. O frontend já monta esse bloco (`lib/mit-declaracao.ts`) e
+    bloqueia a chamada se a configuração não existir — essa validação
+    aqui é só uma segunda trava (falha alto e claro em vez de deixar
+    passar um CPF vazio pra Serpro, que já aconteceu uma vez quando isso
+    ainda vinha de env var não configurada).
     """
-    dados_iniciais = dados.setdefault("DadosIniciais", {})
-    if "ResponsavelApuracao" in dados_iniciais:
-        return dados
-    dados_iniciais["ResponsavelApuracao"] = {
-        "CpfResponsavel": os.environ.get("SOMA_CONTADOR_CPF", ""),
-        "TelResponsavel": {
-            "Ddd": os.environ.get("SOMA_CONTADOR_TELEFONE_DDD", ""),
-            "NumTelefone": os.environ.get("SOMA_CONTADOR_TELEFONE_NUMERO", ""),
-        },
-        "EmailResponsavel": os.environ.get("SOMA_CONTADOR_EMAIL", ""),
-        "RegistroCrc": {
-            "UfRegistro": os.environ.get("SOMA_CONTADOR_CRC_UF", ""),
-            "NumRegistro": os.environ.get("SOMA_CONTADOR_CRC_NUMERO", ""),
-        },
-    }
-    return dados
+    responsavel = dados.get("DadosIniciais", {}).get("ResponsavelApuracao")
+    if not responsavel or not responsavel.get("CpfResponsavel"):
+        raise ErroIntegraContador(
+            "Payload do MIT sem ResponsavelApuracao.CpfResponsavel — configure o contador "
+            "responsável em Configurações > Contador responsável antes de declarar."
+        )
 
 
 @app.post(
@@ -303,13 +295,13 @@ def declarar_apuracao_mit(cnpj: str, corpo: DeclararMitIn):
     acompanhar). Nunca serve do cache (regra já existe em
     serpro_client.chamar() pra toda rota "Declarar"). O payload em `dados`
     já vem pronto do frontend (montado a partir do faturamento e do
-    cálculo de Lucro Presumido) — este endpoint só completa o
-    `ResponsavelApuracao` (dado do contador da SOMA, não da empresa
-    cliente) antes de repassar.
+    cálculo de Lucro Presumido, incluindo `ResponsavelApuracao` — dado do
+    contador da SOMA, não da empresa cliente) — validado aqui de novo
+    antes de repassar.
     """
-    dados = _preencher_responsavel_apuracao(corpo.dados)
     try:
-        resposta = chamar("MIT", "ENCAPURACAO314", cnpj, dados)
+        _validar_responsavel_apuracao(corpo.dados)
+        resposta = chamar("MIT", "ENCAPURACAO314", cnpj, corpo.dados)
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return DeclararMitOut(contribuinte_cnpj=cnpj, resposta=resposta)
