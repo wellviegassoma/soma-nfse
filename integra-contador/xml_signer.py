@@ -21,34 +21,14 @@ exemplo):
     elemento assinado, não filha dele)
 
 USO NESTE SERVIÇO (DCTFWEB.TRANSDECLARACAO310, ver main.py): diferente da
-DPS, aqui NÃO existia um exemplo real já aceito pra calibrar o perfil
-exato de assinatura que a DCTFWeb espera — foram 4 rodadas de teste real
-(ORTOP, 02/09/2026) até acertar:
-  1. RSA-SHA1 (igual DPS) → "[TRANS09] SignatureMethod inválido: .../rsa-sha1"
-  2. RSA-SHA256 + DigestMethod SHA-1 → "[TRANS09] DigestMethod inválido: .../sha1"
-  3. RSA-SHA256 + DigestMethod SHA-256 (C14N não-exclusivo, hand-rolled
-     igual DPS) → "Assinatura inválida" genérico (sem apontar campo) —
-     a assinatura em si não validava, não o nome de nenhum algoritmo
-  4. Trocou pra C14N EXCLUSIVO (a dupla "moderna" que o NFS-e usa) →
-     "[TRANS09] CanonicalizationMethod inválido: .../xml-exc-c14n#" — ou
-     seja, exclusivo é EXPLICITAMENTE recusado; tinha que ser
-     não-exclusivo mesmo, só que o hand-rolled (`_c14n`) não lida com
-     mais de um namespace nem atributo com namespace próprio (só
-     testado contra a DPS, que só tem um namespace) — o XML da DCTFWeb
-     tem 3 (default + tns1 + xsi) e um atributo `xsi:type`
-
-Perfil final: RSA-SHA256 + DigestMethod SHA-256 + C14N NÃO-exclusivo,
-calculado com o C14N NATIVO do lxml (não o hand-rolled `_c14n`) sobre
-uma CÓPIA DESTACADA do elemento (`copy.deepcopy`) — o C14N nativo do
-lxml tem um bug real e reproduzível (insere `xmlns=""` espúrio em
-elementos filhos sem prefixo quando um DESCENDENTE redeclara o mesmo
-namespace com prefixo) que só acontece canonicalizando um elemento
-"vivo" dentro da árvore maior; canonicalizar uma cópia destacada evita
-o bug (verificado manualmente contra o XML real da DCTFWeb). Foi
-exatamente esse bug que motivou o hand-roll original pra DPS — mas ali
-o documento só tem 1 namespace, então nunca dava pra reproduzir; aqui
-com 3 namespaces o bug aparece, e a correção (cópia destacada) resolve
-sem precisar generalizar o hand-roll pra suportar múltiplos namespaces.
+DPS, aqui NÃO existe um exemplo real já aceito pra calibrar o perfil
+exato de assinatura que a DCTFWeb espera — a doc pública só diz "XML
+assinado digitalmente, com o certificado original", sem detalhar
+algoritmo. Usando o mesmo perfil (RSA-SHA1 + C14N não-exclusivo, sem
+cadeia de certificação) por ser o único já validado neste projeto contra
+um endpoint de assinatura de documento fiscal do governo — se a Serpro
+recusar a assinatura em si (não a estrutura do XML), é o primeiro lugar
+pra revisar.
 
 Não depende de bibliotecas externas de XMLDSig (signxml não estava
 disponível no ambiente) — implementado com lxml (canonicalização C14N)
@@ -58,7 +38,6 @@ disponível no ambiente) — implementado com lxml (canonicalização C14N)
 from __future__ import annotations
 
 import base64
-import copy
 import hashlib
 from typing import Optional
 
@@ -164,32 +143,6 @@ def _canonicalizar_elemento(elemento, namespace_uri: str, eh_raiz: bool) -> str:
     return "".join(partes)
 
 
-def _c14n_lxml_nativo(elemento) -> bytes:
-    """
-    C14N NÃO-exclusivo (mesma URI que `_c14n` hand-rolled usa), mas
-    calculado com o suporte NATIVO do lxml em vez de hand-rolled — só
-    funciona corretamente sobre uma CÓPIA DESTACADA do elemento
-    (`copy.deepcopy`), nunca sobre o elemento "vivo" dentro da árvore
-    maior. Canonicalizar o elemento vivo tem um bug real e reproduzível
-    no lxml: insere `xmlns=""` espúrio num elemento filho sem prefixo
-    quando um DESCENDENTE redeclara o MESMO namespace com prefixo (ex.:
-    `ConteudoDeclaracao` tem `xmlns="...dctf/v1"` default, o filho
-    `tns1:DctfXml` redeclara o mesmo URI como prefixo `tns1`, e um NETO
-    sem prefixo dentro de `tns1:DctfXml` deveria herdar o namespace
-    default de `ConteudoDeclaracao` — o lxml "vivo" erra isso e marca o
-    neto como sem namespace nenhum). Usar uma cópia destacada faz o lxml
-    recalcular os namespaces do zero pro subtree isolado, sem esse erro
-    — verificado manualmente contra o XML real da DCTFWeb.
-
-    Só serve pra documentos com MAIS de um namespace/atributo com
-    namespace próprio (a DCTFWeb) — `_c14n` (hand-rolled) continua sendo
-    o usado pra DPS (só 1 namespace, já testado e aceito em produção;
-    trocar de implementação ali é risco sem benefício).
-    """
-    copia = copy.deepcopy(elemento)
-    return etree.tostring(copia, method="c14n")
-
-
 def assinar_elemento(
     xml_documento: str,
     id_elemento_a_assinar: str,
@@ -197,7 +150,6 @@ def assinar_elemento(
     certificado_der: bytes,
     cadeia_der: Optional[list] = None,
     nome_atributo_id: str = "Id",
-    algoritmo_assinatura: str = "rsa-sha1",
 ) -> str:
     """
     Recebe o XML completo (como string) já contendo o elemento a ser
@@ -216,28 +168,7 @@ def assinar_elemento(
 
     `nome_atributo_id` — nome do atributo que identifica o elemento
     (case-sensitive; a DPS/NFS-e usa "Id", a DCTFWeb usa "id" minúsculo).
-
-    `algoritmo_assinatura` — "rsa-sha1" (padrão, usado pela DPS, C14N
-    não-exclusivo hand-rolled) ou "rsa-sha256" (usado pela DCTFWeb,
-    também C14N não-exclusivo mas via lxml nativo + cópia destacada —
-    ver nota no topo do arquivo pro histórico completo de por que essa
-    combinação específica). Troca junto SignatureMethod/DigestMethod.
     """
-    if algoritmo_assinatura == "rsa-sha256":
-        signature_method_uri = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
-        hash_assinatura = hashes.SHA256()
-        digest_method_uri = "http://www.w3.org/2001/04/xmlenc#sha256"
-        digest_hasher = hashlib.sha256
-        canon_method_uri = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
-        canonicalizar = _c14n_lxml_nativo
-    else:
-        signature_method_uri = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
-        hash_assinatura = hashes.SHA1()
-        digest_method_uri = "http://www.w3.org/2000/09/xmldsig#sha1"
-        digest_hasher = hashlib.sha1
-        canon_method_uri = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
-        canonicalizar = _c14n
-
     parser = etree.XMLParser(remove_blank_text=False)
     raiz = etree.fromstring(xml_documento.encode("utf-8"), parser=parser)
 
@@ -252,18 +183,18 @@ def assinar_elemento(
 
     # 1) Canonicaliza o elemento alvo (transform enveloped-signature é
     #    identidade aqui, já que ainda não existe <Signature> nenhuma
-    #    dentro dele) e calcula o digest.
-    canon_alvo = canonicalizar(alvo)
-    digest_value = base64.b64encode(digest_hasher(canon_alvo).digest()).decode("ascii")
+    #    dentro dele) e calcula o digest SHA-1.
+    canon_alvo = _c14n(alvo)
+    digest_value = base64.b64encode(hashlib.sha1(canon_alvo).digest()).decode("ascii")
 
     # 2) Monta o <SignedInfo> com a referência ao elemento assinado.
     signed_info = etree.Element(f"{{{NS_DS}}}SignedInfo", nsmap={None: NS_DS})
 
     canon_method = etree.SubElement(signed_info, f"{{{NS_DS}}}CanonicalizationMethod")
-    canon_method.set("Algorithm", canon_method_uri)
+    canon_method.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
 
     sig_method = etree.SubElement(signed_info, f"{{{NS_DS}}}SignatureMethod")
-    sig_method.set("Algorithm", signature_method_uri)
+    sig_method.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#rsa-sha1")
 
     reference = etree.SubElement(signed_info, f"{{{NS_DS}}}Reference")
     reference.set("URI", f"#{id_elemento_a_assinar}")
@@ -272,10 +203,10 @@ def assinar_elemento(
     t1 = etree.SubElement(transforms, f"{{{NS_DS}}}Transform")
     t1.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#enveloped-signature")
     t2 = etree.SubElement(transforms, f"{{{NS_DS}}}Transform")
-    t2.set("Algorithm", canon_method_uri)
+    t2.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
 
     digest_method = etree.SubElement(reference, f"{{{NS_DS}}}DigestMethod")
-    digest_method.set("Algorithm", digest_method_uri)
+    digest_method.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#sha1")
 
     digest_value_el = etree.SubElement(reference, f"{{{NS_DS}}}DigestValue")
     digest_value_el.text = digest_value
@@ -296,9 +227,9 @@ def assinar_elemento(
 
     # 4) SÓ AGORA canonicaliza o SignedInfo (já na posição final) e assina
     #    com RSA-SHA1.
-    canon_signed_info = canonicalizar(signed_info)
+    canon_signed_info = _c14n(signed_info)
     assinatura_bytes = chave_privada.sign(
-        canon_signed_info, padding.PKCS1v15(), hash_assinatura
+        canon_signed_info, padding.PKCS1v15(), hashes.SHA1()
     )
     signature_value_b64 = base64.b64encode(assinatura_bytes).decode("ascii")
 

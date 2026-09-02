@@ -17,7 +17,16 @@ import base64
 import json
 import re
 
+from cryptography import x509
 from dotenv import load_dotenv
+from lxml import etree
+from signxml import (
+    CanonicalizationMethod,
+    DigestAlgorithm,
+    SignatureConstructionMethod,
+    SignatureMethod,
+    XMLSigner,
+)
 
 load_dotenv()  # só facilita rodar localmente — em produção (Railway) as
 # variáveis já vêm injetadas no processo, load_dotenv() não faz nada.
@@ -50,7 +59,6 @@ from schemas import (
     TransmitirDctfWebOut,
 )
 from serpro_client import ErroIntegraContador, chamar
-from xml_signer import ErroAssinatura, assinar_elemento
 from sitfis import ErroSitfis, obter_situacao_fiscal
 
 app = FastAPI(title="integra-contador", docs_url=None, redoc_url=None)
@@ -403,16 +411,22 @@ def transmitir_declaracao_dctfweb(cnpj: str, ano_pa: str, mes_pa: str):
     atuando por procuração — nunca o certificado da empresa cliente),
     3) transmite via DCTFWEB.TRANSDECLARACAO310.
 
-    Perfil de assinatura: RSA-SHA256 (SignatureMethod E DigestMethod) +
-    C14N não-exclusivo, sem cadeia de certificação. Começou como cópia
-    do perfil da DPS (RSA-SHA1), mas dois testes reais (ORTOP,
-    02/09/2026) foram recusados em sequência: primeiro "[TRANS09]
-    SignatureMethod inválido: .../rsa-sha1", depois (já com
-    SignatureMethod corrigido) "[TRANS09] DigestMethod inválido:
-    .../sha1" — os dois precisaram trocar pra SHA-256 juntos (ver
-    `algoritmo_assinatura` em xml_signer.assinar_elemento). Se a Serpro
-    recusar de novo por causa da assinatura, a canonicalização (ainda
-    não-exclusiva) é o próximo lugar a revisar.
+    Assinatura feita com `signxml` (biblioteca de terceiros madura),
+    não com o `xml_signer.py` hand-rolled usado pra DPS. Histórico: 4
+    tentativas reais (ORTOP, 02/09/2026) copiando/ajustando o perfil da
+    DPS na mão foram todas recusadas — RSA-SHA1 puro, depois SHA-256 só
+    no SignatureMethod, depois SHA-256 nos dois mas com C14N
+    não-exclusivo hand-rolled (só validado pra DPS, que tem 1 namespace
+    só), depois C14N exclusivo (explicitamente rejeitado: "[TRANS09]
+    CanonicalizationMethod inválido"). A verificação independente com
+    `signxml.XMLVerifier` (não a minha própria função) provou que a
+    tentativa de C14N não-exclusivo hand-rolled realmente produzia uma
+    assinatura matematicamente inválida — o hand-roll nunca foi
+    projetado pra documentos com mais de 1 namespace (a DCTFWeb tem 3:
+    default + tns1 + xsi), e o XML da DCTFWeb expôs exatamente esse
+    limite. RSA-SHA256 + C14N 1.0 não-exclusivo via signxml verificado
+    localmente (assinatura + conteúdo referenciado inalterado) antes de
+    ir pra produção.
     """
     try:
         resposta_xml = chamar("DCTFWEB", "CONSXMLDECLARACAO38", cnpj, {"categoria": "GERAL_MENSAL", "anoPA": ano_pa, "mesPA": mes_pa})
@@ -429,16 +443,24 @@ def transmitir_declaracao_dctfweb(cnpj: str, ano_pa: str, mes_pa: str):
             )
         id_conteudo = id_match.group(1)
 
-        chave_privada, certificado_der, cadeia_der = obter_chave_e_certificado_para_assinatura()
-        xml_assinado = assinar_elemento(
-            xml_original,
-            id_conteudo,
-            chave_privada,
-            certificado_der,
-            cadeia_der,
-            nome_atributo_id="id",
-            algoritmo_assinatura="rsa-sha256",
+        chave_privada, certificado_der, _cadeia_der = obter_chave_e_certificado_para_assinatura()
+        certificado_x509 = x509.load_der_x509_certificate(certificado_der)
+
+        raiz_xml = etree.fromstring(xml_original.encode("utf-8"))
+        signer = XMLSigner(
+            method=SignatureConstructionMethod.enveloped,
+            signature_algorithm=SignatureMethod.RSA_SHA256,
+            digest_algorithm=DigestAlgorithm.SHA256,
+            c14n_algorithm=CanonicalizationMethod.CANONICAL_XML_1_0,
         )
+        raiz_assinada = signer.sign(
+            raiz_xml,
+            key=chave_privada,
+            cert=[certificado_x509],
+            reference_uri=f"#{id_conteudo}",
+            id_attribute="id",
+        )
+        xml_assinado = etree.tostring(raiz_assinada, xml_declaration=True, encoding="utf-8").decode("utf-8")
         xml_assinado_base64 = base64.b64encode(xml_assinado.encode("utf-8")).decode("ascii")
 
         resposta = chamar(
@@ -447,7 +469,7 @@ def transmitir_declaracao_dctfweb(cnpj: str, ano_pa: str, mes_pa: str):
             cnpj,
             {"categoria": "GERAL_MENSAL", "anoPA": ano_pa, "mesPA": mes_pa, "xmlAssinadoBase64": xml_assinado_base64},
         )
-    except (ErroIntegraContador, ErroCertificadoEscritorio, ErroAssinatura) as e:
+    except (ErroIntegraContador, ErroCertificadoEscritorio) as e:
         raise HTTPException(status_code=400, detail=str(e))
     return TransmitirDctfWebOut(contribuinte_cnpj=cnpj, ano_pa=ano_pa, mes_pa=mes_pa, resposta=resposta)
 
