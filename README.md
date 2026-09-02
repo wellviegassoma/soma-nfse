@@ -2000,8 +2000,17 @@ servidor (concluído, 2026-08-31)**
       padrão `[Aviso/Erro-DCTFWEB-...]` dos outros erros já vistos) —
       indica indisponibilidade (temporária, a julgar pelo "Currently") ou
       falta de contratação desse serviço específico no plano Integra
-      Contador da SOMA. Precisa retestar mais tarde ou confirmar
-      contratação com a Serpro antes de insistir em ajuste de código
+      Contador da SOMA. Confirmado contra a página de "Erros comuns" da
+      própria DCTFWeb: não documenta o 303001/SUSPENDED (é claramente
+      fora do escopo de validação, mesma conclusão), mas documenta os
+      erros de validação de assinatura pra referência futura, se algum
+      dia a assinatura em si for recusada em vez do endpoint: `TRANS02`
+      (Reference errada — tem que ter exatamente 1), `TRANS04` (XML
+      alterado além da assinatura — quebra a comparação por hash),
+      `TRANS18` (erro no elemento Signature — conferir SignatureValue/
+      SignedInfo). Precisa retestar mais tarde ou confirmar contratação
+      com o suporte do Integra Contador antes de insistir em ajuste de
+      código
 
 **Fase V — Retenções na fonte abatidas do imposto apurado (concluído,
 02/09/2026)**
