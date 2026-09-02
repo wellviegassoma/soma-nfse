@@ -53,6 +53,21 @@ export async function POST(
     return NextResponse.json({ error: body?.detail ?? "A Serpro recusou a transmissão." }, { status: 502 });
   }
 
+  // HTTP 200 sozinho não é garantia de sucesso de verdade — a Serpro já
+  // devolveu 200 com `dados` vazio/sem NumeroRecibo pra uma transmissão
+  // que na prática não colou (a declaração continuou "Em Andamento").
+  // As `mensagens` são a fonte real de verdade sobre o que aconteceu.
   const dadosResposta = body.resposta?.dados ? JSON.parse(body.resposta.dados) : null;
-  return NextResponse.json({ numeroRecibo: dadosResposta?.NumeroRecibo ?? null });
+  const numeroRecibo = dadosResposta?.NumeroRecibo ?? dadosResposta?.numeroRecibo ?? null;
+  const mensagens: { codigo?: string; texto?: string }[] = body.resposta?.mensagens ?? [];
+
+  if (!numeroRecibo) {
+    const motivo = mensagens.map((m) => `[${m.codigo}] ${m.texto}`).join("; ");
+    return NextResponse.json(
+      { error: motivo || "A Serpro não devolveu um número de recibo — a transmissão pode não ter sido concluída." },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json({ numeroRecibo, mensagens });
 }
