@@ -26,7 +26,10 @@ export async function GET(
   let response: Response;
   try {
     response = await fetch(
-      `${process.env.INTEGRA_CONTADOR_URL}/contribuintes/${company.cnpj}/mit/situacao-encerramento/${encodeURIComponent(protocolo)}`,
+      // protocolo_encerramento vai como query, não path — é base64 (pode
+      // ter "/"), e path segments não casam %2F de forma confiável (404
+      // real na primeira tentativa de polling, ver comentário no backend).
+      `${process.env.INTEGRA_CONTADOR_URL}/contribuintes/${company.cnpj}/mit/situacao-encerramento?protocolo_encerramento=${encodeURIComponent(protocolo)}`,
       {
         headers: { "X-Internal-Token": process.env.INTEGRA_CONTADOR_INTERNAL_TOKEN ?? "" },
         cache: "no-store",

@@ -308,7 +308,7 @@ def declarar_apuracao_mit(cnpj: str, corpo: DeclararMitIn):
 
 
 @app.get(
-    "/contribuintes/{cnpj}/mit/situacao-encerramento/{protocolo_encerramento}",
+    "/contribuintes/{cnpj}/mit/situacao-encerramento",
     response_model=SituacaoEncerramentoMitOut,
     dependencies=[Depends(exigir_token_interno)],
 )
@@ -319,6 +319,13 @@ def consultar_situacao_encerramento_mit(cnpj: str, protocolo_encerramento: str):
     /mit/apuracao/declarar. Feito pra polling: TTL de cache bem curto
     (30s, ver catalogo.py) pra não travar numa resposta velha "em
     processamento" enquanto o status muda de verdade do lado da Receita.
+
+    `protocolo_encerramento` vem como QUERY param, não path — o valor é
+    base64 (pode conter `/`), e frameworks web em geral (este incluso)
+    não casam `%2F` de forma confiável dentro de um segmento de rota
+    mesmo codificado. Descoberto ao vivo: o primeiro polling de um
+    encerramento real (ORTOP, 02/09/2026) voltou 404 mesmo com
+    encodeURIComponent aplicado nos dois lados.
     """
     try:
         resposta = chamar("MIT", "SITUACAOENC315", cnpj, {"protocoloEncerramento": protocolo_encerramento})
