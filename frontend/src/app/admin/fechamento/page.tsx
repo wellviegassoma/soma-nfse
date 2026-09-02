@@ -78,6 +78,11 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
                 Central Simples Nacional
               </Button>
             </a>
+            <a href="/admin/fechamento/situacao-fiscal">
+              <Button type="button" variant="secondary">
+                Central Situação Fiscal
+              </Button>
+            </a>
           </form>
           <BuscarTodasButton competencia={competencia} empresas={empresasComCertificado} />
         </div>
