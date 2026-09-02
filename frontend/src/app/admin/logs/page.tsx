@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
+import { formatarDataHora } from "@/lib/formatters";
 
 export const metadata = { title: "Logs — Painel SOMA" };
 
@@ -66,7 +67,7 @@ export default async function AdminLogsPage() {
                 )}
               </span>
               <span className="shrink-0 text-xs text-foreground/45">
-                {new Date(log.created_at).toLocaleString("pt-BR")}
+                {formatarDataHora(log.created_at)}
               </span>
             </div>
           ))}

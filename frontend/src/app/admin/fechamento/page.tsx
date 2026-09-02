@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { formatarDataHora } from "@/lib/formatters";
 import { BuscarTodasButton } from "./BuscarTodasButton";
 import { BuscarHistoricoTodasButton } from "./BuscarHistoricoTodasButton";
 import { ExportarZipButton } from "./ExportarZipButton";
@@ -122,7 +123,7 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
                   </div>
                   <div className="text-xs text-foreground/50">
                     {company.ultima_sincronizacao_em
-                      ? `Última sincronização: ${new Date(company.ultima_sincronizacao_em).toLocaleString("pt-BR")}`
+                      ? `Última sincronização: ${formatarDataHora(company.ultima_sincronizacao_em)}`
                       : "Nunca sincronizado"}
                   </div>
                 </div>

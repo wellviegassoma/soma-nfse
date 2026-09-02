@@ -4,6 +4,26 @@ export function formatarMoeda(valor: number): string {
   return formatadorMoeda.format(valor);
 }
 
+// `.toLocaleString("pt-BR")` sem `timeZone` usa o fuso do PROCESSO que
+// roda o código — nos Server Components isso é o servidor da Vercel
+// (UTC), não o fuso de quem está vendo a tela. Como o Brasil inteiro
+// está em UTC-3 fixo (sem horário de verão desde 2019), isso mostrava
+// todo horário 3h à frente do horário real de Brasília. Usar sempre
+// esta função em vez de `.toLocaleString("pt-BR")` direto.
+const formatadorDataHoraBrasilia = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+export function formatarDataHora(iso: string): string {
+  return formatadorDataHoraBrasilia.format(new Date(iso));
+}
+
 /** Recebe uma fração (0.05) e formata como percentual (5,0%). */
 export function formatarPercentual(fracao: number, casasDecimais = 1): string {
   return `${(fracao * 100).toFixed(casasDecimais).replace(".", ",")}%`;

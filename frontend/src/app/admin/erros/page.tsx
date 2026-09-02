@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
+import { formatarDataHora } from "@/lib/formatters";
 
 export const metadata = { title: "Erros — Painel SOMA" };
 
@@ -49,7 +50,7 @@ export default async function AdminErrorsPage() {
                   {erro.creator?.full_name ? ` · ${erro.creator.full_name}` : ""}
                   {erro.dps ? ` · DPS ${erro.dps.numero_dps}` : ""}
                 </span>
-                <span>{new Date(erro.created_at).toLocaleString("pt-BR")}</span>
+                <span>{formatarDataHora(erro.created_at)}</span>
               </div>
               <p className="break-all font-mono text-xs text-foreground/80">
                 {erro.technical_message}

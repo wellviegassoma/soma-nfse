@@ -135,6 +135,15 @@ export async function syncOneCompany(
         meses_anteriores: mesesAnteriores ?? 0,
       }),
       cache: "no-store",
+      // Sem isso, uma empresa cujo adn.nfse.gov.br trava (já visto em
+      // produção — ver HTTP 408 registrado em ultima_sincronizacao_erro)
+      // prende o fetch indefinidamente. Como syncAllCompanies processa o
+      // lote em sequência dentro de uma função serverless com
+      // maxDuration, isso já travou o cron inteiro: a função é matada
+      // pela plataforma no meio do await, antes de devolver resposta —
+      // e o after() que dispararia o próximo lote nunca chega a ser
+      // registrado, silenciando o resto do agendamento.
+      signal: AbortSignal.timeout(45_000),
     });
 
     if (!resp.ok) {
@@ -215,7 +224,24 @@ export type ResultadoLoteSincronizacao = {
   resultados: ResultadoSincronizacao[];
   totalEmpresas: number;
   temMais: boolean;
+  // Offset real de onde o próximo lote deve continuar — normalmente
+  // paginacao.offset + o tamanho do lote, mas quando o orçamento de
+  // tempo estoura no meio do lote (ver LIMITE_TEMPO_LOTE_MS abaixo),
+  // reflete só o que de fato foi processado, pra ninguém ficar pulado.
+  proximoOffset?: number;
 };
+
+// Deixa uma folga generosa dentro do maxDuration=300s da função
+// serverless do cron: se processar o lote inteiro (TAMANHO_LOTE
+// empresas) está demorando demais — uma delas travando o
+// adn.nfse.gov.br, por exemplo — para de pegar empresa nova e devolve
+// a resposta AGORA, com o offset real de onde parou. Sem isso, a
+// função corria risco de ser matada pela plataforma no meio do loop,
+// antes de conseguir devolver resposta e dar tempo do `after()` (que
+// dispara o próximo lote) ser registrado — foi exatamente esse o jeito
+// como o agendamento automático ficou travado silenciosamente em
+// produção.
+const LIMITE_TEMPO_LOTE_MS = 240_000;
 
 // Paginação opcional: sem ela, processa TODAS as empresas na mesma
 // chamada (uso antigo). Com ela, processa só a fatia pedida e informa se
@@ -241,16 +267,21 @@ export async function syncAllCompanies(
   }
   const { data: companies, count } = await query;
 
+  const inicio = Date.now();
   const resultados: ResultadoSincronizacao[] = [];
+  let processadas = 0;
   for (const company of companies ?? []) {
     resultados.push(
       await syncOneCompany(admin, company as CompanyParaSincronizar, competencia, mesesAnteriores),
     );
+    processadas += 1;
+    if (paginacao && Date.now() - inicio > LIMITE_TEMPO_LOTE_MS) break;
   }
 
   const totalEmpresas = count ?? resultados.length;
-  const temMais = paginacao ? paginacao.offset + paginacao.limite < totalEmpresas : false;
-  return { resultados, totalEmpresas, temMais };
+  const proximoOffset = paginacao ? paginacao.offset + processadas : undefined;
+  const temMais = paginacao ? (proximoOffset as number) < totalEmpresas : false;
+  return { resultados, totalEmpresas, temMais, proximoOffset };
 }
 
 export { MESES_ANTERIORES_HISTORICO };

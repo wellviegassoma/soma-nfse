@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { formatarCnpj, STATUS_PILL_CLASSES, type StatusTone } from "@/lib/formatters";
+import { formatarCnpj, formatarDataHora, STATUS_PILL_CLASSES, type StatusTone } from "@/lib/formatters";
 import { EmitirGuiaParcelamentoButton } from "./EmitirGuiaParcelamentoButton";
 
 export type LinhaParcelamento = {
@@ -23,10 +23,6 @@ function tonePorSituacao(situacao: string): StatusTone {
   if (situacao === "Em parcelamento") return "success";
   if (situacao.toLowerCase().includes("rescind")) return "danger";
   return "neutral";
-}
-
-function formatarDataHora(iso: string): string {
-  return new Date(iso).toLocaleString("pt-BR");
 }
 
 // Primeira tabela client-interativa do app (busca + filtro sem reload) —

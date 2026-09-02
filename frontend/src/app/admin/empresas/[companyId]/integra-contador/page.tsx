@@ -2,12 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { formatarDataHora } from "@/lib/formatters";
 
 export const metadata = { title: "Integra Contador — Painel SOMA" };
-
-function formatarDataHora(iso: string): string {
-  return new Date(iso).toLocaleString("pt-BR");
-}
 
 export default async function AdminCompanyIntegraContadorPage(
   props: PageProps<"/admin/empresas/[companyId]/integra-contador">,

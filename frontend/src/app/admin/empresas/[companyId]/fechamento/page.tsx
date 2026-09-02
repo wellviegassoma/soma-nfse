@@ -5,6 +5,7 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { formatarDataHora } from "@/lib/formatters";
 import { BuscarAgoraButton } from "./BuscarAgoraButton";
 import { BuscarHistoricoButton } from "./BuscarHistoricoButton";
 
@@ -82,7 +83,7 @@ export default async function AdminFechamentoPage(
       {company?.ultima_sincronizacao_status === "erro" && (
         <Alert tone="warning">
           Última sincronização falhou ({company.ultima_sincronizacao_em
-            ? new Date(company.ultima_sincronizacao_em).toLocaleString("pt-BR")
+            ? formatarDataHora(company.ultima_sincronizacao_em)
             : "-"}
           ): {company.ultima_sincronizacao_erro || "erro desconhecido"}. Os dados abaixo podem
           estar desatualizados.
@@ -90,7 +91,7 @@ export default async function AdminFechamentoPage(
       )}
       {company?.ultima_sincronizacao_status === "sucesso" && (
         <p className="text-xs text-foreground/50">
-          Última sincronização: {new Date(company.ultima_sincronizacao_em!).toLocaleString("pt-BR")}
+          Última sincronização: {formatarDataHora(company.ultima_sincronizacao_em!)}
         </p>
       )}
 

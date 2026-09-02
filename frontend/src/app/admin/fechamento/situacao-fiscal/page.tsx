@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
+import { formatarDataHora } from "@/lib/formatters";
 import { ConsultarSituacaoFiscalLoteButton } from "./ConsultarSituacaoFiscalLoteButton";
 import { BaixarRelatoriosSituacaoFiscalLoteButton } from "./BaixarRelatoriosSituacaoFiscalLoteButton";
 
@@ -13,10 +14,6 @@ export const maxDuration = 300;
 // hoje" aqui na tela; quem realmente decide se cobra de novo é o próprio
 // serviço integra-contador, isso aqui é só informativo/estimativa.
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-
-function formatarDataHora(iso: string): string {
-  return new Date(iso).toLocaleString("pt-BR");
-}
 
 function cacheEhFresco(fetchedAt: string): boolean {
   return Date.now() - new Date(fetchedAt).getTime() < CACHE_TTL_MS;
