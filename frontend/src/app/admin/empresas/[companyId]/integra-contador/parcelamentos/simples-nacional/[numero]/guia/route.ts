@@ -57,12 +57,12 @@ export async function GET(
   }
 
   const dadosParseados = body.resposta?.dados ? JSON.parse(body.resposta.dados) : null;
-  const pdfBase64: string | undefined = dadosParseados?.pdf;
+  // Confirmado contra a Serpro (2026-09-02): GERARDAS161 devolve o PDF em
+  // `docArrecadacaoPdfB64`, não `pdf` (nome diferente dos outros serviços
+  // — PGDAS-D/MIT/DCTFWeb usam `pdf`).
+  const pdfBase64: string | undefined = dadosParseados?.docArrecadacaoPdfB64;
   if (!pdfBase64) {
-    // Diagnóstico temporário (Passo 0 ainda em confirmação): devolve o
-    // corpo cru pra descobrir o nome real do campo, em vez de só dizer
-    // "não veio pdf".
-    return NextResponse.json({ error: "A Serpro não devolveu o PDF da guia.", debug: dadosParseados, mensagens: body.resposta?.mensagens }, { status: 502 });
+    return NextResponse.json({ error: "A Serpro não devolveu o PDF da guia." }, { status: 502 });
   }
 
   return new NextResponse(Buffer.from(pdfBase64, "base64"), {
