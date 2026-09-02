@@ -174,16 +174,23 @@ def assinar_elemento(
     (case-sensitive; a DPS/NFS-e usa "Id", a DCTFWeb usa "id" minúsculo).
 
     `algoritmo_assinatura` — "rsa-sha1" (padrão, usado pela DPS) ou
-    "rsa-sha256" (usado pela DCTFWeb — ver nota no topo do arquivo). Só
-    troca o SignatureMethod e o hash usado pra assinar o SignedInfo; o
-    DigestMethod da Reference continua SHA-1 nos dois casos.
+    "rsa-sha256" (usado pela DCTFWeb — ver nota no topo do arquivo).
+    Troca junto o SignatureMethod/hash da assinatura E o DigestMethod/
+    hash da Reference (a DCTFWeb recusou os dois separadamente, um erro
+    de cada vez: primeiro só reclamou do SignatureMethod, com o
+    DigestMethod ainda SHA-1 recusou de novo — os dois tem que
+    acompanhar o mesmo algoritmo).
     """
     if algoritmo_assinatura == "rsa-sha256":
         signature_method_uri = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
         hash_assinatura = hashes.SHA256()
+        digest_method_uri = "http://www.w3.org/2001/04/xmlenc#sha256"
+        digest_hasher = hashlib.sha256
     else:
         signature_method_uri = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
         hash_assinatura = hashes.SHA1()
+        digest_method_uri = "http://www.w3.org/2000/09/xmldsig#sha1"
+        digest_hasher = hashlib.sha1
 
     parser = etree.XMLParser(remove_blank_text=False)
     raiz = etree.fromstring(xml_documento.encode("utf-8"), parser=parser)
@@ -199,9 +206,9 @@ def assinar_elemento(
 
     # 1) Canonicaliza o elemento alvo (transform enveloped-signature é
     #    identidade aqui, já que ainda não existe <Signature> nenhuma
-    #    dentro dele) e calcula o digest SHA-1.
+    #    dentro dele) e calcula o digest.
     canon_alvo = _c14n(alvo)
-    digest_value = base64.b64encode(hashlib.sha1(canon_alvo).digest()).decode("ascii")
+    digest_value = base64.b64encode(digest_hasher(canon_alvo).digest()).decode("ascii")
 
     # 2) Monta o <SignedInfo> com a referência ao elemento assinado.
     signed_info = etree.Element(f"{{{NS_DS}}}SignedInfo", nsmap={None: NS_DS})
@@ -222,7 +229,7 @@ def assinar_elemento(
     t2.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
 
     digest_method = etree.SubElement(reference, f"{{{NS_DS}}}DigestMethod")
-    digest_method.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#sha1")
+    digest_method.set("Algorithm", digest_method_uri)
 
     digest_value_el = etree.SubElement(reference, f"{{{NS_DS}}}DigestValue")
     digest_value_el.text = digest_value

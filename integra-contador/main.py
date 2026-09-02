@@ -403,15 +403,16 @@ def transmitir_declaracao_dctfweb(cnpj: str, ano_pa: str, mes_pa: str):
     atuando por procuração — nunca o certificado da empresa cliente),
     3) transmite via DCTFWEB.TRANSDECLARACAO310.
 
-    Perfil de assinatura: RSA-SHA256 + C14N não-exclusivo, sem cadeia de
-    certificação. Começou como cópia do perfil da DPS (RSA-SHA1), mas um
-    teste real (ORTOP, 02/09/2026) foi recusado com "[TRANS09]
-    SignatureMethod inválido: .../rsa-sha1" — corrigido pra RSA-SHA256
-    (ver `algoritmo_assinatura` em xml_signer.assinar_elemento). O
-    DigestMethod da Reference continua SHA-1; não há evidência ainda de
-    que precise mudar também. Se a Serpro recusar de novo por causa da
-    assinatura, a canonicalização (ainda não-exclusiva) é o próximo
-    lugar a revisar.
+    Perfil de assinatura: RSA-SHA256 (SignatureMethod E DigestMethod) +
+    C14N não-exclusivo, sem cadeia de certificação. Começou como cópia
+    do perfil da DPS (RSA-SHA1), mas dois testes reais (ORTOP,
+    02/09/2026) foram recusados em sequência: primeiro "[TRANS09]
+    SignatureMethod inválido: .../rsa-sha1", depois (já com
+    SignatureMethod corrigido) "[TRANS09] DigestMethod inválido:
+    .../sha1" — os dois precisaram trocar pra SHA-256 juntos (ver
+    `algoritmo_assinatura` em xml_signer.assinar_elemento). Se a Serpro
+    recusar de novo por causa da assinatura, a canonicalização (ainda
+    não-exclusiva) é o próximo lugar a revisar.
     """
     try:
         resposta_xml = chamar("DCTFWEB", "CONSXMLDECLARACAO38", cnpj, {"categoria": "GERAL_MENSAL", "anoPA": ano_pa, "mesPA": mes_pa})
