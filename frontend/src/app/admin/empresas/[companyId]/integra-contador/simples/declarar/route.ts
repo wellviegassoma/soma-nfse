@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireSomaStaff } from "@/lib/auth";
+import { requireSomaStaff, requireUser } from "@/lib/auth";
 import {
   buscarFaturamentoMensal,
   buscarFaturamentoPorAtividade,
@@ -22,6 +22,7 @@ export async function POST(
   props: { params: Promise<{ companyId: string }> },
 ) {
   await requireSomaStaff();
+  const user = await requireUser();
   const { companyId } = await props.params;
 
   const corpo = await request.json().catch(() => null);
@@ -107,6 +108,31 @@ export async function POST(
   // objeto pronto.
   const dadosParseados = body.resposta?.dados ? JSON.parse(body.resposta.dados) : null;
   const declaracaoTransmitida = Array.isArray(dadosParseados) ? dadosParseados[0] : dadosParseados;
+
+  // Melhor esforço: a transmissão pra Serpro já aconteceu de verdade nesse
+  // ponto (só quando indicadorTransmissao=true — nunca registra simulação)
+  // — uma falha ao gravar o histórico não pode fazer a resposta parecer
+  // que a declaração em si falhou. Mesmo padrão de mit/declarar/route.ts.
+  if (indicadorTransmissao && declaracaoTransmitida?.idDeclaracao) {
+    const valoresDevidos = Array.isArray(declaracaoTransmitida.valoresDevidos)
+      ? (declaracaoTransmitida.valoresDevidos as { valor: number }[])
+      : [];
+    const valorTotal = valoresDevidos.reduce((acc, v) => acc + Number(v.valor ?? 0), 0);
+    supabase
+      .from("integra_contador_pgdas_declaracoes")
+      .insert({
+        company_id: companyId,
+        competencia,
+        id_declaracao: declaracaoTransmitida.idDeclaracao,
+        data_hora_transmissao: declaracaoTransmitida.dataHoraTransmissao ?? null,
+        valor_total: valorTotal,
+        dados_enviados: resultado.dados,
+        transmitted_by: user.id,
+      })
+      .then(({ error }) => {
+        if (error) console.error("Falha ao registrar histórico de declaração do PGDAS-D:", error);
+      });
+  }
 
   return NextResponse.json({ resultado: declaracaoTransmitida });
 }
