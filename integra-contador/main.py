@@ -29,6 +29,7 @@ from schemas import (
     ChamarServicoOut,
     CndOut,
     ConsultarApuracaoMitOut,
+    ConsultarXmlDctfWebOut,
     DeclaracoesPeriodoOut,
     DeclararMitIn,
     DeclararMitOut,
@@ -356,6 +357,27 @@ def gerar_guia_dctfweb(cnpj: str, ano_pa: str, mes_pa: str):
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return GerarGuiaDctfWebOut(contribuinte_cnpj=cnpj, ano_pa=ano_pa, mes_pa=mes_pa, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/dctfweb/xml/{ano_pa}/{mes_pa}",
+    response_model=ConsultarXmlDctfWebOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def consultar_xml_dctfweb(cnpj: str, ano_pa: str, mes_pa: str):
+    """
+    Consulta o XML de uma declaração da DCTFWeb (DCTFWEB.CONSXMLDECLARACAO38)
+    — devolve o XML já assinado (se transmitida) ou o rascunho ainda sem
+    assinatura (se "EM ANDAMENTO", ex.: logo depois de um encerramento do
+    MIT). Só leitura, sem efeito legal — usado pra diagnosticar por que
+    uma declaração está travada antes de decidir se precisa do fluxo de
+    assinatura + TRANSDECLARACAO310.
+    """
+    try:
+        resposta = chamar("DCTFWEB", "CONSXMLDECLARACAO38", cnpj, {"categoria": "GERAL_MENSAL", "anoPA": ano_pa, "mesPA": mes_pa})
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ConsultarXmlDctfWebOut(contribuinte_cnpj=cnpj, ano_pa=ano_pa, mes_pa=mes_pa, resposta=resposta)
 
 
 @app.get(

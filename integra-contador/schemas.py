@@ -92,3 +92,10 @@ class GerarGuiaDctfWebOut(BaseModel):
     ano_pa: str
     mes_pa: str
     resposta: dict
+
+
+class ConsultarXmlDctfWebOut(BaseModel):
+    contribuinte_cnpj: str
+    ano_pa: str
+    mes_pa: str
+    resposta: dict
