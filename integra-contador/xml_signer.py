@@ -146,6 +146,20 @@ def _canonicalizar_elemento(elemento, namespace_uri: str, eh_raiz: bool) -> str:
     return "".join(partes)
 
 
+def _c14n_exclusivo(elemento) -> bytes:
+    """
+    C14N EXCLUSIVO (W3C, http://www.w3.org/2001/10/xml-exc-c14n#), via
+    suporte nativo do lxml — ao contrário do C14N não-exclusivo usado
+    pela DPS (hand-rolled por causa de um bug real do lxml nesse modo
+    específico, ver `_c14n`), o modo exclusivo do lxml não apresentou
+    esse problema nos testes feitos aqui. Usado pra DCTFWeb (RSA-SHA256)
+    — é o pareamento "moderno" (SHA-256 + C14N exclusivo) que o próprio
+    NFS-e Nacional usa pra assinar o documento final, conforme já
+    documentado no topo deste arquivo.
+    """
+    return etree.tostring(elemento, method="c14n", exclusive=True)
+
+
 def assinar_elemento(
     xml_documento: str,
     id_elemento_a_assinar: str,
@@ -173,24 +187,27 @@ def assinar_elemento(
     `nome_atributo_id` — nome do atributo que identifica o elemento
     (case-sensitive; a DPS/NFS-e usa "Id", a DCTFWeb usa "id" minúsculo).
 
-    `algoritmo_assinatura` — "rsa-sha1" (padrão, usado pela DPS) ou
-    "rsa-sha256" (usado pela DCTFWeb — ver nota no topo do arquivo).
-    Troca junto o SignatureMethod/hash da assinatura E o DigestMethod/
-    hash da Reference (a DCTFWeb recusou os dois separadamente, um erro
-    de cada vez: primeiro só reclamou do SignatureMethod, com o
-    DigestMethod ainda SHA-1 recusou de novo — os dois tem que
-    acompanhar o mesmo algoritmo).
+    `algoritmo_assinatura` — "rsa-sha1" (padrão, usado pela DPS, com C14N
+    NÃO-exclusivo) ou "rsa-sha256" (usado pela DCTFWeb, com C14N
+    EXCLUSIVO — ver nota no topo do arquivo). Troca junto
+    SignatureMethod/DigestMethod/CanonicalizationMethod — a DCTFWeb
+    recusou um de cada vez até os três baterem com o par "moderno"
+    (SHA-256 + C14N exclusivo).
     """
     if algoritmo_assinatura == "rsa-sha256":
         signature_method_uri = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
         hash_assinatura = hashes.SHA256()
         digest_method_uri = "http://www.w3.org/2001/04/xmlenc#sha256"
         digest_hasher = hashlib.sha256
+        canon_method_uri = "http://www.w3.org/2001/10/xml-exc-c14n#"
+        canonicalizar = _c14n_exclusivo
     else:
         signature_method_uri = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
         hash_assinatura = hashes.SHA1()
         digest_method_uri = "http://www.w3.org/2000/09/xmldsig#sha1"
         digest_hasher = hashlib.sha1
+        canon_method_uri = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+        canonicalizar = _c14n
 
     parser = etree.XMLParser(remove_blank_text=False)
     raiz = etree.fromstring(xml_documento.encode("utf-8"), parser=parser)
@@ -207,14 +224,14 @@ def assinar_elemento(
     # 1) Canonicaliza o elemento alvo (transform enveloped-signature é
     #    identidade aqui, já que ainda não existe <Signature> nenhuma
     #    dentro dele) e calcula o digest.
-    canon_alvo = _c14n(alvo)
+    canon_alvo = canonicalizar(alvo)
     digest_value = base64.b64encode(digest_hasher(canon_alvo).digest()).decode("ascii")
 
     # 2) Monta o <SignedInfo> com a referência ao elemento assinado.
     signed_info = etree.Element(f"{{{NS_DS}}}SignedInfo", nsmap={None: NS_DS})
 
     canon_method = etree.SubElement(signed_info, f"{{{NS_DS}}}CanonicalizationMethod")
-    canon_method.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
+    canon_method.set("Algorithm", canon_method_uri)
 
     sig_method = etree.SubElement(signed_info, f"{{{NS_DS}}}SignatureMethod")
     sig_method.set("Algorithm", signature_method_uri)
@@ -226,7 +243,7 @@ def assinar_elemento(
     t1 = etree.SubElement(transforms, f"{{{NS_DS}}}Transform")
     t1.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#enveloped-signature")
     t2 = etree.SubElement(transforms, f"{{{NS_DS}}}Transform")
-    t2.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
+    t2.set("Algorithm", canon_method_uri)
 
     digest_method = etree.SubElement(reference, f"{{{NS_DS}}}DigestMethod")
     digest_method.set("Algorithm", digest_method_uri)
@@ -250,7 +267,7 @@ def assinar_elemento(
 
     # 4) SÓ AGORA canonicaliza o SignedInfo (já na posição final) e assina
     #    com RSA-SHA1.
-    canon_signed_info = _c14n(signed_info)
+    canon_signed_info = canonicalizar(signed_info)
     assinatura_bytes = chave_privada.sign(
         canon_signed_info, padding.PKCS1v15(), hash_assinatura
     )
