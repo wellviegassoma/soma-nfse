@@ -30,6 +30,16 @@ const CODIGO_DEBITO_CSLL = "237201";
 const CODIGO_DEBITO_PIS = "810902";
 const CODIGO_DEBITO_COFINS = "217201";
 
+// A Serpro recusa ValorDebito com mais de 2 casas decimais ("[EntradaIncorreta-
+// MIT-MSG_0003] O campo valorDebito possui valor inválido ou nulo") — os
+// valores chegam aqui com erro de ponto flutuante do JS (ex.:
+// 391.90788000000003 em vez de 391.91), mesmo cálculo de round2 já usado
+// em lib/actions/notas.ts. Descoberto no 4º teste real contra produção
+// (ORTOP, 02/09/2026).
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 export type ResponsavelApuracao = {
   cpf: string;
   crcUf: string;
@@ -63,16 +73,16 @@ export function montarDeclaracaoMit(params: {
   let proximoId = 1;
   const debitos: Record<string, unknown> = {};
   if (irpj > 0) {
-    debitos.Irpj = { ListaDebitos: [{ IdDebito: proximoId++, CodigoDebito: CODIGO_DEBITO_IRPJ, ValorDebito: irpj }] };
+    debitos.Irpj = { ListaDebitos: [{ IdDebito: proximoId++, CodigoDebito: CODIGO_DEBITO_IRPJ, ValorDebito: round2(irpj) }] };
   }
   if (csll > 0) {
-    debitos.Csll = { ListaDebitos: [{ IdDebito: proximoId++, CodigoDebito: CODIGO_DEBITO_CSLL, ValorDebito: csll }] };
+    debitos.Csll = { ListaDebitos: [{ IdDebito: proximoId++, CodigoDebito: CODIGO_DEBITO_CSLL, ValorDebito: round2(csll) }] };
   }
   if (pis > 0) {
-    debitos.PisPasep = { ListaDebitos: [{ IdDebito: proximoId++, CodigoDebito: CODIGO_DEBITO_PIS, ValorDebito: pis }] };
+    debitos.PisPasep = { ListaDebitos: [{ IdDebito: proximoId++, CodigoDebito: CODIGO_DEBITO_PIS, ValorDebito: round2(pis) }] };
   }
   if (cofins > 0) {
-    debitos.Cofins = { ListaDebitos: [{ IdDebito: proximoId++, CodigoDebito: CODIGO_DEBITO_COFINS, ValorDebito: cofins }] };
+    debitos.Cofins = { ListaDebitos: [{ IdDebito: proximoId++, CodigoDebito: CODIGO_DEBITO_COFINS, ValorDebito: round2(cofins) }] };
   }
 
   return {
