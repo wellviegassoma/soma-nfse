@@ -2008,9 +2008,17 @@ servidor (concluído, 2026-08-31)**
       (Reference errada — tem que ter exatamente 1), `TRANS04` (XML
       alterado além da assinatura — quebra a comparação por hash),
       `TRANS18` (erro no elemento Signature — conferir SignatureValue/
-      SignedInfo). Precisa retestar mais tarde ou confirmar contratação
-      com o suporte do Integra Contador antes de insistir em ajuste de
-      código
+      SignedInfo)
+- [x] Verificado (não só argumentado) que a imutabilidade exigida pela
+      doc está respeitada: peguei o XML real da ORTOP, rodei
+      `assinar_elemento` de verdade contra ele, tirei a tag
+      `<Signature>` do resultado, e comparei caractere a caractere com o
+      original — idênticos (2708 bytes nos dois). Esse XML específico
+      também não tem nenhum elemento vazio, então nem o risco clássico
+      de `<tag></tag>` virar `<tag/>` no round-trip do lxml se aplica
+      aqui. Confirmação com o suporte do Integra Contador ainda
+      pendente; enquanto isso, retestar mais tarde é a única ação que
+      falta do nosso lado
 
 **Fase V — Retenções na fonte abatidas do imposto apurado (concluído,
 02/09/2026)**
