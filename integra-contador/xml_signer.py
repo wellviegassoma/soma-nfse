@@ -21,14 +21,17 @@ exemplo):
     elemento assinado, não filha dele)
 
 USO NESTE SERVIÇO (DCTFWEB.TRANSDECLARACAO310, ver main.py): diferente da
-DPS, aqui NÃO existe um exemplo real já aceito pra calibrar o perfil
-exato de assinatura que a DCTFWeb espera — a doc pública só diz "XML
-assinado digitalmente, com o certificado original", sem detalhar
-algoritmo. Usando o mesmo perfil (RSA-SHA1 + C14N não-exclusivo, sem
-cadeia de certificação) por ser o único já validado neste projeto contra
-um endpoint de assinatura de documento fiscal do governo — se a Serpro
-recusar a assinatura em si (não a estrutura do XML), é o primeiro lugar
-pra revisar.
+DPS, aqui NÃO existia um exemplo real já aceito pra calibrar o perfil
+exato de assinatura que a DCTFWeb espera. Primeiro teste real (ORTOP,
+02/09/2026) com o mesmo perfil da DPS (RSA-SHA1) foi recusado com
+"[TRANS09] Assinatura inválida: Elemento 'SignatureMethod' inválido:
+.../rsa-sha1". Corrigido pra RSA-SHA256 (`algoritmo_assinatura="rsa-sha256"`
+em `assinar_elemento`) — só o SignatureMethod/hash da assinatura em si
+muda; o DigestMethod da Reference continua SHA-1 (a DCTFWeb só reclamou
+do SignatureMethod, sem evidência de que o DigestMethod também precise
+mudar). Canonicalização continua a mesma (C14N não-exclusivo) — se a
+Serpro recusar de novo por causa da canonicalização especificamente
+(não do algoritmo de assinatura), é o próximo lugar a revisar.
 
 Não depende de bibliotecas externas de XMLDSig (signxml não estava
 disponível no ambiente) — implementado com lxml (canonicalização C14N)
@@ -150,6 +153,7 @@ def assinar_elemento(
     certificado_der: bytes,
     cadeia_der: Optional[list] = None,
     nome_atributo_id: str = "Id",
+    algoritmo_assinatura: str = "rsa-sha1",
 ) -> str:
     """
     Recebe o XML completo (como string) já contendo o elemento a ser
@@ -168,7 +172,19 @@ def assinar_elemento(
 
     `nome_atributo_id` — nome do atributo que identifica o elemento
     (case-sensitive; a DPS/NFS-e usa "Id", a DCTFWeb usa "id" minúsculo).
+
+    `algoritmo_assinatura` — "rsa-sha1" (padrão, usado pela DPS) ou
+    "rsa-sha256" (usado pela DCTFWeb — ver nota no topo do arquivo). Só
+    troca o SignatureMethod e o hash usado pra assinar o SignedInfo; o
+    DigestMethod da Reference continua SHA-1 nos dois casos.
     """
+    if algoritmo_assinatura == "rsa-sha256":
+        signature_method_uri = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+        hash_assinatura = hashes.SHA256()
+    else:
+        signature_method_uri = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+        hash_assinatura = hashes.SHA1()
+
     parser = etree.XMLParser(remove_blank_text=False)
     raiz = etree.fromstring(xml_documento.encode("utf-8"), parser=parser)
 
@@ -194,7 +210,7 @@ def assinar_elemento(
     canon_method.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
 
     sig_method = etree.SubElement(signed_info, f"{{{NS_DS}}}SignatureMethod")
-    sig_method.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#rsa-sha1")
+    sig_method.set("Algorithm", signature_method_uri)
 
     reference = etree.SubElement(signed_info, f"{{{NS_DS}}}Reference")
     reference.set("URI", f"#{id_elemento_a_assinar}")
@@ -229,7 +245,7 @@ def assinar_elemento(
     #    com RSA-SHA1.
     canon_signed_info = _c14n(signed_info)
     assinatura_bytes = chave_privada.sign(
-        canon_signed_info, padding.PKCS1v15(), hashes.SHA1()
+        canon_signed_info, padding.PKCS1v15(), hash_assinatura
     )
     signature_value_b64 = base64.b64encode(assinatura_bytes).decode("ascii")
 

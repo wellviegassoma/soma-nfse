@@ -139,6 +139,7 @@ def assinar_elemento(
     certificado_der: bytes,
     cadeia_der: Optional[list] = None,
     nome_atributo_id: str = "Id",
+    algoritmo_assinatura: str = "rsa-sha1",
 ) -> str:
     """
     Recebe o XML completo (como string) já contendo o elemento a ser
@@ -159,7 +160,21 @@ def assinar_elemento(
 
     `nome_atributo_id` — nome do atributo que identifica o elemento
     (case-sensitive; a DPS/NFS-e usa "Id", a DCTFWeb usa "id" minúsculo).
+
+    `algoritmo_assinatura` — "rsa-sha1" (padrão, usado pela DPS) ou
+    "rsa-sha256". Só troca o SignatureMethod e o hash usado pra assinar o
+    SignedInfo — o DigestMethod da Reference continua SHA-1 nos dois
+    casos (a DCTFWeb recusou especificamente rsa-sha1 no SignatureMethod
+    com "[TRANS09] SignatureMethod inválido", testado ao vivo; não temos
+    evidência de que o DigestMethod SHA-1 também precise mudar).
     """
+    if algoritmo_assinatura == "rsa-sha256":
+        signature_method_uri = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+        hash_assinatura = hashes.SHA256()
+    else:
+        signature_method_uri = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+        hash_assinatura = hashes.SHA1()
+
     parser = etree.XMLParser(remove_blank_text=False)
     raiz = etree.fromstring(xml_documento.encode("utf-8"), parser=parser)
 
@@ -185,7 +200,7 @@ def assinar_elemento(
     canon_method.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
 
     sig_method = etree.SubElement(signed_info, f"{{{NS_DS}}}SignatureMethod")
-    sig_method.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#rsa-sha1")
+    sig_method.set("Algorithm", signature_method_uri)
 
     reference = etree.SubElement(signed_info, f"{{{NS_DS}}}Reference")
     reference.set("URI", f"#{id_elemento_a_assinar}")
@@ -220,7 +235,7 @@ def assinar_elemento(
     #    com RSA-SHA1.
     canon_signed_info = _c14n(signed_info)
     assinatura_bytes = chave_privada.sign(
-        canon_signed_info, padding.PKCS1v15(), hashes.SHA1()
+        canon_signed_info, padding.PKCS1v15(), hash_assinatura
     )
     signature_value_b64 = base64.b64encode(assinatura_bytes).decode("ascii")
 
