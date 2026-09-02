@@ -1975,50 +1975,36 @@ servidor (concluído, 2026-08-31)**
       Confirmado pelo usuário: a assinatura tem que ser com o certificado
       da própria SOMA (contratante do Integra Contador, atuando por
       procuração), nunca o certificado da empresa cliente
-- [x] Reaproveitado `xml_signer.py` (já usado pra assinar a DPS da
-      NFS-e) — duplicado em `integra-contador/` com o mesmo perfil de
-      assinatura (RSA-SHA1 + C14N não-exclusivo, sem cadeia de
-      certificação), **sem uma referência real já aceita pela DCTFWeb
-      pra calibrar contra** (diferente da DPS) — se a Serpro recusar
-      especificamente a assinatura (não a estrutura do XML), é o
-      primeiro lugar a revisar. Novo botão "Transmitir declaração da
-      DCTFWeb" na aba Impostos, atrás de confirmação (mesmo efeito legal
-      real do encerramento do MIT)
-- [x] Confirmado contra a documentação oficial do TRANSDECLARACAO310
-      (`entregar_declaracao`): "o certificado usado na assinatura deve
-      ser o do autor do pedido de dados" — a SOMA, exatamente como já
-      implementado — e que a comparação de integridade é por hash sobre
-      o XML original sem a tag de assinatura (nosso código só acrescenta
-      `<Signature>`, não toca no resto do conteúdo). Os dois pontos de
-      maior risco da assinatura em si já batem com a doc oficial
-- [ ] **Bloqueado do lado da Serpro, não é bug nosso**: primeiro teste
-      real (ORTOP) recusado com HTTP 500 antes mesmo de validar
-      conteúdo — `{"code":"303001","message":"Runtime Error",
-      "description":"Currently, Address endpoint :
-      [Name: integra-contador--vv1_APIproductionEndpoint]
-      [State: SUSPENDED]"}`. Não é um código de validação (não tem o
-      padrão `[Aviso/Erro-DCTFWEB-...]` dos outros erros já vistos) —
-      indica indisponibilidade (temporária, a julgar pelo "Currently") ou
-      falta de contratação desse serviço específico no plano Integra
-      Contador da SOMA. Confirmado contra a página de "Erros comuns" da
-      própria DCTFWeb: não documenta o 303001/SUSPENDED (é claramente
-      fora do escopo de validação, mesma conclusão), mas documenta os
-      erros de validação de assinatura pra referência futura, se algum
-      dia a assinatura em si for recusada em vez do endpoint: `TRANS02`
-      (Reference errada — tem que ter exatamente 1), `TRANS04` (XML
-      alterado além da assinatura — quebra a comparação por hash),
-      `TRANS18` (erro no elemento Signature — conferir SignatureValue/
-      SignedInfo)
-- [x] Verificado (não só argumentado) que a imutabilidade exigida pela
-      doc está respeitada: peguei o XML real da ORTOP, rodei
-      `assinar_elemento` de verdade contra ele, tirei a tag
-      `<Signature>` do resultado, e comparei caractere a caractere com o
-      original — idênticos (2708 bytes nos dois). Esse XML específico
-      também não tem nenhum elemento vazio, então nem o risco clássico
-      de `<tag></tag>` virar `<tag/>` no round-trip do lxml se aplica
-      aqui. Confirmação com o suporte do Integra Contador ainda
-      pendente; enquanto isso, retestar mais tarde é a única ação que
-      falta do nosso lado
+- [x] **Concluído e confirmado em produção (ORTOP, competência 2026-08,
+      02/09/2026): fluxo completo MIT → DCTFWeb → guia funcionando de
+      ponta a ponta.** Recibo real da transmissão: `50000522858502`.
+      Guia (DARF) gerada com sucesso (PDF real, 122KB). Levou 6 tentativas
+      reais até acertar a assinatura da DCTFWeb — histórico completo,
+      porque cada erro ensinou algo específico que vale registrar:
+      1. RSA-SHA1 (perfil da DPS) → `[TRANS09] SignatureMethod inválido`
+      2. RSA-SHA256 só no SignatureMethod → `[TRANS09] DigestMethod inválido` (os dois têm que trocar juntos)
+      3. RSA-SHA256 completo + C14N não-exclusivo **hand-rolled** → "assinatura inválida" genérico
+      4. C14N **exclusivo** (supondo o par "moderno" que o NFS-e usa) → `[TRANS09] CanonicalizationMethod inválido` (explicitamente rejeitado — tinha que ser não-exclusivo mesmo)
+      5. C14N não-exclusivo via **lxml nativo + cópia destacada** (corrige um bug real do lxml com `xmlns=""` espúrio) → ainda "assinatura inválida" genérico
+      6. Instalei **`signxml`** (biblioteca de terceiros madura — o comentário antigo dizendo que não estava disponível no ambiente não era mais verdade) só pra *verificar* a tentativa 5, e ela confirmou que a assinatura realmente não validava — minha "autoverificação" até então era circular (validava contra a mesma canonicalização que eu mesmo implementei, então sempre "passava"). Troquei a assinatura em si pra usar `signxml.XMLSigner` (RSA-SHA256 + C14N 1.0) em vez de qualquer implementação própria — **sucesso**
+      - Causa raiz do hand-roll nunca ter funcionado pra DCTFWeb: `_c14n`
+        (usado pela DPS) foi escrito assumindo 1 namespace só — a DPS
+        realmente só tem 1. O XML da DCTFWeb tem 3 (default + `tns1` +
+        `xsi`) e um atributo com namespace próprio (`xsi:type`), exatamente
+        o caso que o hand-roll documentava não suportar
+      - Certificado: confirmado com o usuário e com a doc oficial
+        (`entregar_declaracao` — "o certificado usado na assinatura deve
+        ser o do autor do pedido de dados") que é o da própria SOMA
+        (contratante do Integra Contador), nunca o da empresa cliente
+      - O erro `303001`/"SUSPENDED" que apareceu em alguns testes no meio
+        do caminho era mesmo intermitente do lado da Serpro (apareceu ora
+        no `TRANSDECLARACAO310`, ora no `GERARGUIA31`, em tentativas
+        diferentes) — não relacionado ao conteúdo enviado, resolvia
+        sozinho tentando de novo
+      - `xml_signer.py` (hand-rolled, usado pela DPS) **não foi alterado**
+        — nunca teve o problema que motivou essa investigação (documento
+        de 1 namespace só), e trocar a implementação lá seria risco sem
+        benefício num fluxo já testado e aceito em produção
 
 **Fase V — Retenções na fonte abatidas do imposto apurado (concluído,
 02/09/2026)**
