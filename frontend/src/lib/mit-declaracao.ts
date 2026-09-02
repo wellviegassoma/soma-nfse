@@ -8,19 +8,23 @@ import type { ValoresDevidosMit } from "@/lib/calculo-impostos";
 // períodos de 2025 e 2026, valores idênticos em todas):
 // https://apicenter.estaleiro.serpro.gov.br/documentacao/api-integra-contador/pt/solucoes/integra-dctfweb/mit/
 //
-// `VariacoesMonetarias` foi descoberto tarde (01-02/09/2026): a
-// documentação pública não deixa claro que é obrigatório, e só apareceu
-// no primeiro teste real contra produção — a Serpro recusou o
-// ENCAPURACAO314 com "[EntradaIncorreta-MIT-MSG_0003] DadosIniciais.
-// VariacoesMonetarias: campo obrigatório não informado" (junto com um
-// aviso confuso sobre RegimePisCofins que não se confirmou depois —
-// as apurações reais têm os dois campos juntos, então é bem provável
-// que aquele segundo aviso fosse só efeito colateral do primeiro campo
-// faltando, não uma regra de verdade).
+// `VariacoesMonetarias` foi descoberto em 01-02/09/2026: a documentação
+// pública não deixa claro que é obrigatório, e só apareceu no primeiro
+// teste real contra produção — a Serpro recusou o ENCAPURACAO314 com
+// "[EntradaIncorreta-MIT-MSG_0003] DadosIniciais.VariacoesMonetarias:
+// campo obrigatório não informado". Valor (2) confirmado direto em
+// apurações reais já encerradas.
+//
+// `RegimePisCofins` NÃO entra no payload de envio — apesar de aparecer
+// preenchido (valor 2) quando se CONSULTA uma apuração já encerrada
+// (CONSAPURACAO316), é um valor que a própria Receita deriva
+// automaticamente a partir de `TributacaoLucro` pra Lucro Presumido, não
+// algo que se informa. Confirmado num segundo teste real: a Serpro
+// recusou com "DadosIniciais.RegimePisCofins: campo não deve ser
+// informado" mesmo já com VariacoesMonetarias corrigido.
 const QUALIFICACAO_PJ = 1;
 const TRIBUTACAO_LUCRO_PRESUMIDO = 3;
 const VARIACOES_MONETARIAS = 2;
-const REGIME_PIS_COFINS_CUMULATIVO = 2;
 const CODIGO_DEBITO_IRPJ = "208901";
 const CODIGO_DEBITO_CSLL = "237201";
 const CODIGO_DEBITO_PIS = "810902";
@@ -79,7 +83,6 @@ export function montarDeclaracaoMit(params: {
         QualificacaoPj: QUALIFICACAO_PJ,
         TributacaoLucro: TRIBUTACAO_LUCRO_PRESUMIDO,
         VariacoesMonetarias: VARIACOES_MONETARIAS,
-        RegimePisCofins: REGIME_PIS_COFINS_CUMULATIVO,
         ResponsavelApuracao: {
           CpfResponsavel: responsavelApuracao.cpf,
           TelResponsavel: {
