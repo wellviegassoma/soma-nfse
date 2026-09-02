@@ -39,17 +39,20 @@ configuradas via variável de ambiente, nunca a senha em texto.
    mostrado na tela de consolidação — é o valor de serviços que gerou a
    guia, útil pra conferir contra o faturamento já registrado no SOMA.
 
-IMPORTANTE — isso só busca guia de um período JÁ CONSOLIDADO. A
-consolidação do período (fechamento do movimento econômico do mês,
-que exige informar/confirmar "Faturamento de Vendas") é uma decisão
-contábil por competência que este cliente NÃO automatiza — precisa ser
-feita manualmente no site antes de haver uma guia pra buscar aqui.
+`buscar_guia_iss` só busca guia de um período JÁ CONSOLIDADO — se não
+houver, levanta `ErroGuiaNaoConsolidada` já com o resumo (valor de
+serviços lançado até agora) da competência, pra quem chamar decidir se
+quer consolidar. `consolidar_e_buscar_guia` faz o fechamento do período
+de verdade (sempre assumindo "sem faturamento de vendas" — ver docstring
+do método) e busca a guia na sequência; só deve ser chamado depois de
+confirmação explícita do usuário, nunca automaticamente.
 """
 
 from __future__ import annotations
 
 import os
 import re
+from datetime import datetime, timedelta, timezone
 
 import requests
 from lxml import html as lxml_html
@@ -75,6 +78,19 @@ class ErroPetropolis(Exception):
     pass
 
 
+class ErroGuiaNaoConsolidada(ErroPetropolis):
+    """
+    Levantada quando não há guia pendente pra competência pedida — via
+    de regra porque o período ainda não foi consolidado no site. Ainda
+    carrega o resumo (valor de serviços já lançado) da competência pra
+    quem pegar esse erro poder mostrar antes de decidir consolidar.
+    """
+
+    def __init__(self, mensagem: str, resumo: dict[str, float]):
+        super().__init__(mensagem)
+        self.resumo = resumo
+
+
 def _somente_digitos(texto: str) -> str:
     return re.sub(r"\D", "", texto)
 
@@ -82,6 +98,14 @@ def _somente_digitos(texto: str) -> str:
 def _valor_para_float(texto: str) -> float:
     """'55.300,00' -> 55300.0"""
     return float(texto.strip().replace(".", "").replace(",", "."))
+
+
+def _ano_mes_da_competencia(competencia: str | None) -> tuple[int, int]:
+    if competencia:
+        ano_str, mes_str = competencia.split("-")
+        return int(ano_str), int(mes_str)
+    agora = datetime.now(timezone(timedelta(hours=-3)))  # horário de Brasília
+    return agora.year, agora.month
 
 
 _REGEX_DATA = re.compile(r"^\d{2}/\d{2}/\d{4}$")
@@ -232,10 +256,7 @@ class ClientePetropolis:
     def buscar_guia_iss(
         self, cnpj: str, competencia: str | None = None
     ) -> tuple[bytes, dict[str, float]]:
-        ano_mes_alvo: tuple[int, int] | None = None
-        if competencia:
-            ano_str, mes_str = competencia.split("-")
-            ano_mes_alvo = (int(ano_str), int(mes_str))
+        ano_mes_alvo = _ano_mes_da_competencia(competencia)
 
         self._selecionar_empresa_por_cnpj(cnpj)
 
@@ -244,17 +265,15 @@ class ClientePetropolis:
             params={"st_divida": "0", "st_parcela": "1"},
             timeout=30,
         )
-        if "não foram localizados" in resp.text.lower():
-            raise ErroPetropolis(
-                "Nenhuma guia de ISS pendente encontrada — o período precisa ser "
-                "consolidado manualmente no site antes de gerar a guia."
-            )
+        sem_debito = "não foram localizados" in resp.text.lower()
+        resultado = None if sem_debito else self._extrair_linha_debito(resp.text, ano_mes_alvo)
 
-        resultado = self._extrair_linha_debito(resp.text, ano_mes_alvo)
         if resultado is None:
-            raise ErroPetropolis(
-                f"Nenhuma guia pendente encontrada para a competência "
-                f"{competencia or 'atual'}."
+            resumo = self._consultar_resumo_periodo(*ano_mes_alvo)
+            raise ErroGuiaNaoConsolidada(
+                f"Nenhuma guia de ISS pendente pra competência {competencia or 'atual'} — "
+                "o período ainda não foi consolidado.",
+                resumo=resumo,
             )
         campos, (ano, mes) = resultado
 
@@ -269,3 +288,46 @@ class ClientePetropolis:
 
         resumo = self._consultar_resumo_periodo(ano, mes)
         return r.content, resumo
+
+    def _consolidar_periodo(self, ano: int, mes: int) -> None:
+        """
+        Fecha o movimento econômico do período — cria a guia oficial de
+        ISS. Ação real e (segundo o próprio site) só desfazível via
+        retificação: "Após a confirmação só é permitido retificar ou
+        desconsolidar todo período."
+
+        Sempre envia "sem faturamento de vendas" (campo valorvendas
+        vazio) — assume que a empresa só presta serviço, sem venda de
+        mercadoria própria (verdadeiro pra todas as empresas do
+        escritório testadas até agora). Se algum cliente vender
+        mercadoria além do serviço, esse valor precisa ser informado
+        manualmente no site — não dá pra automatizar sem saber o valor.
+        """
+        mesano = f"{mes:02d}{ano:04d}"
+        self._sessao.post(
+            f"{BASE_URL}/iss-consolidar_periodo.php",
+            data={
+                "mesano_final": mesano,
+                "st_consolida": "1",
+                "servicosmatrizfilial": "",
+                "vendasmatrizfilial": "",
+                "valorvendas": "",
+                "valorfolhas": "",
+                "vl_servicosexterior": "",
+            },
+            timeout=45,
+        )
+
+    def consolidar_e_buscar_guia(
+        self, cnpj: str, competencia: str | None = None
+    ) -> tuple[bytes, dict[str, float]]:
+        """
+        Consolida o período (ação real, ver `_consolidar_periodo`) e, na
+        sequência, busca a guia recém-criada. Uso: só depois que quem
+        chamou já mostrou o resumo (via ErroGuiaNaoConsolidada.resumo) e
+        teve confirmação explícita do usuário de que o valor bate.
+        """
+        ano, mes = _ano_mes_da_competencia(competencia)
+        self._selecionar_empresa_por_cnpj(cnpj)
+        self._consolidar_periodo(ano, mes)
+        return self.buscar_guia_iss(cnpj, competencia)

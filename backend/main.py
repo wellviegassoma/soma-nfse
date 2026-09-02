@@ -29,7 +29,7 @@ load_dotenv()  # só facilita rodar localmente com backend/.env — em produçã
 # (Railway) as variáveis já vêm injetadas no processo, load_dotenv() não faz nada.
 
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 import danfse
 import emissor
@@ -38,7 +38,7 @@ from auth import exigir_token_interno
 from certificado import carregar_certificado_pfx, limpar_certificado_temporario
 from certificado_temp import certificado_temporario
 from nfse_client import ClienteNFSeNacional
-from petropolis_client import ClientePetropolis, ErroPetropolis
+from petropolis_client import ClientePetropolis, ErroGuiaNaoConsolidada, ErroPetropolis
 from schemas import (
     BuscarNotasRequest,
     BuscarNotasResponse,
@@ -233,14 +233,7 @@ def consultar_parametros_servico(req: ParametrosServicoRequest):
 # Prefeitura, dependência pesada demais pra colocar nesse serviço.
 
 
-@app.post("/petropolis/guia-iss", dependencies=[Depends(exigir_token_interno)])
-def buscar_guia_iss_petropolis(req: GuiaIssPetropolisRequest):
-    try:
-        with ClientePetropolis() as cliente:
-            pdf_bytes, resumo = cliente.buscar_guia_iss(req.cnpj, req.competencia)
-    except ErroPetropolis as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
+def _resposta_guia_pdf(pdf_bytes: bytes, resumo: dict) -> Response:
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -249,3 +242,38 @@ def buscar_guia_iss_petropolis(req: GuiaIssPetropolisRequest):
             "X-Valor-Iss": f"{resumo['valor_iss']:.2f}",
         },
     )
+
+
+@app.post("/petropolis/guia-iss", dependencies=[Depends(exigir_token_interno)])
+def buscar_guia_iss_petropolis(req: GuiaIssPetropolisRequest):
+    try:
+        with ClientePetropolis() as cliente:
+            pdf_bytes, resumo = cliente.buscar_guia_iss(req.cnpj, req.competencia)
+    except ErroGuiaNaoConsolidada as e:
+        # Não é bem um erro — é um estado válido (período ainda aberto).
+        # Devolve o resumo pro frontend perguntar se o usuário quer
+        # consolidar, em vez de só mostrar uma mensagem de erro.
+        return JSONResponse(
+            status_code=200,
+            content={
+                "consolidado": False,
+                "mensagem": str(e),
+                "valor_servicos": round(e.resumo["valor_servicos"], 2),
+                "valor_iss": round(e.resumo["valor_iss"], 2),
+            },
+        )
+    except ErroPetropolis as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return _resposta_guia_pdf(pdf_bytes, resumo)
+
+
+@app.post("/petropolis/consolidar-e-emitir-guia", dependencies=[Depends(exigir_token_interno)])
+def consolidar_e_emitir_guia_petropolis(req: GuiaIssPetropolisRequest):
+    try:
+        with ClientePetropolis() as cliente:
+            pdf_bytes, resumo = cliente.consolidar_e_buscar_guia(req.cnpj, req.competencia)
+    except ErroPetropolis as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return _resposta_guia_pdf(pdf_bytes, resumo)

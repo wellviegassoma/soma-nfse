@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { buscarEmpresaPetropolis } from "../petropolis-empresa";
 
+// Consolidação de período + emissão da guia são ações reais (criam a
+// declaração oficial no Petrópolis) — só chamado depois que o usuário
+// confirma explicitamente, vendo o valor de serviços, na tela.
 export const maxDuration = 90;
 
-export async function GET(
+export async function POST(
   request: Request,
   props: { params: Promise<{ companyId: string }> },
 ) {
   const { companyId } = await props.params;
-  const competencia = new URL(request.url).searchParams.get("competencia");
+  const body = await request.json().catch(() => ({}));
+  const competencia = typeof body.competencia === "string" ? body.competencia : null;
   if (competencia && !/^\d{4}-\d{2}$/.test(competencia)) {
     return NextResponse.json({ error: "Competência inválida." }, { status: 400 });
   }
@@ -20,7 +24,7 @@ export async function GET(
 
   let response: Response;
   try {
-    response = await fetch(`${process.env.NFSE_ENGINE_URL}/petropolis/guia-iss`, {
+    response = await fetch(`${process.env.NFSE_ENGINE_URL}/petropolis/consolidar-e-emitir-guia`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -37,15 +41,8 @@ export async function GET(
     const corpo = await response.json().catch(() => null);
     const mensagem =
       (corpo && typeof corpo.detail === "string" && corpo.detail) ||
-      "Não foi possível buscar a guia de ISS agora.";
+      "Não foi possível consolidar e gerar a guia agora.";
     return NextResponse.json({ error: mensagem }, { status: 502 });
-  }
-
-  // 200 com corpo JSON = período ainda não consolidado (não é um erro,
-  // é um estado — o frontend oferece consolidar e buscar de novo).
-  if ((response.headers.get("content-type") ?? "").includes("application/json")) {
-    const corpo = await response.json();
-    return NextResponse.json(corpo);
   }
 
   const pdfBytes = await response.arrayBuffer();
