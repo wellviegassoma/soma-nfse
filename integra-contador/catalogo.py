@@ -149,14 +149,19 @@ _registrar(
     _s("DCTFWEB", "GERARGUIAANDAMENTO313", "Emitir", "1.0", procuracao_codigo="00103"),
 )
 
-# --- Integra-DCTFWeb: MIT (versão 1.0, confirmada) — procuração assumida
-# igual à do DCTFWeb (00103), já que MIT vive dentro do mesmo grupo/rota
-# de declaração — confirme antes do primeiro uso ---
+# --- Integra-DCTFWeb: MIT (versão 1.0, confirmada contra a doc oficial:
+# apicenter.estaleiro.serpro.gov.br/documentacao/api-integra-contador/pt/
+# solucoes/integra-dctfweb/mit/) — procuração ASSUMIDA igual à do DCTFWeb
+# (00103), já que MIT vive dentro do mesmo grupo/rota de declaração e a
+# doc de MIT não lista procuração própria — nunca confirmado contra um
+# 403 real. CONSAPURACAO316/LISTAAPURACOES317 (Consultar) só leitura, sem
+# risco de declarar nada por engano. ENCAPURACAO314 (Declarar) tem efeito
+# legal real — não usar sem revisão cuidadosa do payload de Debitos. ---
 _registrar(
-    _s("MIT", "ENCAPURACAO314", "Declarar", "1.0"),
-    _s("MIT", "SITUACAOENC315", "Apoiar", "1.0"),
-    _s("MIT", "CONSAPURACAO316", "Consultar", "1.0"),
-    _s("MIT", "LISTAAPURACOES317", "Consultar", "1.0"),
+    _s("MIT", "ENCAPURACAO314", "Declarar", "1.0", procuracao_codigo="00103"),
+    _s("MIT", "SITUACAOENC315", "Apoiar", "1.0", procuracao_codigo="00103"),
+    _s("MIT", "CONSAPURACAO316", "Consultar", "1.0", procuracao_codigo="00103"),
+    _s("MIT", "LISTAAPURACOES317", "Consultar", "1.0", procuracao_codigo="00103"),
 )
 
 # --- Integra-Procurações (versão "1", sem decimal — confirmada) ---

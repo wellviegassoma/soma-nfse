@@ -28,11 +28,13 @@ from schemas import (
     ChamarServicoIn,
     ChamarServicoOut,
     CndOut,
+    ConsultarApuracaoMitOut,
     DeclaracoesPeriodoOut,
     DeclararPgdasIn,
     DeclararPgdasOut,
     ExtratoDasOut,
     GerarDasOut,
+    ListarApuracoesMitOut,
     ReciboDeclaracaoOut,
     SituacaoFiscalOut,
 )
@@ -205,6 +207,53 @@ def consultar_recibo_declaracao(cnpj: str, periodo_apuracao: str):
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ReciboDeclaracaoOut(contribuinte_cnpj=cnpj, periodo_apuracao=periodo_apuracao, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/mit/apuracoes/{ano_apuracao}",
+    response_model=ListarApuracoesMitOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def listar_apuracoes_mit(cnpj: str, ano_apuracao: int, mes_apuracao: int | None = None):
+    """
+    Lista as apurações do MIT (Módulo de Inclusão de Tributos — IRPJ/CSLL/
+    PIS/COFINS de quem é Lucro Presumido/Real) de um ano, opcionalmente
+    filtrado por mês (MIT.LISTAAPURACOES317). Só leitura — devolve
+    idApuracao de cada período, usado depois em
+    /mit/apuracao/{id_apuracao} pra ver o detalhe (débitos por tributo).
+
+    Exige procuração eletrônica 00103 no e-CAC (mesma do DCTFWeb) —
+    assumida, não confirmada de forma independente contra um 403 real
+    ainda (ver comentário em catalogo.py).
+    """
+    dados = {"anoApuracao": ano_apuracao}
+    if mes_apuracao is not None:
+        dados["mesApuracao"] = mes_apuracao
+    try:
+        resposta = chamar("MIT", "LISTAAPURACOES317", cnpj, dados)
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ListarApuracoesMitOut(
+        contribuinte_cnpj=cnpj, ano_apuracao=ano_apuracao, mes_apuracao=mes_apuracao, resposta=resposta
+    )
+
+
+@app.get(
+    "/contribuintes/{cnpj}/mit/apuracao/{id_apuracao}",
+    response_model=ConsultarApuracaoMitOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def consultar_apuracao_mit(cnpj: str, id_apuracao: int):
+    """
+    Detalhe de uma apuração específica do MIT (MIT.CONSAPURACAO316) — os
+    débitos por tributo (IRPJ/CSLL/PIS/COFINS/...) que foram declarados.
+    id_apuracao vem de /mit/apuracoes/{ano_apuracao}. Só leitura.
+    """
+    try:
+        resposta = chamar("MIT", "CONSAPURACAO316", cnpj, {"idApuracao": id_apuracao})
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ConsultarApuracaoMitOut(contribuinte_cnpj=cnpj, id_apuracao=id_apuracao, resposta=resposta)
 
 
 @app.get(
