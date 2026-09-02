@@ -127,7 +127,11 @@ def chamar(id_sistema: str, id_servico: str, contribuinte_cnpj: str, dados: dict
             "idSistema": servico.id_sistema,
             "idServico": servico.id_servico,
             "versaoSistema": servico.versao_sistema,
-            "dados": json.dumps(dados, separators=(",", ":")),
+            # Alguns serviços (ex.: PARCSN.PEDIDOSPARC163) rejeitam com
+            # ER_N007 se "dados" vier como "{}" — exigem string vazia
+            # quando não há parâmetro nenhum. Mesma regra que o sitfis.py
+            # já usa (bypassando essa função) pro SOLICITARPROTOCOLO91.
+            "dados": json.dumps(dados, separators=(",", ":")) if dados else "",
         },
     }
 
