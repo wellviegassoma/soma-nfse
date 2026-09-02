@@ -54,6 +54,11 @@ no Catálogo de Serviços oficial antes de ligar.
 |---|---|---|
 | GET | `/health` | Health check |
 | GET | `/contribuintes/{cnpj}/simples/extrato-das/{numero_das}` | Consulta extrato do DAS (`PGDASD.CONSEXTRATO16`, cache-first) |
+| GET | `/contribuintes/{cnpj}/mit/apuracoes/{ano_apuracao}` | Lista apurações do MIT do ano, opcionalmente por mês (`MIT.LISTAAPURACOES317`, só leitura) |
+| GET | `/contribuintes/{cnpj}/mit/apuracao/{id_apuracao}` | Detalhe de uma apuração do MIT (`MIT.CONSAPURACAO316`, só leitura) |
+| POST | `/contribuintes/{cnpj}/mit/apuracao/declarar` | Encerra uma apuração do MIT — IRPJ/CSLL/PIS/COFINS de Lucro Presumido/Real (`MIT.ENCAPURACAO314`, **efeito legal real**, nunca cacheado) |
+| GET | `/contribuintes/{cnpj}/mit/situacao-encerramento/{protocolo_encerramento}` | Acompanha o encerramento de uma apuração do MIT (`MIT.SITUACAOENC315`, cache de 30s pra polling) |
+| GET | `/contribuintes/{cnpj}/dctfweb/guia/{ano_pa}/{mes_pa}` | Gera o PDF da guia (DARF) de um período já encerrado na DCTFWeb, inclusive vindo do MIT (`DCTFWEB.GERARGUIA31`) |
 
 ## Job agendado
 

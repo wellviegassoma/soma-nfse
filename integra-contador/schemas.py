@@ -70,3 +70,25 @@ class ConsultarApuracaoMitOut(BaseModel):
     contribuinte_cnpj: str
     id_apuracao: int
     resposta: dict
+
+
+class DeclararMitIn(BaseModel):
+    dados: dict
+
+
+class DeclararMitOut(BaseModel):
+    contribuinte_cnpj: str
+    resposta: dict
+
+
+class SituacaoEncerramentoMitOut(BaseModel):
+    contribuinte_cnpj: str
+    protocolo_encerramento: str
+    resposta: dict
+
+
+class GerarGuiaDctfWebOut(BaseModel):
+    contribuinte_cnpj: str
+    ano_pa: str
+    mes_pa: str
+    resposta: dict

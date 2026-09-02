@@ -77,10 +77,10 @@ export function calcularSimplesNacional(params: {
   };
 }
 
-const IRPJ_ALIQUOTA = 0.15;
+export const IRPJ_ALIQUOTA = 0.15;
 const IRPJ_ADICIONAL_ALIQUOTA = 0.1;
 const IRPJ_ADICIONAL_LIMITE_TRIMESTRE = 60_000;
-const CSLL_ALIQUOTA = 0.09;
+export const CSLL_ALIQUOTA = 0.09;
 const PRESUNCAO_SERVICOS_IRPJ = 0.32;
 const PRESUNCAO_SERVICOS_CSLL = 0.32;
 const PIS_ALIQUOTA = 0.0065; // regime cumulativo
@@ -149,6 +149,41 @@ export function calcularLucroPresumido(params: {
     adicionalIrpjAplicado: adicionalIrpj > 0,
     baseTrimestreIrpj: baseIrpjTrimestre,
   };
+}
+
+export type ValoresDevidosMit = { irpj: number; csll: number; pis: number; cofins: number };
+
+// `calcularLucroPresumido()` acima SEMPRE mostra a estimativa de IRPJ/CSLL
+// do mês, mesmo em empresa de apuração trimestral — é proposital pra
+// exibição (ver comentário na função). Mas isso não é o valor realmente
+// devido no período pra fins de declarar no MIT: numa empresa trimestral,
+// só existe débito de IRPJ/CSLL de verdade no 3º mês do trimestre (base =
+// trimestre inteiro, não só o mês) — nos outros dois meses o débito é
+// zero. PIS/COFINS continuam sempre mensais, em qualquer regime de
+// apuração. Resultado pensado pra alimentar `montarDeclaracaoMit()`
+// (`lib/mit-declaracao.ts`) — nunca pra exibição direta ao usuário (pra
+// isso, use `calcularLucroPresumido` mesmo).
+export function valoresDevidosNoPeriodoMit(resultado: ResultadoLucroPresumido): ValoresDevidosMit {
+  const semDebitoDeFechamento = !resultado.apuracaoMensal && !resultado.ehUltimoMesDoTrimestre;
+  if (semDebitoDeFechamento) {
+    return { irpj: 0, csll: 0, pis: resultado.pis, cofins: resultado.cofins };
+  }
+
+  // Mês de fechamento do trimestre (apuração mensal ou não): reconcilia
+  // sobre a base do TRIMESTRE inteiro, não só a fatia do mês — mesmo
+  // valor que sairia numa guia trimestral tradicional.
+  if (resultado.ehUltimoMesDoTrimestre) {
+    return {
+      irpj: resultado.baseTrimestreIrpj * IRPJ_ALIQUOTA + resultado.irpjAdicional,
+      csll: resultado.baseTrimestreIrpj * CSLL_ALIQUOTA, // presunção de CSLL == presunção de IRPJ pra serviços neste sistema
+      pis: resultado.pis,
+      cofins: resultado.cofins,
+    };
+  }
+
+  // Apuração mensal, meses 1-2 do trimestre: usa a base do próprio mês
+  // (resultado.irpj/csll já vêm calculados assim quando não é fechamento).
+  return { irpj: resultado.irpj, csll: resultado.csll, pis: resultado.pis, cofins: resultado.cofins };
 }
 
 export type ResumoImposto = { aliquotaEfetiva: number; valor: number };

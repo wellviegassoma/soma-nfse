@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { abrirPdfBase64 } from "@/lib/pdf-base64";
 
 type ValorDevido = { codigoTributo: number; valor: number };
 
@@ -30,20 +31,6 @@ type ReciboConsultado = {
 
 function formatMoney(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function abrirPdfBase64(base64: string, nomeArquivo: string) {
-  const bin = atob(base64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  a.download = nomeArquivo;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 // Fluxo em 2 passos, cada um com efeito bem diferente:

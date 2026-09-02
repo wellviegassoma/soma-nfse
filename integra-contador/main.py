@@ -13,6 +13,8 @@ Toda rota exige o header X-Internal-Token (ver auth.py).
 
 from __future__ import annotations
 
+import os
+
 from dotenv import load_dotenv
 
 load_dotenv()  # só facilita rodar localmente — em produção (Railway) as
@@ -30,12 +32,16 @@ from schemas import (
     CndOut,
     ConsultarApuracaoMitOut,
     DeclaracoesPeriodoOut,
+    DeclararMitIn,
+    DeclararMitOut,
     DeclararPgdasIn,
     DeclararPgdasOut,
     ExtratoDasOut,
     GerarDasOut,
+    GerarGuiaDctfWebOut,
     ListarApuracoesMitOut,
     ReciboDeclaracaoOut,
+    SituacaoEncerramentoMitOut,
     SituacaoFiscalOut,
 )
 from serpro_client import ErroIntegraContador, chamar
@@ -254,6 +260,103 @@ def consultar_apuracao_mit(cnpj: str, id_apuracao: int):
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ConsultarApuracaoMitOut(contribuinte_cnpj=cnpj, id_apuracao=id_apuracao, resposta=resposta)
+
+
+def _preencher_responsavel_apuracao(dados: dict) -> dict:
+    """
+    O frontend nunca vê as env vars deste serviço, então o bloco
+    `ResponsavelApuracao` (contador responsável da SOMA perante a Receita
+    — CPF, CRC, contato) é preenchido aqui, não em `lib/mit-declaracao.ts`.
+    Só adiciona se o frontend não tiver mandado nada em `DadosIniciais`
+    (não deveria mandar, mas não sobrescreve por engano se um dia mandar).
+    """
+    dados_iniciais = dados.setdefault("DadosIniciais", {})
+    if "ResponsavelApuracao" in dados_iniciais:
+        return dados
+    dados_iniciais["ResponsavelApuracao"] = {
+        "CpfResponsavel": os.environ.get("SOMA_CONTADOR_CPF", ""),
+        "TelResponsavel": {
+            "Ddd": os.environ.get("SOMA_CONTADOR_TELEFONE_DDD", ""),
+            "NumTelefone": os.environ.get("SOMA_CONTADOR_TELEFONE_NUMERO", ""),
+        },
+        "EmailResponsavel": os.environ.get("SOMA_CONTADOR_EMAIL", ""),
+        "RegistroCrc": {
+            "UfRegistro": os.environ.get("SOMA_CONTADOR_CRC_UF", ""),
+            "NumRegistro": os.environ.get("SOMA_CONTADOR_CRC_NUMERO", ""),
+        },
+    }
+    return dados
+
+
+@app.post(
+    "/contribuintes/{cnpj}/mit/apuracao/declarar",
+    response_model=DeclararMitOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def declarar_apuracao_mit(cnpj: str, corpo: DeclararMitIn):
+    """
+    Encerra uma apuração do MIT (MIT.ENCAPURACAO314) — IRPJ/CSLL/PIS/COFINS
+    de quem é Lucro Presumido/Real. Tem efeito legal real: cria (ou
+    sobrescreve, se já existir uma apuração em edição no mesmo período)
+    uma apuração que a Receita enfileira pra encerramento na DCTFWeb
+    (não é imediato — usar /mit/situacao-encerramento/{protocolo} pra
+    acompanhar). Nunca serve do cache (regra já existe em
+    serpro_client.chamar() pra toda rota "Declarar"). O payload em `dados`
+    já vem pronto do frontend (montado a partir do faturamento e do
+    cálculo de Lucro Presumido) — este endpoint só completa o
+    `ResponsavelApuracao` (dado do contador da SOMA, não da empresa
+    cliente) antes de repassar.
+    """
+    dados = _preencher_responsavel_apuracao(corpo.dados)
+    try:
+        resposta = chamar("MIT", "ENCAPURACAO314", cnpj, dados)
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return DeclararMitOut(contribuinte_cnpj=cnpj, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/mit/situacao-encerramento/{protocolo_encerramento}",
+    response_model=SituacaoEncerramentoMitOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def consultar_situacao_encerramento_mit(cnpj: str, protocolo_encerramento: str):
+    """
+    Consulta o andamento do encerramento de uma apuração do MIT
+    (MIT.SITUACAOENC315) usando o `protocoloEncerramento` devolvido por
+    /mit/apuracao/declarar. Feito pra polling: TTL de cache bem curto
+    (30s, ver catalogo.py) pra não travar numa resposta velha "em
+    processamento" enquanto o status muda de verdade do lado da Receita.
+    """
+    try:
+        resposta = chamar("MIT", "SITUACAOENC315", cnpj, {"protocoloEncerramento": protocolo_encerramento})
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return SituacaoEncerramentoMitOut(
+        contribuinte_cnpj=cnpj, protocolo_encerramento=protocolo_encerramento, resposta=resposta
+    )
+
+
+@app.get(
+    "/contribuintes/{cnpj}/dctfweb/guia/{ano_pa}/{mes_pa}",
+    response_model=GerarGuiaDctfWebOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def gerar_guia_dctfweb(cnpj: str, ano_pa: str, mes_pa: str):
+    """
+    Gera o PDF da guia (DARF) de um período já encerrado na DCTFWeb
+    (DCTFWEB.GERARGUIA31, categoria GERAL_MENSAL) — inclusive o que foi
+    encerrado via MIT, já que a apuração do MIT vira uma declaração da
+    DCTFWeb por baixo dos panos. Só funciona depois que
+    /mit/situacao-encerramento confirmar status ENCERRADA pro período. Rota
+    "Emitir": serve do cache normalmente (reemitir o mesmo PDF no mesmo dia
+    não deveria gastar chamada nova).
+    """
+    try:
+        resposta = chamar("DCTFWEB", "GERARGUIA31", cnpj, {"categoria": "GERAL_MENSAL", "anoPA": ano_pa, "mesPA": mes_pa})
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return GerarGuiaDctfWebOut(contribuinte_cnpj=cnpj, ano_pa=ano_pa, mes_pa=mes_pa, resposta=resposta)
 
 
 @app.get(

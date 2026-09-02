@@ -18,10 +18,11 @@ import {
   somarFaturamento,
 } from "@/lib/faturamento";
 import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
-import { calcularLucroPresumido, calcularSimplesNacional } from "@/lib/calculo-impostos";
+import { calcularLucroPresumido, calcularSimplesNacional, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
 import { buscarAtividade, type TratamentoAtividade } from "@/lib/simples-nacional-atividades";
 import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
 import { DeclararPgdasCard } from "./DeclararPgdasCard";
+import { DeclararMitCard } from "./DeclararMitCard";
 import { BuscarGuiaIssButton } from "./BuscarGuiaIssButton";
 import { BuscarGuiaIssPetropolisButton } from "./BuscarGuiaIssPetropolisButton";
 
@@ -389,6 +390,24 @@ export default async function ImpostosPage(
     aliquotaIss: company.iss_aliquota_padrao,
   });
 
+  // Melhor esforço — se a tabela de histórico (Fase U) ainda não existir
+  // ou a consulta falhar por qualquer motivo, trata como "nunca
+  // encerrado" em vez de quebrar a página.
+  let encerramentoExistente: { protocolo_encerramento: string; situacao_apuracao: string | null } | null = null;
+  try {
+    const { data } = await supabase
+      .from("integra_contador_mit_encerramentos")
+      .select("protocolo_encerramento, situacao_apuracao")
+      .eq("company_id", companyId)
+      .eq("competencia", competencia)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    encerramentoExistente = data;
+  } catch {
+    encerramentoExistente = null;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {competenciaFilterForm}
@@ -486,6 +505,20 @@ export default async function ImpostosPage(
           </div>
         </div>
       </Card>
+
+      <DeclararMitCard
+        companyId={companyId}
+        competencia={competencia}
+        valoresDevidos={valoresDevidosNoPeriodoMit(resultado)}
+        encerramentoExistente={
+          encerramentoExistente
+            ? {
+                protocolo: encerramentoExistente.protocolo_encerramento,
+                textoSituacao: encerramentoExistente.situacao_apuracao,
+              }
+            : null
+        }
+      />
 
       {guiaIssBotao}
     </div>

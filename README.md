@@ -1885,6 +1885,70 @@ servidor (concluído, 2026-08-31)**
       ZIP. Ajuste natural: incluir um sufixo curto do `company.id` no nome
       da pasta quando houver colisão
 
+**Fase U — Integração MIT (IRPJ/CSLL/PIS/COFINS) pra Lucro Presumido
+(concluído, 2026-09-01, pendente aplicar migration)**
+- [x] Pedido: automatizar o envio do MIT (Módulo de Inclusão de Tributos)
+      pelo Integra Contador pra gerar as guias de IRPJ/CSLL/PIS/COFINS de
+      clientes Lucro Presumido — hoje feito manualmente pelo contador no
+      e-CAC. O terreno já estava preparado: o conector `integra-contador/`
+      já tinha os 2 serviços de consulta do MIT prontos
+      (`LISTAAPURACOES317`/`CONSAPURACAO316`) e catalogava (sem expor) o
+      serviço de declarar (`MIT.ENCAPURACAO314`)
+- [x] A documentação pública da Serpro pro MIT não detalha em tabela 4
+      campos de domínio que o payload exige (`QualificacaoPj`,
+      `TributacaoLucro`, `RegimePisCofins`, e os códigos de receita de
+      cada tributo) — só dá exemplos soltos. Em vez de arriscar um
+      palpite numa declaração com efeito legal real, consultei ao vivo
+      (via os 2 serviços de consulta que já existiam) as apurações do MIT
+      já encerradas de 5 clientes Lucro Presumido reais da SOMA, em
+      múltiplos períodos de 2025 e 2026 — todos idênticos:
+      `QualificacaoPj=1`, `TributacaoLucro=3`, `RegimePisCofins=2`,
+      códigos de débito IRPJ `208901`, CSLL `237201`, PIS `810902`,
+      COFINS `217201`. De quebra, confirmei ao vivo que IRPJ/CSLL só
+      aparecem no mês de fechamento do trimestre (PIS/COFINS sempre
+      mensais) — validando a mesma regra que já estava em
+      `calculo-impostos.ts`
+- [x] `calculo-impostos.ts` ganhou `valoresDevidosNoPeriodoMit()` —
+      diferente de `calcularLucroPresumido()` (que sempre mostra a
+      estimativa do MÊS pra exibição), essa calcula o valor REALMENTE
+      devido no período pra fins de declarar: zera IRPJ/CSLL nos meses
+      que não são fechamento de trimestre (a não ser que a empresa tenha
+      antecipação mensal habilitada)
+- [x] Backend (`integra-contador/`): 3 endpoints novos —
+      `POST /mit/apuracao/declarar` (`ENCAPURACAO314`, nunca cacheado,
+      efeito legal real), `GET /mit/situacao-encerramento/{protocolo}`
+      (`SITUACAOENC315`, TTL de cache reduzido pra 30s pra servir
+      polling), `GET /dctfweb/guia/{ano}/{mes}` (`DCTFWEB.GERARGUIA31` —
+      o encerramento do MIT vira declaração da DCTFWeb por baixo dos
+      panos, então a guia sai por lá, não por um serviço próprio do MIT).
+      `ResponsavelApuracao` (contador da SOMA, não a empresa cliente) é
+      preenchido no backend a partir de env vars novas
+      (`SOMA_CONTADOR_*`), nunca vindo do frontend
+- [x] Frontend: `lib/mit-declaracao.ts` (payload builder puro, mesmo
+      molde de `pgdas-declaracao.ts`) + rotas
+      `mit/declarar`/`mit/situacao/{protocolo}`/`mit/guia/{ano}/{mes}`
+      (mesmo padrão de nunca confiar em payload vindo do navegador — o
+      valor devido é sempre remontado a partir do faturamento real) +
+      `DeclararMitCard.tsx` na aba Impostos, com confirmação explícita
+      antes de encerrar (o MIT não tem modo de simulação como o PGDAS-D —
+      todo `ENCAPURACAO314` já tem efeito real) e polling do status até
+      ENCERRADA
+- [x] Nova tabela `integra_contador_mit_encerramentos` (migration
+      `20260901220000_fase_u_mit_encerramentos.sql`) — histórico auditável
+      de exatamente o que foi declarado em nome de cada cliente, e permite
+      a UI mostrar "já encerrado esse mês" mesmo depois de um refresh da
+      página
+- [ ] **Migration ainda não aplicada em produção** — `npx supabase db
+      push --linked` precisa ser rodado manualmente (bloqueado pelo
+      classificador de permissões do Claude Code neste ambiente). Até lá,
+      o card na aba Impostos funciona normalmente pra encerrar/consultar
+      (a escrita/leitura do histórico é melhor esforço, com try/catch —
+      não quebra o fluxo principal), só o "lembrar entre refreshes" fica
+      inativo
+- [ ] Validação ao vivo contra produção (ambiente de demonstração
+      primeiro) do fluxo completo — encerrar, acompanhar o status até
+      ENCERRADA, baixar a guia — ainda não feita
+
 ## Backend (Fase C em diante)
 
 ```bash

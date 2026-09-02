@@ -156,10 +156,21 @@ _registrar(
 # doc de MIT não lista procuração própria — nunca confirmado contra um
 # 403 real. CONSAPURACAO316/LISTAAPURACOES317 (Consultar) só leitura, sem
 # risco de declarar nada por engano. ENCAPURACAO314 (Declarar) tem efeito
-# legal real — não usar sem revisão cuidadosa do payload de Debitos. ---
+# legal real — não usar sem revisão cuidadosa do payload de Debitos.
+#
+# QualificacaoPj/TributacaoLucro/RegimePisCofins e os CodigoDebito de
+# IRPJ/CSLL/PIS/COFINS pra Lucro Presumido (respectivamente 1/3/2 e
+# 208901/237201/810902/217201) foram confirmados em 01/09/2026 direto nas
+# apurações reais já encerradas de 5 clientes Lucro Presumido da SOMA
+# (múltiplos períodos de 2025 e 2026, valores idênticos em todos) — ver
+# `lib/mit-declaracao.ts` no frontend. ---
 _registrar(
     _s("MIT", "ENCAPURACAO314", "Declarar", "1.0", procuracao_codigo="00103"),
-    _s("MIT", "SITUACAOENC315", "Apoiar", "1.0", procuracao_codigo="00103"),
+    # TTL curto (30s) — diferente das outras consultas do catálogo, essa é
+    # justamente pra fazer polling de um status que muda entre uma chamada
+    # e outra logo depois de encerrar uma apuração; um TTL longo faria o
+    # polling ficar preso servindo a mesma resposta "em processamento".
+    _s("MIT", "SITUACAOENC315", "Apoiar", "1.0", cache_ttl_segundos=30, procuracao_codigo="00103"),
     _s("MIT", "CONSAPURACAO316", "Consultar", "1.0", procuracao_codigo="00103"),
     _s("MIT", "LISTAAPURACOES317", "Consultar", "1.0", procuracao_codigo="00103"),
 )
