@@ -118,7 +118,17 @@ export async function buscarProcedimentosComMargem(
       taxaCartao,
       desconto: descontoPadrao,
     });
-    return { procedimento, margemPct: resultado.cheio.margemPct, receitaLiquida: resultado.cheio.receitaLiquida };
+    return {
+      procedimento,
+      margemPct: resultado.cheio.margemPct,
+      receitaLiquida: resultado.cheio.receitaLiquida,
+      custoMaterial: resultado.custoMaterial,
+      custoFixoProcedimento: resultado.custoFixoProcedimento,
+      retrabalhoValor: resultado.retrabalhoValor,
+      custoTotal: resultado.custoTotal,
+      impostoValor: resultado.cheio.impostoValor,
+      taxaCartaoValor: resultado.cheio.taxaCartaoValor,
+    };
   });
 
   return rows.sort((a, b) => a.margemPct - b.margemPct);

@@ -4,6 +4,7 @@ import { requirePrecificacaoAccess } from "@/lib/auth";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { ProcedimentosTable } from "@/components/precificacao/ProcedimentosTable";
+import { PrecificacaoDestaques } from "@/components/precificacao/PrecificacaoDestaques";
 import { buscarContextoCalculo, buscarProcedimentosComMargem } from "@/lib/precificacao/queries";
 
 export const metadata = { title: "Precificação — Painel SOMA" };
@@ -34,7 +35,7 @@ export default async function AdminPrecificacaoPage(
             </span>
           )}
         </p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link href={`${basePath}/modelos`}>
             <Button variant="secondary">Modelos prontos</Button>
           </Link>
@@ -44,11 +45,18 @@ export default async function AdminPrecificacaoPage(
           <Link href={`${basePath}/parametros`}>
             <Button variant="secondary">Parâmetros</Button>
           </Link>
+          {rows.length > 0 && (
+            <a href={`${basePath}/excel`} target="_blank">
+              <Button variant="secondary">Baixar Excel</Button>
+            </a>
+          )}
           <Link href={`${basePath}/procedimentos/novo`}>
             <Button>+ Novo procedimento</Button>
           </Link>
         </div>
       </div>
+
+      <PrecificacaoDestaques rows={rows} />
 
       {rows.length === 0 && (
         <Alert tone="success">

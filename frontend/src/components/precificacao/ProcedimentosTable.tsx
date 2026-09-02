@@ -8,6 +8,12 @@ export type ProcedimentoComMargem = {
   procedimento: PrecificacaoProcedimento;
   margemPct: number;
   receitaLiquida: number;
+  custoMaterial: number;
+  custoFixoProcedimento: number;
+  retrabalhoValor: number;
+  custoTotal: number;
+  impostoValor: number;
+  taxaCartaoValor: number;
 };
 
 // Limiares só pra sinalização visual — não são regra de negócio.
