@@ -1,14 +1,25 @@
 import type { ValoresDevidosMit } from "@/lib/calculo-impostos";
 
 // Códigos de domínio do MIT (ENCAPURACAO314) pra Lucro Presumido —
-// QualificacaoPj/TributacaoLucro/RegimePisCofins e os CodigoDebito de
-// IRPJ/CSLL/PIS/COFINS. A documentação pública da Serpro só dá exemplos
-// soltos, sem tabela — confirmados em 01/09/2026 direto nas apurações
-// reais já encerradas de 5 clientes Lucro Presumido da SOMA (múltiplos
-// períodos de 2025 e 2026, valores idênticos em todos os 5):
+// QualificacaoPj/TributacaoLucro/VariacoesMonetarias/RegimePisCofins e os
+// CodigoDebito de IRPJ/CSLL/PIS/COFINS. A documentação pública da Serpro
+// só dá exemplos soltos, sem tabela — confirmados direto nas apurações
+// reais já encerradas de clientes Lucro Presumido da SOMA (múltiplos
+// períodos de 2025 e 2026, valores idênticos em todas):
 // https://apicenter.estaleiro.serpro.gov.br/documentacao/api-integra-contador/pt/solucoes/integra-dctfweb/mit/
+//
+// `VariacoesMonetarias` foi descoberto tarde (01-02/09/2026): a
+// documentação pública não deixa claro que é obrigatório, e só apareceu
+// no primeiro teste real contra produção — a Serpro recusou o
+// ENCAPURACAO314 com "[EntradaIncorreta-MIT-MSG_0003] DadosIniciais.
+// VariacoesMonetarias: campo obrigatório não informado" (junto com um
+// aviso confuso sobre RegimePisCofins que não se confirmou depois —
+// as apurações reais têm os dois campos juntos, então é bem provável
+// que aquele segundo aviso fosse só efeito colateral do primeiro campo
+// faltando, não uma regra de verdade).
 const QUALIFICACAO_PJ = 1;
 const TRIBUTACAO_LUCRO_PRESUMIDO = 3;
+const VARIACOES_MONETARIAS = 2;
 const REGIME_PIS_COFINS_CUMULATIVO = 2;
 const CODIGO_DEBITO_IRPJ = "208901";
 const CODIGO_DEBITO_CSLL = "237201";
@@ -67,6 +78,7 @@ export function montarDeclaracaoMit(params: {
         SemMovimento: semMovimento,
         QualificacaoPj: QUALIFICACAO_PJ,
         TributacaoLucro: TRIBUTACAO_LUCRO_PRESUMIDO,
+        VariacoesMonetarias: VARIACOES_MONETARIAS,
         RegimePisCofins: REGIME_PIS_COFINS_CUMULATIVO,
         ResponsavelApuracao: {
           CpfResponsavel: responsavelApuracao.cpf,
