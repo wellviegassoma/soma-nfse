@@ -1983,7 +1983,25 @@ servidor (concluído, 2026-08-31)**
       especificamente a assinatura (não a estrutura do XML), é o
       primeiro lugar a revisar. Novo botão "Transmitir declaração da
       DCTFWeb" na aba Impostos, atrás de confirmação (mesmo efeito legal
-      real do encerramento do MIT) — ainda não testado contra produção
+      real do encerramento do MIT)
+- [x] Confirmado contra a documentação oficial do TRANSDECLARACAO310
+      (`entregar_declaracao`): "o certificado usado na assinatura deve
+      ser o do autor do pedido de dados" — a SOMA, exatamente como já
+      implementado — e que a comparação de integridade é por hash sobre
+      o XML original sem a tag de assinatura (nosso código só acrescenta
+      `<Signature>`, não toca no resto do conteúdo). Os dois pontos de
+      maior risco da assinatura em si já batem com a doc oficial
+- [ ] **Bloqueado do lado da Serpro, não é bug nosso**: primeiro teste
+      real (ORTOP) recusado com HTTP 500 antes mesmo de validar
+      conteúdo — `{"code":"303001","message":"Runtime Error",
+      "description":"Currently, Address endpoint :
+      [Name: integra-contador--vv1_APIproductionEndpoint]
+      [State: SUSPENDED]"}`. Não é um código de validação (não tem o
+      padrão `[Aviso/Erro-DCTFWEB-...]` dos outros erros já vistos) —
+      indica indisponibilidade (temporária, a julgar pelo "Currently") ou
+      falta de contratação desse serviço específico no plano Integra
+      Contador da SOMA. Precisa retestar mais tarde ou confirmar
+      contratação com a Serpro antes de insistir em ajuste de código
 
 **Fase V — Retenções na fonte abatidas do imposto apurado (concluído,
 02/09/2026)**
