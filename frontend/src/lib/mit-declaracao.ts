@@ -97,7 +97,12 @@ export function montarDeclaracaoMit(params: {
         },
       },
       ...(semMovimento ? {} : { Debitos: debitos }),
-      TransmissaoImediata: transmissaoImediata,
+      // TransmissaoImediata só é aceito quando SemMovimento=true — a
+      // Serpro recusa ("[EntradaIncorreta-MIT-MSG_0020] O campo
+      // transmissaoImediata só deve ser enviado para apuração sem
+      // movimento") se enviado junto com uma apuração com débitos.
+      // Descoberto no 3º teste real contra produção (ORTOP, 02/09/2026).
+      ...(semMovimento ? { TransmissaoImediata: transmissaoImediata } : {}),
     },
   };
 }
