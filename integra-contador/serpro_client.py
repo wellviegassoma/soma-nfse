@@ -80,6 +80,25 @@ def _chamar_gateway(rota: str, envelope: dict, tentativa_apos_401: bool = False)
     return resposta
 
 
+def _extrair_motivo_erro(texto_resposta: str) -> str:
+    """
+    A resposta de erro da Serpro ecoa de volta o envelope inteiro da
+    requisição (contratante/autorPedidoDados/contribuinte/pedidoDados) —
+    numa apuração do MIT isso sozinho já passa de 1000 caracteres, cortando
+    a única parte que interessa de verdade: o array `mensagens`, que só
+    vem DEPOIS do eco. Tenta extrair só isso; cai pro texto cru (truncado)
+    se a resposta não for o JSON esperado.
+    """
+    try:
+        corpo = json.loads(texto_resposta)
+        mensagens = corpo.get("mensagens")
+        if mensagens:
+            return "; ".join(f"[{m.get('codigo')}] {m.get('texto')}" for m in mensagens)
+    except (json.JSONDecodeError, AttributeError):
+        pass
+    return texto_resposta[:2000]
+
+
 def chamar(id_sistema: str, id_servico: str, contribuinte_cnpj: str, dados: dict[str, Any]) -> dict:
     try:
         servico = obter_servico(id_sistema, id_servico)
@@ -119,7 +138,7 @@ def chamar(id_sistema: str, id_servico: str, contribuinte_cnpj: str, dados: dict
         )
         raise ErroIntegraContador(
             f"Serpro respondeu HTTP {resposta.status_code} para {id_sistema}.{id_servico} "
-            f"(contribuinte {contribuinte_cnpj}): {resposta.text[:1000]}"
+            f"(contribuinte {contribuinte_cnpj}): {_extrair_motivo_erro(resposta.text)}"
         )
     corpo = resposta.json()
 
