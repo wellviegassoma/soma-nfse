@@ -32,6 +32,8 @@ function primeiroDiaMesSeguinte(competencia: string): string {
 }
 
 type NotaRow = {
+  id: string;
+  numero: string | null;
   direcao: "saida" | "entrada" | "indefinida";
   cancelada: boolean;
   valor_servico: number | null;
@@ -63,7 +65,7 @@ export default async function AdminFechamentoPage(
       .single(),
     supabase
       .from("notas_distribuidas")
-      .select("direcao, cancelada, valor_servico, prestador_nome, tomador_nome")
+      .select("id, numero, direcao, cancelada, valor_servico, prestador_nome, tomador_nome")
       .eq("company_id", companyId)
       .gte("competencia", `${competencia}-01`)
       .lt("competencia", primeiroDiaMesSeguinte(competencia)),
@@ -159,10 +161,18 @@ export default async function AdminFechamentoPage(
           <div className="p-6 text-center text-sm text-foreground/50">Nenhuma nota ativa.</div>
         ) : (
           <div className="divide-y divide-border">
-            {saidaAtivas.map((n, i) => (
-              <div key={i} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
-                <span className="truncate">{n.tomador_nome || "—"}</span>
+            {saidaAtivas.map((n) => (
+              <div key={n.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
+                <span className="w-16 shrink-0 text-foreground/50">{n.numero || "—"}</span>
+                <span className="min-w-0 flex-1 truncate">{n.tomador_nome || "—"}</span>
                 <span className="shrink-0 font-medium">{formatMoney(n.valor_servico ?? 0)}</span>
+                <a
+                  href={`/admin/empresas/${companyId}/fechamento/notas/${n.id}/pdf`}
+                  target="_blank"
+                  className="shrink-0 text-xs font-medium text-brand hover:underline"
+                >
+                  PDF
+                </a>
               </div>
             ))}
           </div>
@@ -177,10 +187,18 @@ export default async function AdminFechamentoPage(
           <div className="p-6 text-center text-sm text-foreground/50">Nenhuma nota ativa.</div>
         ) : (
           <div className="divide-y divide-border">
-            {entradaAtivas.map((n, i) => (
-              <div key={i} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
-                <span className="truncate">{n.prestador_nome || "—"}</span>
+            {entradaAtivas.map((n) => (
+              <div key={n.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
+                <span className="w-16 shrink-0 text-foreground/50">{n.numero || "—"}</span>
+                <span className="min-w-0 flex-1 truncate">{n.prestador_nome || "—"}</span>
                 <span className="shrink-0 font-medium">{formatMoney(n.valor_servico ?? 0)}</span>
+                <a
+                  href={`/admin/empresas/${companyId}/fechamento/notas/${n.id}/pdf`}
+                  target="_blank"
+                  className="shrink-0 text-xs font-medium text-brand hover:underline"
+                >
+                  PDF
+                </a>
               </div>
             ))}
           </div>
