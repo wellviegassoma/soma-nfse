@@ -33,7 +33,8 @@ Por isso:
 | Arquivo | Responsabilidade |
 |---|---|
 | `certificado.py` | Cópia de `backend/certificado.py` — ler `.pfx`/`.p12`, gravar PEM temporário, apagar depois. |
-| `certificado_escritorio.py` | Busca a linha da SOMA em `certificates`, decifra (AES-256-GCM) com `MASTER_ENCRYPTION_KEY`. |
+| `certificado_escritorio.py` | Busca a linha da SOMA em `certificates`, decifra (AES-256-GCM) com `MASTER_ENCRYPTION_KEY` — pra mTLS (`obter_certificado_temporario`) ou pra assinatura XMLDSig (`obter_chave_e_certificado_para_assinatura`). |
+| `xml_signer.py` | Cópia de `backend/xml_signer.py` — assina digitalmente (XMLDSig) um elemento do XML da declaração da DCTFWeb antes de `TRANSDECLARACAO310`, com o certificado da própria SOMA. |
 | `serpro_auth.py` | OAuth2 + mTLS: obtém e cacheia `access_token`/`jwt_token`. |
 | `catalogo.py` | Mapa idSistema/idServico → rota do gateway, versão, TTL de cache. |
 | `cache.py` | Lê/grava `integra_contador_cache` respeitando o TTL. |
@@ -59,6 +60,8 @@ no Catálogo de Serviços oficial antes de ligar.
 | POST | `/contribuintes/{cnpj}/mit/apuracao/declarar` | Encerra uma apuração do MIT — IRPJ/CSLL/PIS/COFINS de Lucro Presumido/Real (`MIT.ENCAPURACAO314`, **efeito legal real**, nunca cacheado) |
 | GET | `/contribuintes/{cnpj}/mit/situacao-encerramento?protocolo_encerramento=...` | Acompanha o encerramento de uma apuração do MIT (`MIT.SITUACAOENC315`, cache de 30s pra polling) — protocolo vai como query, não path (é base64, pode ter `/`) |
 | GET | `/contribuintes/{cnpj}/dctfweb/guia/{ano_pa}/{mes_pa}` | Gera o PDF da guia (DARF) de um período já encerrado na DCTFWeb, inclusive vindo do MIT (`DCTFWEB.GERARGUIA31`) |
+| GET | `/contribuintes/{cnpj}/dctfweb/xml/{ano_pa}/{mes_pa}` | Consulta o XML (assinado ou rascunho) de uma declaração da DCTFWeb (`DCTFWEB.CONSXMLDECLARACAO38`, só leitura) |
+| POST | `/contribuintes/{cnpj}/dctfweb/transmitir/{ano_pa}/{mes_pa}` | Fecha uma declaração "Em Andamento" (ex.: vinda de um encerramento do MIT) — consulta o XML, assina com o certificado da SOMA, transmite (`DCTFWEB.TRANSDECLARACAO310`, **efeito legal real**) |
 
 ## Job agendado
 

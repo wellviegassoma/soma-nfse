@@ -1945,21 +1945,45 @@ servidor (concluído, 2026-08-31)**
       (a escrita/leitura do histórico é melhor esforço, com try/catch —
       não quebra o fluxo principal), só o "lembrar entre refreshes" fica
       inativo
-- [ ] Validação ao vivo contra produção (ambiente de demonstração
-      primeiro) do fluxo completo — encerrar, acompanhar o status até
-      ENCERRADA, baixar a guia — ainda não feita
-- [x] **Correção**: primeiro teste real (empresa ORTOP) foi recusado pela
-      Serpro (HTTP 400) duas vezes seguidas — primeiro por
-      `ResponsavelApuracao` vazio (env vars nunca configuradas no
-      Railway, resolvido movendo pra `configuracao_contador_responsavel`
-      dentro do app), depois por faltar `DadosIniciais.VariacoesMonetarias`
-      (campo obrigatório que a doc pública do MIT não deixa claro — valor
-      `2` confirmado direto em apurações reais já encerradas da própria
-      ORTOP). De quebra, corrigido `serpro_client.py` pra extrair o array
-      `mensagens` da resposta de erro em vez de cortar em 1000 caracteres
-      (o eco do envelope de requisição sozinho já passa disso, escondendo
-      a mensagem de validação de verdade — foi assim que os dois motivos
-      acima puderam ser diagnosticados ao vivo)
+- [x] **Validação ao vivo contra produção — 6 rodadas de correção até a
+      primeira apuração real sair (ORTOP, competência 2026-08)**:
+      1) `ResponsavelApuracao` vazio (env vars nunca configuradas no
+      Railway — resolvido movendo pra `configuracao_contador_responsavel`
+      dentro do app, só SUPER_ADMIN edita, ver Fase U abaixo); 2) faltava
+      `DadosIniciais.VariacoesMonetarias` (campo obrigatório que a doc
+      pública não deixa claro — valor `2` confirmado em apurações reais
+      já encerradas); 3) sobrava `DadosIniciais.RegimePisCofins` (só
+      aparece ao CONSULTAR uma apuração — a Receita deriva sozinha, não
+      se envia); 4) `TransmissaoImediata` só pode ser enviado quando
+      `SemMovimento=true`; 5) `ValorDebito` chegava com erro de ponto
+      flutuante do JS (391.90788000000003 em vez de 391.91) — Serpro só
+      aceita 2 casas, corrigido com round2(); 6) o protocolo de
+      encerramento (base64, com `/`) quebrava o polling de status por
+      não estar com `encodeURIComponent` na chamada do navegador. De
+      quebra, corrigido `serpro_client.py` pra extrair o array
+      `mensagens` da resposta de erro em vez de cortar em 1000
+      caracteres (o eco do envelope de requisição sozinho já passa
+      disso) — foi assim que a maioria dos motivos acima pôde ser
+      diagnosticada ao vivo em vez de adivinhada
+- [x] **Descoberta**: o encerramento do MIT sozinho não fecha a
+      declaração da DCTFWeb — só "prepara" os dados. A declaração fica
+      "Em Andamento" e `GERARGUIA31` recusa até ela ficar "Ativa", o que
+      exige um passo à parte: consultar o XML da declaração
+      (`DCTFWEB.CONSXMLDECLARACAO38`), assiná-lo digitalmente
+      (elemento `ConteudoDeclaracao`, atributo `id` minúsculo — diferente
+      do `Id` da DPS) e transmitir (`DCTFWEB.TRANSDECLARACAO310`).
+      Confirmado pelo usuário: a assinatura tem que ser com o certificado
+      da própria SOMA (contratante do Integra Contador, atuando por
+      procuração), nunca o certificado da empresa cliente
+- [x] Reaproveitado `xml_signer.py` (já usado pra assinar a DPS da
+      NFS-e) — duplicado em `integra-contador/` com o mesmo perfil de
+      assinatura (RSA-SHA1 + C14N não-exclusivo, sem cadeia de
+      certificação), **sem uma referência real já aceita pela DCTFWeb
+      pra calibrar contra** (diferente da DPS) — se a Serpro recusar
+      especificamente a assinatura (não a estrutura do XML), é o
+      primeiro lugar a revisar. Novo botão "Transmitir declaração da
+      DCTFWeb" na aba Impostos, atrás de confirmação (mesmo efeito legal
+      real do encerramento do MIT) — ainda não testado contra produção
 
 **Fase V — Retenções na fonte abatidas do imposto apurado (concluído,
 02/09/2026)**

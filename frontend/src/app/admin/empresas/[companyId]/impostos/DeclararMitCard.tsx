@@ -54,6 +54,9 @@ export function DeclararMitCard({
   );
   const [poluindoDemais, setPolluindoDemais] = useState(false);
   const [baixandoGuia, setBaixandoGuia] = useState(false);
+  const [confirmandoTransmissao, setConfirmandoTransmissao] = useState(false);
+  const [transmitindo, setTransmitindo] = useState(false);
+  const [transmitida, setTransmitida] = useState(false);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const nadaADeclarar =
@@ -142,6 +145,28 @@ export function DeclararMitCard({
     }
   }
 
+  async function transmitirDctfWeb() {
+    setTransmitindo(true);
+    setErro(null);
+    try {
+      const resposta = await fetch(`/admin/empresas/${companyId}/integra-contador/dctfweb/transmitir/${ano}/${mes}`, {
+        method: "POST",
+      });
+      const corpo = await resposta.json();
+      if (!resposta.ok) {
+        setErro(corpo.error ?? "Não foi possível transmitir a declaração da DCTFWeb.");
+        return;
+      }
+      setTransmitida(true);
+      await baixarGuia();
+    } catch {
+      setErro("Não foi possível falar com o Integra Contador agora. Tente novamente.");
+    } finally {
+      setTransmitindo(false);
+      setConfirmandoTransmissao(false);
+    }
+  }
+
   return (
     <Card className="overflow-hidden">
       <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
@@ -224,9 +249,40 @@ export function DeclararMitCard({
                 <span className="font-medium text-foreground">
                   Encerrada{situacao?.dataEncerramento ? ` em ${situacao.dataEncerramento}` : ""}.
                 </span>
-                <Button variant="secondary" size="md" loading={baixandoGuia} onClick={baixarGuia} className="self-start">
-                  Baixar guia (DARF)
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant="secondary" size="md" loading={baixandoGuia} onClick={baixarGuia}>
+                    Baixar guia (DARF)
+                  </Button>
+                  {!transmitida && !confirmandoTransmissao && (
+                    <Button variant="ghost" size="md" onClick={() => setConfirmandoTransmissao(true)}>
+                      A guia não gerou? Transmitir declaração da DCTFWeb
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-foreground/50">
+                  O MIT só prepara os dados — a declaração da DCTFWeb (de onde sai a guia) às vezes
+                  fica &quot;Em Andamento&quot; e precisa ser transmitida à parte antes de gerar a
+                  guia. Só use isso se &quot;Baixar guia&quot; falhar dizendo isso.
+                </p>
+                {confirmandoTransmissao && (
+                  <Alert tone="danger">
+                    <div className="flex flex-col gap-3">
+                      <span>
+                        Isso vai <strong>transmitir oficialmente</strong> a declaração da DCTFWeb pra
+                        competência {competencia} — efeito legal real, igual ao encerramento do MIT.
+                        Confirma?
+                      </span>
+                      <div className="flex gap-2">
+                        <Button variant="danger" loading={transmitindo} onClick={transmitirDctfWeb}>
+                          Sim, transmitir
+                        </Button>
+                        <Button variant="ghost" onClick={() => setConfirmandoTransmissao(false)}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  </Alert>
+                )}
               </>
             )}
           </div>

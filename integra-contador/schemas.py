@@ -99,3 +99,10 @@ class ConsultarXmlDctfWebOut(BaseModel):
     ano_pa: str
     mes_pa: str
     resposta: dict
+
+
+class TransmitirDctfWebOut(BaseModel):
+    contribuinte_cnpj: str
+    ano_pa: str
+    mes_pa: str
+    resposta: dict

@@ -1,6 +1,12 @@
 """
 xml_signer.py
 
+Duplicado de backend/xml_signer.py (mesmo princípio de "portar sem
+alterar lógica" já usado nesse repo — ver comentário em certificado.py
+deste mesmo diretório). Cada serviço é implantado no Railway a partir da
+própria pasta como root directory, então um import cross-pasta quebraria
+no deploy.
+
 Assina digitalmente um elemento XML no padrão XMLDSig (W3C), replicando
 EXATAMENTE o perfil observado em uma DPS real, assinada por um sistema
 terceirizado e aceita pelo Sefin Nacional (fornecida pelo usuário como
@@ -14,10 +20,15 @@ exemplo):
   - <Signature> inserida como último filho do elemento pai (irmã do
     elemento assinado, não filha dele)
 
-Isso é DIFERENTE do padrão mais moderno (SHA-256 + C14N exclusivo) usado
-pelo NFS-e Nacional para assinar o documento final (isso quem faz é o
-próprio governo, depois de aceitar nossa DPS) — não precisamos replicar
-esse segundo padrão, só o da DPS que enviamos.
+USO NESTE SERVIÇO (DCTFWEB.TRANSDECLARACAO310, ver main.py): diferente da
+DPS, aqui NÃO existe um exemplo real já aceito pra calibrar o perfil
+exato de assinatura que a DCTFWeb espera — a doc pública só diz "XML
+assinado digitalmente, com o certificado original", sem detalhar
+algoritmo. Usando o mesmo perfil (RSA-SHA1 + C14N não-exclusivo, sem
+cadeia de certificação) por ser o único já validado neste projeto contra
+um endpoint de assinatura de documento fiscal do governo — se a Serpro
+recusar a assinatura em si (não a estrutura do XML), é o primeiro lugar
+pra revisar.
 
 Não depende de bibliotecas externas de XMLDSig (signxml não estava
 disponível no ambiente) — implementado com lxml (canonicalização C14N)
@@ -60,11 +71,12 @@ def _c14n(elemento) -> bytes:
     do lxml nesse ponto crítico, implementamos a canonicalização
     MANUALMENTE, em Python puro, seguindo a especificação C14N 1.0
     diretamente. Isso é viável porque nosso caso é bem mais simples que
-    o caso geral: cada elemento que assinamos (infDPS ou SignedInfo)
-    usa um ÚNICO namespace, consistente em toda a subárvore, sem
-    comentários, sem instruções de processamento, sem atributos com
-    namespace próprio. Testado e confirmado batendo exatamente com o
-    digest embutido em uma nota real e aceita pelo Sefin Nacional.
+    o caso geral: cada elemento que assinamos (infDPS, ConteudoDeclaracao
+    ou SignedInfo) usa um ÚNICO namespace, consistente em toda a
+    subárvore, sem comentários, sem instruções de processamento, sem
+    atributos com namespace próprio. Testado e confirmado batendo
+    exatamente com o digest embutido em uma nota real e aceita pelo
+    Sefin Nacional.
     """
     namespace_uri = etree.QName(elemento).namespace or ""
     texto_canonico = _canonicalizar_elemento(elemento, namespace_uri, eh_raiz=True)
@@ -99,8 +111,7 @@ def _canonicalizar_elemento(elemento, namespace_uri: str, eh_raiz: bool) -> str:
     """
     Serializa um elemento em C14N 1.0, assumindo que ele e toda a sua
     subárvore usam um ÚNICO namespace (sem comentários, sem instruções
-    de processamento, sem atributos com namespace próprio — verdadeiro
-    para infDPS e SignedInfo, os dois únicos casos em que usamos isso).
+    de processamento, sem atributos com namespace próprio).
     """
     tag = etree.QName(elemento).localname
     partes = [f"<{tag}"]
@@ -113,7 +124,7 @@ def _canonicalizar_elemento(elemento, namespace_uri: str, eh_raiz: bool) -> str:
         # canonicalizar um "node-set" que não é o documento inteiro.
         partes.append(f' xmlns="{namespace_uri}"')
 
-    # Atributos (nenhum dos nossos tem namespace próprio — Id, URI,
+    # Atributos (nenhum dos nossos tem namespace próprio — Id/id, URI,
     # Algorithm são todos atributos "soltos") — ordem alfabética simples
     for nome, valor in sorted(elemento.attrib.items()):
         partes.append(f' {nome}="{_escapar_atributo_c14n(valor)}"')
@@ -142,20 +153,18 @@ def assinar_elemento(
 ) -> str:
     """
     Recebe o XML completo (como string) já contendo o elemento a ser
-    assinado (identificado pelo atributo Id=<id_elemento_a_assinar>),
+    assinado (identificado pelo atributo <nome_atributo_id>=<id_elemento_a_assinar>),
     calcula a assinatura XMLDSig sobre ele, e retorna o XML com o
     elemento <Signature> inserido logo depois do elemento assinado
-    (como irmão dele, dentro do mesmo elemento pai) — replicando a
-    estrutura observada no exemplo real fornecido.
+    (como irmão dele, dentro do mesmo elemento pai).
 
     `certificado_der` é o certificado X.509 em formato DER (bytes cru,
     sem o cabeçalho PEM) — vai dentro de <X509Certificate>, em base64.
 
     `cadeia_der`, se informado, é uma lista de certificados intermediários
-    (também em DER) que são incluídos como elementos <X509Certificate>
-    adicionais dentro do mesmo <X509Data> — importante para o validador
-    conseguir confirmar a cadeia de confiança completa, não só a
-    matemática da assinatura.
+    (também em DER) — atualmente NUNCA incluída na assinatura de DPS
+    (ver nota abaixo); mantido como parâmetro pra não quebrar a
+    assinatura caso um dia isso mude pra outro tipo de documento.
 
     `nome_atributo_id` — nome do atributo que identifica o elemento
     (case-sensitive; a DPS/NFS-e usa "Id", a DCTFWeb usa "id" minúsculo).
@@ -210,8 +219,8 @@ def assinar_elemento(
     #    "reaberto de um XML já serializado" pode produzir bytes
     #    diferentes (namespaces redundantes tratados de forma diferente
     #    nos dois casos). Assinando já na posição final, garantimos que
-    #    o que assinamos é EXATAMENTE o que um terceiro (o Sefin
-    #    Nacional) vai recalcular ao reabrir o XML que enviarmos.
+    #    o que assinamos é EXATAMENTE o que um terceiro vai recalcular
+    #    ao reabrir o XML que enviarmos.
     signature = etree.Element(f"{{{NS_DS}}}Signature", nsmap={None: NS_DS})
     signature.append(signed_info)
     pai.append(signature)
@@ -231,19 +240,17 @@ def assinar_elemento(
     x509_data = etree.SubElement(key_info, f"{{{NS_DS}}}X509Data")
     x509_cert = etree.SubElement(x509_data, f"{{{NS_DS}}}X509Certificate")
     x509_cert.text = base64.b64encode(certificado_der).decode("ascii")
-    # NÃO incluir mais de um <X509Certificate> — confirmado na especificação
-    # oficial (tabela de campos do padrão de assinatura, campo XS21,
-    # ocorrência "1-1"). A cadeia de certificação NÃO deve ser incluída;
-    # o validador do governo já reconhece a cadeia a partir do certificado
-    # único informado. (Isso já foi testado e causava a MESMA rejeição
-    # E0714 quando incluíamos a cadeia — reafirma essa regra.)
+    # NÃO incluir mais de um <X509Certificate> — confirmado (pra DPS) na
+    # especificação oficial (campo XS21, ocorrência "1-1"); a cadeia de
+    # certificação causava a mesma rejeição E0714 quando incluída.
+    # Assumindo a mesma regra aqui até prova em contrário.
 
     # Construímos a declaração XML manualmente (sem usar xml_declaration=True
     # do lxml), porque ele insere uma quebra de linha logo depois dela — e
-    # um relato de terceiros sobre esse mesmo erro (E0714) aponta que
-    # caracteres como quebras de linha podem ser alterados na conversão
-    # para o formato de envio (gzip+base64), então eliminamos essa
-    # quebra de linha por completo em vez de arriscar.
+    # um relato de terceiros sobre esse mesmo erro (E0714, no contexto da
+    # DPS) aponta que caracteres como quebras de linha podem ser alterados
+    # na conversão para o formato de envio, então eliminamos essa quebra de
+    # linha por completo em vez de arriscar.
     corpo_xml = etree.tostring(raiz, encoding="utf-8").decode("utf-8")
     return '<?xml version="1.0" encoding="utf-8"?>' + corpo_xml
 
@@ -254,10 +261,7 @@ def carregar_chave_e_certificado_de_pfx(caminho_pfx: str, senha: str):
     prontos para usar em `assinar_elemento`. `cadeia_der` é uma lista
     (pode ser vazia) com os certificados intermediários da cadeia de
     certificação (CA), em DER, que costumam vir junto no .pfx de
-    certificados ICP-Brasil reais — importante incluir na assinatura
-    para o validador do governo conseguir confirmar a cadeia de
-    confiança completa até a raiz, não só verificar a matemática da
-    assinatura.
+    certificados ICP-Brasil reais.
     """
     from pathlib import Path
     from cryptography.hazmat.primitives.serialization import pkcs12

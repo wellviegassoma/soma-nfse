@@ -13,6 +13,10 @@ Toda rota exige o header X-Internal-Token (ver auth.py).
 
 from __future__ import annotations
 
+import base64
+import json
+import re
+
 from dotenv import load_dotenv
 
 load_dotenv()  # só facilita rodar localmente — em produção (Railway) as
@@ -23,6 +27,7 @@ from fastapi import Depends, FastAPI, HTTPException
 import scheduler
 from auth import exigir_token_interno
 from catalogo import CATALOGO
+from certificado_escritorio import ErroCertificadoEscritorio, obter_chave_e_certificado_para_assinatura
 from cnd import ErroCnd, consultar_cnd
 from schemas import (
     ChamarServicoIn,
@@ -42,8 +47,10 @@ from schemas import (
     ReciboDeclaracaoOut,
     SituacaoEncerramentoMitOut,
     SituacaoFiscalOut,
+    TransmitirDctfWebOut,
 )
 from serpro_client import ErroIntegraContador, chamar
+from xml_signer import ErroAssinatura, assinar_elemento
 from sitfis import ErroSitfis, obter_situacao_fiscal
 
 app = FastAPI(title="integra-contador", docs_url=None, redoc_url=None)
@@ -378,6 +385,62 @@ def consultar_xml_dctfweb(cnpj: str, ano_pa: str, mes_pa: str):
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ConsultarXmlDctfWebOut(contribuinte_cnpj=cnpj, ano_pa=ano_pa, mes_pa=mes_pa, resposta=resposta)
+
+
+@app.post(
+    "/contribuintes/{cnpj}/dctfweb/transmitir/{ano_pa}/{mes_pa}",
+    response_model=TransmitirDctfWebOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def transmitir_declaracao_dctfweb(cnpj: str, ano_pa: str, mes_pa: str):
+    """
+    Fecha de vez uma declaração da DCTFWeb que ficou "EM ANDAMENTO" (ex.:
+    logo depois de um encerramento do MIT, que só prepara os dados —
+    quem efetivamente transmite a declaração é este passo). Efeito legal
+    real, igual ao MIT: 1) consulta o XML atual (CONSXMLDECLARACAO38),
+    2) assina digitalmente o elemento `ConteudoDeclaracao` com o
+    certificado da PRÓPRIA SOMA (contratante do Integra Contador,
+    atuando por procuração — nunca o certificado da empresa cliente),
+    3) transmite via DCTFWEB.TRANSDECLARACAO310.
+
+    Perfil de assinatura (RSA-SHA1 + C14N não-exclusivo, sem cadeia de
+    certificação) copiado do único caso já validado neste projeto contra
+    um endpoint de assinatura de documento fiscal do governo (a DPS da
+    NFS-e) — a DCTFWeb não tem, até onde a doc pública mostra, um
+    exemplo real equivalente pra calibrar contra. Se a Serpro recusar
+    especificamente a assinatura (não a estrutura do XML), é o primeiro
+    lugar a revisar.
+    """
+    try:
+        resposta_xml = chamar("DCTFWEB", "CONSXMLDECLARACAO38", cnpj, {"categoria": "GERAL_MENSAL", "anoPA": ano_pa, "mesPA": mes_pa})
+        dados_xml = json.loads(resposta_xml["dados"])
+        xml_original = base64.b64decode(dados_xml["XMLStringBase64"]).decode("utf-8")
+
+        # `ConteudoDeclaracao id="..."` — achado inspecionando um XML real
+        # (ORTOP, 02/09/2026); atributo `id` minúsculo, diferente do `Id`
+        # usado na DPS.
+        id_match = re.search(r'<ConteudoDeclaracao\s+id="([^"]+)"', xml_original)
+        if not id_match:
+            raise ErroIntegraContador(
+                "Não encontrei o elemento ConteudoDeclaracao no XML da DCTFWeb — layout inesperado."
+            )
+        id_conteudo = id_match.group(1)
+
+        chave_privada, certificado_der, cadeia_der = obter_chave_e_certificado_para_assinatura()
+        xml_assinado = assinar_elemento(
+            xml_original, id_conteudo, chave_privada, certificado_der, cadeia_der, nome_atributo_id="id"
+        )
+        xml_assinado_base64 = base64.b64encode(xml_assinado.encode("utf-8")).decode("ascii")
+
+        resposta = chamar(
+            "DCTFWEB",
+            "TRANSDECLARACAO310",
+            cnpj,
+            {"categoria": "GERAL_MENSAL", "anoPA": ano_pa, "mesPA": mes_pa, "xmlAssinadoBase64": xml_assinado_base64},
+        )
+    except (ErroIntegraContador, ErroCertificadoEscritorio, ErroAssinatura) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return TransmitirDctfWebOut(contribuinte_cnpj=cnpj, ano_pa=ano_pa, mes_pa=mes_pa, resposta=resposta)
 
 
 @app.get(

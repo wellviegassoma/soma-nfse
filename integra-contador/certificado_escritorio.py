@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from certificado import carregar_certificado_pfx
 from supabase_client import obter_cliente
+from xml_signer import carregar_chave_e_certificado_de_pfx
 
 
 class ErroCertificadoEscritorio(Exception):
@@ -37,12 +38,14 @@ def _decifrar(blob: bytes, chave: bytes) -> bytes:
     return AESGCM(chave).decrypt(iv, ciphertext + tag, None)
 
 
-def obter_certificado_temporario() -> tuple[str, str]:
+def _buscar_pfx_e_senha_da_soma() -> tuple[bytes, str]:
     """
-    Busca, decifra e grava o certificado da SOMA em arquivos PEM temporários
-    (cert, key), prontos pra mTLS. Quem chamar é responsável por apagar logo
-    depois de usar, via certificado.limpar_certificado_temporario — nunca
-    fique com esses arquivos além da janela da chamada.
+    Busca e decifra o .pfx (bytes) e a senha do certificado e-CNPJ da
+    própria SOMA — compartilhado por `obter_certificado_temporario`
+    (mTLS) e `obter_chave_e_certificado_para_assinatura` (XMLDSig,
+    ex.: DCTFWEB.TRANSDECLARACAO310). É o certificado do CONTRATANTE
+    (a SOMA, atuando por procuração), nunca o da empresa cliente — o
+    mesmo usado pra autenticar no gateway da Serpro.
     """
     company_id = os.environ.get("SOMA_COMPANY_ID")
     if not company_id:
@@ -75,6 +78,17 @@ def obter_certificado_temporario() -> tuple[str, str]:
 
     pfx_bytes = _decifrar(_from_bytea(linha["encrypted_file"]), chave_mestra)
     senha = _decifrar(_from_bytea(linha["encrypted_password"]), chave_mestra).decode("utf-8")
+    return pfx_bytes, senha
+
+
+def obter_certificado_temporario() -> tuple[str, str]:
+    """
+    Busca, decifra e grava o certificado da SOMA em arquivos PEM temporários
+    (cert, key), prontos pra mTLS. Quem chamar é responsável por apagar logo
+    depois de usar, via certificado.limpar_certificado_temporario — nunca
+    fique com esses arquivos além da janela da chamada.
+    """
+    pfx_bytes, senha = _buscar_pfx_e_senha_da_soma()
 
     tmp = tempfile.NamedTemporaryFile(suffix=".pfx", delete=False)
     try:
@@ -82,5 +96,26 @@ def obter_certificado_temporario() -> tuple[str, str]:
         tmp.close()
         os.chmod(tmp.name, 0o600)
         return carregar_certificado_pfx(tmp.name, senha)
+    finally:
+        os.remove(tmp.name)
+
+
+def obter_chave_e_certificado_para_assinatura():
+    """
+    Mesmo certificado de `obter_certificado_temporario`, mas devolvido
+    pronto pra assinatura XMLDSig (chave privada em memória + certificado
+    em DER) em vez de arquivos PEM pra mTLS — usado por
+    `xml_signer.assinar_elemento`. Não grava nada em disco (só
+    `carregar_chave_e_certificado_de_pfx` internamente usa um arquivo
+    temporário, apagado antes de retornar).
+    """
+    pfx_bytes, senha = _buscar_pfx_e_senha_da_soma()
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".pfx", delete=False)
+    try:
+        tmp.write(pfx_bytes)
+        tmp.close()
+        os.chmod(tmp.name, 0o600)
+        return carregar_chave_e_certificado_de_pfx(tmp.name, senha)
     finally:
         os.remove(tmp.name)
