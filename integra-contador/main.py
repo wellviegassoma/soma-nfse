@@ -498,82 +498,100 @@ def consultar_situacao_fiscal(cnpj: str):
     return SituacaoFiscalOut(contribuinte_cnpj=cnpj, resposta=resposta)
 
 
+# As 8 modalidades de parcelamento do Simples Nacional/MEI repetem a
+# mesma família de 5 serviços (Emitir guia / Consultar parcelas pra
+# gerar / Consultar pedidos / Consultar detalhe / Consultar detalhe de
+# pagamento) — só o sufixo numérico do idServico muda por modalidade.
+# Versão "1.0" confirmada por chamada real em todas as 8 (2026-09-02).
+_MODALIDADES_PARCELAMENTO: dict[str, dict[str, str]] = {
+    "parcsn": {"id_sistema": "PARCSN", "guia": "GERARDAS161", "parcelas": "PARCELASPARAGERAR162", "listar": "PEDIDOSPARC163", "detalhe": "OBTERPARC164"},
+    "parcsn-esp": {"id_sistema": "PARCSN-ESP", "guia": "GERARDAS171", "parcelas": "PARCELASPARAGERAR172", "listar": "PEDIDOSPARC173", "detalhe": "OBTERPARC174"},
+    "pertsn": {"id_sistema": "PERTSN", "guia": "GERARDAS181", "parcelas": "PARCELASPARAGERAR182", "listar": "PEDIDOSPARC183", "detalhe": "OBTERPARC184"},
+    "relpsn": {"id_sistema": "RELPSN", "guia": "GERARDAS191", "parcelas": "PARCELASPARAGERAR192", "listar": "PEDIDOSPARC193", "detalhe": "OBTERPARC194"},
+    "parcmei": {"id_sistema": "PARCMEI", "guia": "GERARDAS201", "parcelas": "PARCELASPARAGERAR202", "listar": "PEDIDOSPARC203", "detalhe": "OBTERPARC204"},
+    "parcmei-esp": {"id_sistema": "PARCMEI-ESP", "guia": "GERARDAS211", "parcelas": "PARCELASPARAGERAR212", "listar": "PEDIDOSPARC213", "detalhe": "OBTERPARC214"},
+    "pertmei": {"id_sistema": "PERTMEI", "guia": "GERARDAS221", "parcelas": "PARCELASPARAGERAR222", "listar": "PEDIDOSPARC223", "detalhe": "OBTERPARC224"},
+    "relpmei": {"id_sistema": "RELPMEI", "guia": "GERARDAS231", "parcelas": "PARCELASPARAGERAR232", "listar": "PEDIDOSPARC233", "detalhe": "OBTERPARC234"},
+}
+
+
+def _resolver_modalidade(modalidade: str) -> dict[str, str]:
+    servicos = _MODALIDADES_PARCELAMENTO.get(modalidade.lower())
+    if not servicos:
+        raise HTTPException(status_code=400, detail=f"Modalidade de parcelamento desconhecida: {modalidade}")
+    return servicos
+
+
 @app.get(
-    "/contribuintes/{cnpj}/parcelamentos/simples-nacional",
+    "/contribuintes/{cnpj}/parcelamentos/{modalidade}",
     response_model=ListarParcelamentosSnOut,
     dependencies=[Depends(exigir_token_interno)],
 )
-def listar_parcelamentos_sn(cnpj: str):
+def listar_parcelamentos(cnpj: str, modalidade: str):
     """
-    Lista os parcelamentos do Simples Nacional (comum, não especial) que
-    esse contribuinte já pediu (PARCSN.PEDIDOSPARC163) — só leitura,
-    devolve os números de parcelamento usados depois em
-    /parcelamentos/simples-nacional/{numero_parcelamento} pro detalhe.
-    Formato exato do campo com os números ainda não confirmado contra a
-    Serpro (ver catalogo.py) — o chamador precisa inspecionar `resposta`.
+    Lista os parcelamentos que esse contribuinte já pediu numa modalidade
+    (PEDIDOSPARC1XX) — só leitura, devolve os números de parcelamento
+    usados depois em /parcelamentos/{modalidade}/{numero_parcelamento}
+    pro detalhe. `modalidade` é uma chave de _MODALIDADES_PARCELAMENTO.
     """
+    servicos = _resolver_modalidade(modalidade)
     try:
-        resposta = chamar("PARCSN", "PEDIDOSPARC163", cnpj, {})
+        resposta = chamar(servicos["id_sistema"], servicos["listar"], cnpj, {})
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ListarParcelamentosSnOut(contribuinte_cnpj=cnpj, resposta=resposta)
 
 
 @app.get(
-    "/contribuintes/{cnpj}/parcelamentos/simples-nacional/{numero_parcelamento}",
+    "/contribuintes/{cnpj}/parcelamentos/{modalidade}/{numero_parcelamento}",
     response_model=ObterParcelamentoSnOut,
     dependencies=[Depends(exigir_token_interno)],
 )
-def obter_parcelamento_sn(cnpj: str, numero_parcelamento: int):
-    """
-    Detalhe de um parcelamento do Simples Nacional (PARCSN.OBTERPARC164)
-    — situação, parcelas pagas/total, valor consolidado etc. Nome do
-    campo de entrada (`numeroParcelamento`) inferido pelo padrão de
-    nomenclatura da Serpro, ainda não confirmado.
-    """
+def obter_parcelamento(cnpj: str, modalidade: str, numero_parcelamento: int):
+    """Detalhe de um parcelamento (OBTERPARC1XX) — situação, parcelas pagas/total, valor consolidado etc."""
+    servicos = _resolver_modalidade(modalidade)
     try:
-        resposta = chamar("PARCSN", "OBTERPARC164", cnpj, {"numeroParcelamento": numero_parcelamento})
+        resposta = chamar(servicos["id_sistema"], servicos["detalhe"], cnpj, {"numeroParcelamento": numero_parcelamento})
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ObterParcelamentoSnOut(contribuinte_cnpj=cnpj, numero_parcelamento=numero_parcelamento, resposta=resposta)
 
 
 @app.get(
-    "/contribuintes/{cnpj}/parcelamentos/simples-nacional/{numero_parcelamento}/parcelas",
+    "/contribuintes/{cnpj}/parcelamentos/{modalidade}/{numero_parcelamento}/parcelas",
     response_model=ParcelasParaGerarSnOut,
     dependencies=[Depends(exigir_token_interno)],
 )
-def parcelas_para_gerar_sn(cnpj: str, numero_parcelamento: int):
+def parcelas_para_gerar(cnpj: str, modalidade: str, numero_parcelamento: int):
     """
-    Lista as parcelas disponíveis pra gerar guia (DAS) desse parcelamento
-    (PARCSN.PARCELASPARAGERAR162) — alimenta o seletor de competência na
-    hora de emitir a guia.
+    Lista as parcelas disponíveis pra gerar guia (PARCELASPARAGERAR1XX)
+    — confirmado (PARCSN) que não recebe numeroParcelamento nenhum.
     """
+    servicos = _resolver_modalidade(modalidade)
     try:
-        resposta = chamar("PARCSN", "PARCELASPARAGERAR162", cnpj, {})
+        resposta = chamar(servicos["id_sistema"], servicos["parcelas"], cnpj, {})
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ParcelasParaGerarSnOut(contribuinte_cnpj=cnpj, numero_parcelamento=numero_parcelamento, resposta=resposta)
 
 
 @app.get(
-    "/contribuintes/{cnpj}/parcelamentos/simples-nacional/{numero_parcelamento}/guia",
+    "/contribuintes/{cnpj}/parcelamentos/{modalidade}/{numero_parcelamento}/guia",
     response_model=GerarGuiaParcelamentoSnOut,
     dependencies=[Depends(exigir_token_interno)],
 )
-def gerar_guia_parcelamento_sn(cnpj: str, numero_parcelamento: int, parcela_para_emitir: int):
+def gerar_guia_parcelamento(cnpj: str, modalidade: str, numero_parcelamento: int, parcela_para_emitir: int):
     """
     Emite o DAS de uma parcela específica desse parcelamento
-    (PARCSN.GERARDAS161) — `parcela_para_emitir` é a competência da
-    parcela (formato AAAAMM, a confirmar contra a Serpro). Só leitura da
-    perspectiva do contribuinte (reemitir a mesma parcela no mesmo dia
-    serve do cache), mas ainda assim é rota "Emitir" — gasta uma chamada
-    de verdade na primeira vez do dia.
+    (GERARDAS1XX) — `parcela_para_emitir` é a competência da parcela
+    (formato AAAAMM). Confirmado (PARCSN) que o PDF vem em
+    `docArrecadacaoPdfB64`, não `pdf`.
     """
+    servicos = _resolver_modalidade(modalidade)
     try:
         resposta = chamar(
-            "PARCSN",
-            "GERARDAS161",
+            servicos["id_sistema"],
+            servicos["guia"],
             cnpj,
             {"numeroParcelamento": numero_parcelamento, "parcelaParaEmitir": parcela_para_emitir},
         )

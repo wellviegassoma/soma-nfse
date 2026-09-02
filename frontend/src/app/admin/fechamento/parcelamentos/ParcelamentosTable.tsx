@@ -33,7 +33,7 @@ function formatarDataHora(iso: string): string {
 // volume esperado aqui é bem menor que "todas as empresas" (só quem tem
 // parcelamento aparece), então um componente pequeno e dedicado basta,
 // sem precisar de um DataTable genérico.
-export function ParcelamentosTable({ linhas }: { linhas: LinhaParcelamento[] }) {
+export function ParcelamentosTable({ linhas, modalidade }: { linhas: LinhaParcelamento[]; modalidade: string }) {
   const [busca, setBusca] = useState("");
   const [situacaoFiltro, setSituacaoFiltro] = useState("Em parcelamento");
 
@@ -128,6 +128,7 @@ export function ParcelamentosTable({ linhas }: { linhas: LinhaParcelamento[] }) 
                 <td className="px-3 py-2 text-right">
                   <EmitirGuiaParcelamentoButton
                     companyId={linha.companyId}
+                    modalidade={modalidade}
                     numeroParcelamento={linha.numeroParcelamento}
                   />
                 </td>

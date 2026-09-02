@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
+import { MODALIDADES_PARCELAMENTO, modalidadePorId } from "@/lib/parcelamento-modalidades";
 import { VerificarParcelamentosLoteButton } from "./VerificarParcelamentosLoteButton";
 import { ParcelamentosTable, type LinhaParcelamento } from "./ParcelamentosTable";
 
@@ -14,7 +15,11 @@ function cacheEhFresco(fetchedAt: string): boolean {
   return Date.now() - new Date(fetchedAt).getTime() < CACHE_TTL_MS;
 }
 
-export default async function CentralParcelamentosPage() {
+export default async function CentralParcelamentosPage(props: PageProps<"/admin/fechamento/parcelamentos">) {
+  const searchParams = await props.searchParams;
+  const modalidadeParam = typeof searchParams.modalidade === "string" ? searchParams.modalidade : undefined;
+  const modalidade = modalidadePorId(modalidadeParam ?? "parcsn");
+
   const supabase = await createClient();
   const { data: companies } = await supabase
     .from("companies")
@@ -31,8 +36,8 @@ export default async function CentralParcelamentosPage() {
       ? supabase
           .from("integra_contador_cache")
           .select("contribuinte_cnpj, fetched_at")
-          .eq("id_sistema", "PARCSN")
-          .eq("id_servico", "PEDIDOSPARC163")
+          .eq("id_sistema", modalidade.idSistema)
+          .eq("id_servico", modalidade.idServicoListar)
           .in("contribuinte_cnpj", cnpjs)
       : Promise.resolve({ data: [] as { contribuinte_cnpj: string; fetched_at: string }[] }),
     supabase
@@ -40,6 +45,7 @@ export default async function CentralParcelamentosPage() {
       .select(
         "company_id, numero_parcelamento, situacao, parcela_atual, parcelas_total, parcelas_em_atraso, checked_at",
       )
+      .eq("modalidade", modalidade.id)
       .in("company_id", (companies ?? []).map((c) => c.id)),
   ]);
 
@@ -74,12 +80,28 @@ export default async function CentralParcelamentosPage() {
       <div>
         <h1 className="text-xl font-semibold text-foreground">Central de Parcelamentos</h1>
         <p className="text-sm text-foreground/60">
-          Parcelamentos do Simples Nacional (PARCSN) encontrados nas empresas — quem não tem
-          parcelamento não aparece na tabela.{" "}
+          Parcelamentos encontrados nas empresas do Simples Nacional — quem não tem parcelamento
+          numa modalidade não aparece na tabela dela.{" "}
           <Link href="/admin/fechamento" className="underline">
             Voltar pro Fechamento
           </Link>
         </p>
+      </div>
+
+      <div className="flex flex-wrap gap-1 border-b border-border">
+        {MODALIDADES_PARCELAMENTO.map((m) => (
+          <Link
+            key={m.id}
+            href={`/admin/fechamento/parcelamentos?modalidade=${m.id}`}
+            className={`rounded-t-lg px-3 py-2 text-sm font-medium transition-colors ${
+              m.id === modalidade.id
+                ? "border-b-2 border-brand text-brand"
+                : "text-foreground/50 hover:text-foreground"
+            }`}
+          >
+            {m.label}
+          </Link>
+        ))}
       </div>
 
       <Card className="p-6">
@@ -90,17 +112,22 @@ export default async function CentralParcelamentosPage() {
               ? ` ${semCacheHoje} empresa(s) sem cache das últimas 24h vão gerar chamada nova (paga) ao Integra Contador.`
               : " Todas já têm cache das últimas 24h — rodar de novo agora não deve gerar chamada paga."}
           </p>
-          <VerificarParcelamentosLoteButton empresas={todasAsEmpresas} semCacheHoje={semCacheHoje} />
+          <VerificarParcelamentosLoteButton
+            modalidade={modalidade.id}
+            modalidadeLabel={modalidade.label}
+            empresas={todasAsEmpresas}
+            semCacheHoje={semCacheHoje}
+          />
         </div>
       </Card>
 
       {linhas.length === 0 ? (
         <Alert tone="warning">
-          Nenhum parcelamento encontrado ainda — clique em &quot;Verificar parcelamentos de
-          todas&quot; pra consultar a Serpro.
+          Nenhum parcelamento de {modalidade.label} encontrado ainda — clique em &quot;Verificar
+          {" "}{modalidade.label} de todas&quot; pra consultar a Serpro.
         </Alert>
       ) : (
-        <ParcelamentosTable linhas={linhas} />
+        <ParcelamentosTable linhas={linhas} modalidade={modalidade.id} />
       )}
     </div>
   );

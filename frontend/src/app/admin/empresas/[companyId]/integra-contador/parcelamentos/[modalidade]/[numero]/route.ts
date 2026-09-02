@@ -1,18 +1,25 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff } from "@/lib/auth";
+import { MODALIDADES_PARCELAMENTO } from "@/lib/parcelamento-modalidades";
 
-// Proxy pro PARCSN.PEDIDOSPARC163 já cadastrado no backend (cacheado
-// 24h lá) — lista os números de parcelamento do Simples Nacional que
-// esse contribuinte já pediu. Devolve `resposta` crua (sem desembrulhar
-// nada) — formato exato ainda em confirmação (Passo 0 da Central de
-// Parcelamentos).
+const NUMERO_REGEX = /^\d+$/;
+
+// Proxy pro OBTERPARC1XX da modalidade — detalhe de um parcelamento
+// específico (situação, parcelas pagas/total etc.). Devolve `resposta`
+// crua.
 export async function GET(
   _request: Request,
-  props: { params: Promise<{ companyId: string }> },
+  props: { params: Promise<{ companyId: string; modalidade: string; numero: string }> },
 ) {
   await requireSomaStaff();
-  const { companyId } = await props.params;
+  const { companyId, modalidade, numero } = await props.params;
+  if (!MODALIDADES_PARCELAMENTO.some((m) => m.id === modalidade)) {
+    return NextResponse.json({ error: "Modalidade de parcelamento inválida." }, { status: 400 });
+  }
+  if (!NUMERO_REGEX.test(numero)) {
+    return NextResponse.json({ error: "Número de parcelamento inválido." }, { status: 400 });
+  }
 
   const supabase = await createClient();
   const { data: company } = await supabase
@@ -27,7 +34,7 @@ export async function GET(
   let response: Response;
   try {
     response = await fetch(
-      `${process.env.INTEGRA_CONTADOR_URL}/contribuintes/${company.cnpj}/parcelamentos/simples-nacional`,
+      `${process.env.INTEGRA_CONTADOR_URL}/contribuintes/${company.cnpj}/parcelamentos/${modalidade}/${numero}`,
       {
         headers: { "X-Internal-Token": process.env.INTEGRA_CONTADOR_INTERNAL_TOKEN ?? "" },
         cache: "no-store",
@@ -36,7 +43,7 @@ export async function GET(
     );
   } catch {
     return NextResponse.json(
-      { error: "Não foi possível consultar os parcelamentos agora. Tente novamente em instantes." },
+      { error: "Não foi possível consultar o parcelamento agora. Tente novamente em instantes." },
       { status: 502 },
     );
   }

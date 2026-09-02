@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff } from "@/lib/auth";
+import { MODALIDADES_PARCELAMENTO } from "@/lib/parcelamento-modalidades";
 
 const NUMERO_REGEX = /^\d+$/;
 
-// Proxy pro PARCSN.PARCELASPARAGERAR162 — parcelas disponíveis pra
-// emitir guia desse parcelamento. Devolve `resposta` crua — formato
-// exato ainda em confirmação (Passo 0 da Central de Parcelamentos).
+// Proxy pro PARCELASPARAGERAR1XX da modalidade — parcelas disponíveis
+// pra emitir guia. Devolve `resposta` crua.
 export async function GET(
   _request: Request,
-  props: { params: Promise<{ companyId: string; numero: string }> },
+  props: { params: Promise<{ companyId: string; modalidade: string; numero: string }> },
 ) {
   await requireSomaStaff();
-  const { companyId, numero } = await props.params;
+  const { companyId, modalidade, numero } = await props.params;
+  if (!MODALIDADES_PARCELAMENTO.some((m) => m.id === modalidade)) {
+    return NextResponse.json({ error: "Modalidade de parcelamento inválida." }, { status: 400 });
+  }
   if (!NUMERO_REGEX.test(numero)) {
     return NextResponse.json({ error: "Número de parcelamento inválido." }, { status: 400 });
   }
@@ -30,7 +33,7 @@ export async function GET(
   let response: Response;
   try {
     response = await fetch(
-      `${process.env.INTEGRA_CONTADOR_URL}/contribuintes/${company.cnpj}/parcelamentos/simples-nacional/${numero}/parcelas`,
+      `${process.env.INTEGRA_CONTADOR_URL}/contribuintes/${company.cnpj}/parcelamentos/${modalidade}/${numero}/parcelas`,
       {
         headers: { "X-Internal-Token": process.env.INTEGRA_CONTADOR_INTERNAL_TOKEN ?? "" },
         cache: "no-store",

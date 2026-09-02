@@ -13,9 +13,11 @@ import { mesCorrenteBrasilia } from "@/lib/competencia";
 // input livre por uma lista das parcelas realmente pendentes.
 export function EmitirGuiaParcelamentoButton({
   companyId,
+  modalidade,
   numeroParcelamento,
 }: {
   companyId: string;
+  modalidade: string;
   numeroParcelamento: number;
 }) {
   const [aberto, setAberto] = useState(false);
@@ -23,7 +25,7 @@ export function EmitirGuiaParcelamentoButton({
 
   function baixar() {
     const parcela = competencia.replace("-", "");
-    const url = `/admin/empresas/${companyId}/integra-contador/parcelamentos/simples-nacional/${numeroParcelamento}/guia?parcela=${parcela}`;
+    const url = `/admin/empresas/${companyId}/integra-contador/parcelamentos/${modalidade}/${numeroParcelamento}/guia?parcela=${parcela}`;
     window.open(url, "_blank");
   }
 

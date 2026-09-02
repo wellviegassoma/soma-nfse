@@ -24,9 +24,13 @@ function esperar(ms: number) {
 // router.refresh() no final pra recarregar a tabela com o que foi
 // encontrado.
 export function VerificarParcelamentosLoteButton({
+  modalidade,
+  modalidadeLabel,
   empresas,
   semCacheHoje,
 }: {
+  modalidade: string;
+  modalidadeLabel: string;
   empresas: Empresa[];
   semCacheHoje: number;
 }) {
@@ -56,7 +60,7 @@ export function VerificarParcelamentosLoteButton({
         if (tentativa > 1) await esperar(PAUSA_ENTRE_TENTATIVAS_MS);
         try {
           const resposta = await fetch(
-            `/admin/empresas/${empresa.id}/integra-contador/parcelamentos/simples-nacional/verificar`,
+            `/admin/empresas/${empresa.id}/integra-contador/parcelamentos/${modalidade}/verificar`,
             { method: "POST" },
           );
           const corpo = await resposta.json();
@@ -91,7 +95,7 @@ export function VerificarParcelamentosLoteButton({
           onClick={() => setConfirmando(true)}
           disabled={empresas.length === 0}
         >
-          Verificar parcelamentos de todas ({empresas.length})
+          Verificar {modalidadeLabel} de todas ({empresas.length})
         </Button>
       )}
 
@@ -99,7 +103,8 @@ export function VerificarParcelamentosLoteButton({
         <Alert tone="warning">
           <div className="flex flex-col gap-3">
             <span>
-              Isso vai verificar parcelamentos de <strong>{empresas.length} empresa(s)</strong>.{" "}
+              Isso vai verificar parcelamentos de <strong>{modalidadeLabel}</strong> em{" "}
+              <strong>{empresas.length} empresa(s)</strong>.{" "}
               {semCacheHoje > 0
                 ? `${semCacheHoje} delas não têm cache das últimas 24h e vão gerar chamada nova (paga) ao Integra Contador.`
                 : "Todas já têm cache das últimas 24h — não deve gerar chamada paga agora."}{" "}

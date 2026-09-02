@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff } from "@/lib/auth";
+import { MODALIDADES_PARCELAMENTO } from "@/lib/parcelamento-modalidades";
 
 type ParcelamentoResumo = {
   numero: number;
@@ -50,18 +51,22 @@ function calcularParcelasEmAtraso(ultimaCompetenciaPaga: string | null): boolean
   return mesesDesdeUltimoPagamento >= 2;
 }
 
-// Endpoint que o botão de lote da Central de Parcelamentos chama por
-// empresa: busca a lista de parcelamentos (PEDIDOSPARC163), pra cada um
-// busca o detalhe (OBTERPARC164), e grava/atualiza
+// Endpoint que o botão de lote de uma modalidade chama por empresa:
+// busca a lista de parcelamentos (PEDIDOSPARC1XX), pra cada um busca o
+// detalhe (OBTERPARC1XX), e grava/atualiza
 // integra_contador_parcelamentos_sn — mesmo padrão client-loop-por-
 // empresa das outras centrais, mas aqui o fan-out lista→detalhe
-// acontece nesta única rota por empresa.
+// acontece nesta única rota por empresa. `modalidade` decide qual
+// idSistema o backend chama (ver _MODALIDADES_PARCELAMENTO em main.py).
 export async function POST(
   _request: Request,
-  props: { params: Promise<{ companyId: string }> },
+  props: { params: Promise<{ companyId: string; modalidade: string }> },
 ) {
   await requireSomaStaff();
-  const { companyId } = await props.params;
+  const { companyId, modalidade } = await props.params;
+  if (!MODALIDADES_PARCELAMENTO.some((m) => m.id === modalidade)) {
+    return NextResponse.json({ error: "Modalidade de parcelamento inválida." }, { status: 400 });
+  }
 
   const supabase = await createClient();
   const { data: company } = await supabase
@@ -92,7 +97,7 @@ export async function POST(
 
   let lista: { parcelamentos?: ParcelamentoResumo[] };
   try {
-    lista = await chamarBackend("/parcelamentos/simples-nacional");
+    lista = await chamarBackend(`/parcelamentos/${modalidade}`);
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Não foi possível listar os parcelamentos." },
@@ -107,7 +112,7 @@ export async function POST(
   for (const resumo of parcelamentos) {
     let detalhe: DetalheParcelamento;
     try {
-      detalhe = await chamarBackend(`/parcelamentos/simples-nacional/${resumo.numero}`);
+      detalhe = await chamarBackend(`/parcelamentos/${modalidade}/${resumo.numero}`);
     } catch (e) {
       falhas.push(`parcelamento ${resumo.numero}: ${e instanceof Error ? e.message : "erro desconhecido"}`);
       continue;
@@ -124,6 +129,7 @@ export async function POST(
     const { error } = await supabase.from("integra_contador_parcelamentos_sn").upsert(
       {
         company_id: companyId,
+        modalidade,
         numero_parcelamento: resumo.numero,
         situacao: detalhe.situacao ?? resumo.situacao,
         data_pedido: dataAaaammddParaIso(resumo.dataDoPedido),
@@ -138,7 +144,7 @@ export async function POST(
         detalhe,
         checked_at: new Date().toISOString(),
       },
-      { onConflict: "company_id,numero_parcelamento" },
+      { onConflict: "company_id,modalidade,numero_parcelamento" },
     );
     if (error) {
       falhas.push(`parcelamento ${resumo.numero}: ${error.message}`);
