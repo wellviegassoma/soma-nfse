@@ -22,16 +22,33 @@ exemplo):
 
 USO NESTE SERVIÇO (DCTFWEB.TRANSDECLARACAO310, ver main.py): diferente da
 DPS, aqui NÃO existia um exemplo real já aceito pra calibrar o perfil
-exato de assinatura que a DCTFWeb espera. Primeiro teste real (ORTOP,
-02/09/2026) com o mesmo perfil da DPS (RSA-SHA1) foi recusado com
-"[TRANS09] Assinatura inválida: Elemento 'SignatureMethod' inválido:
-.../rsa-sha1". Corrigido pra RSA-SHA256 (`algoritmo_assinatura="rsa-sha256"`
-em `assinar_elemento`) — só o SignatureMethod/hash da assinatura em si
-muda; o DigestMethod da Reference continua SHA-1 (a DCTFWeb só reclamou
-do SignatureMethod, sem evidência de que o DigestMethod também precise
-mudar). Canonicalização continua a mesma (C14N não-exclusivo) — se a
-Serpro recusar de novo por causa da canonicalização especificamente
-(não do algoritmo de assinatura), é o próximo lugar a revisar.
+exato de assinatura que a DCTFWeb espera — foram 4 rodadas de teste real
+(ORTOP, 02/09/2026) até acertar:
+  1. RSA-SHA1 (igual DPS) → "[TRANS09] SignatureMethod inválido: .../rsa-sha1"
+  2. RSA-SHA256 + DigestMethod SHA-1 → "[TRANS09] DigestMethod inválido: .../sha1"
+  3. RSA-SHA256 + DigestMethod SHA-256 (C14N não-exclusivo, hand-rolled
+     igual DPS) → "Assinatura inválida" genérico (sem apontar campo) —
+     a assinatura em si não validava, não o nome de nenhum algoritmo
+  4. Trocou pra C14N EXCLUSIVO (a dupla "moderna" que o NFS-e usa) →
+     "[TRANS09] CanonicalizationMethod inválido: .../xml-exc-c14n#" — ou
+     seja, exclusivo é EXPLICITAMENTE recusado; tinha que ser
+     não-exclusivo mesmo, só que o hand-rolled (`_c14n`) não lida com
+     mais de um namespace nem atributo com namespace próprio (só
+     testado contra a DPS, que só tem um namespace) — o XML da DCTFWeb
+     tem 3 (default + tns1 + xsi) e um atributo `xsi:type`
+
+Perfil final: RSA-SHA256 + DigestMethod SHA-256 + C14N NÃO-exclusivo,
+calculado com o C14N NATIVO do lxml (não o hand-rolled `_c14n`) sobre
+uma CÓPIA DESTACADA do elemento (`copy.deepcopy`) — o C14N nativo do
+lxml tem um bug real e reproduzível (insere `xmlns=""` espúrio em
+elementos filhos sem prefixo quando um DESCENDENTE redeclara o mesmo
+namespace com prefixo) que só acontece canonicalizando um elemento
+"vivo" dentro da árvore maior; canonicalizar uma cópia destacada evita
+o bug (verificado manualmente contra o XML real da DCTFWeb). Foi
+exatamente esse bug que motivou o hand-roll original pra DPS — mas ali
+o documento só tem 1 namespace, então nunca dava pra reproduzir; aqui
+com 3 namespaces o bug aparece, e a correção (cópia destacada) resolve
+sem precisar generalizar o hand-roll pra suportar múltiplos namespaces.
 
 Não depende de bibliotecas externas de XMLDSig (signxml não estava
 disponível no ambiente) — implementado com lxml (canonicalização C14N)
@@ -41,6 +58,7 @@ disponível no ambiente) — implementado com lxml (canonicalização C14N)
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 from typing import Optional
 
@@ -146,18 +164,30 @@ def _canonicalizar_elemento(elemento, namespace_uri: str, eh_raiz: bool) -> str:
     return "".join(partes)
 
 
-def _c14n_exclusivo(elemento) -> bytes:
+def _c14n_lxml_nativo(elemento) -> bytes:
     """
-    C14N EXCLUSIVO (W3C, http://www.w3.org/2001/10/xml-exc-c14n#), via
-    suporte nativo do lxml — ao contrário do C14N não-exclusivo usado
-    pela DPS (hand-rolled por causa de um bug real do lxml nesse modo
-    específico, ver `_c14n`), o modo exclusivo do lxml não apresentou
-    esse problema nos testes feitos aqui. Usado pra DCTFWeb (RSA-SHA256)
-    — é o pareamento "moderno" (SHA-256 + C14N exclusivo) que o próprio
-    NFS-e Nacional usa pra assinar o documento final, conforme já
-    documentado no topo deste arquivo.
+    C14N NÃO-exclusivo (mesma URI que `_c14n` hand-rolled usa), mas
+    calculado com o suporte NATIVO do lxml em vez de hand-rolled — só
+    funciona corretamente sobre uma CÓPIA DESTACADA do elemento
+    (`copy.deepcopy`), nunca sobre o elemento "vivo" dentro da árvore
+    maior. Canonicalizar o elemento vivo tem um bug real e reproduzível
+    no lxml: insere `xmlns=""` espúrio num elemento filho sem prefixo
+    quando um DESCENDENTE redeclara o MESMO namespace com prefixo (ex.:
+    `ConteudoDeclaracao` tem `xmlns="...dctf/v1"` default, o filho
+    `tns1:DctfXml` redeclara o mesmo URI como prefixo `tns1`, e um NETO
+    sem prefixo dentro de `tns1:DctfXml` deveria herdar o namespace
+    default de `ConteudoDeclaracao` — o lxml "vivo" erra isso e marca o
+    neto como sem namespace nenhum). Usar uma cópia destacada faz o lxml
+    recalcular os namespaces do zero pro subtree isolado, sem esse erro
+    — verificado manualmente contra o XML real da DCTFWeb.
+
+    Só serve pra documentos com MAIS de um namespace/atributo com
+    namespace próprio (a DCTFWeb) — `_c14n` (hand-rolled) continua sendo
+    o usado pra DPS (só 1 namespace, já testado e aceito em produção;
+    trocar de implementação ali é risco sem benefício).
     """
-    return etree.tostring(elemento, method="c14n", exclusive=True)
+    copia = copy.deepcopy(elemento)
+    return etree.tostring(copia, method="c14n")
 
 
 def assinar_elemento(
@@ -187,20 +217,19 @@ def assinar_elemento(
     `nome_atributo_id` — nome do atributo que identifica o elemento
     (case-sensitive; a DPS/NFS-e usa "Id", a DCTFWeb usa "id" minúsculo).
 
-    `algoritmo_assinatura` — "rsa-sha1" (padrão, usado pela DPS, com C14N
-    NÃO-exclusivo) ou "rsa-sha256" (usado pela DCTFWeb, com C14N
-    EXCLUSIVO — ver nota no topo do arquivo). Troca junto
-    SignatureMethod/DigestMethod/CanonicalizationMethod — a DCTFWeb
-    recusou um de cada vez até os três baterem com o par "moderno"
-    (SHA-256 + C14N exclusivo).
+    `algoritmo_assinatura` — "rsa-sha1" (padrão, usado pela DPS, C14N
+    não-exclusivo hand-rolled) ou "rsa-sha256" (usado pela DCTFWeb,
+    também C14N não-exclusivo mas via lxml nativo + cópia destacada —
+    ver nota no topo do arquivo pro histórico completo de por que essa
+    combinação específica). Troca junto SignatureMethod/DigestMethod.
     """
     if algoritmo_assinatura == "rsa-sha256":
         signature_method_uri = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
         hash_assinatura = hashes.SHA256()
         digest_method_uri = "http://www.w3.org/2001/04/xmlenc#sha256"
         digest_hasher = hashlib.sha256
-        canon_method_uri = "http://www.w3.org/2001/10/xml-exc-c14n#"
-        canonicalizar = _c14n_exclusivo
+        canon_method_uri = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+        canonicalizar = _c14n_lxml_nativo
     else:
         signature_method_uri = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
         hash_assinatura = hashes.SHA1()

@@ -27,6 +27,7 @@ disponível no ambiente) — implementado com lxml (canonicalização C14N)
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 from typing import Optional
 
@@ -132,16 +133,20 @@ def _canonicalizar_elemento(elemento, namespace_uri: str, eh_raiz: bool) -> str:
     return "".join(partes)
 
 
-def _c14n_exclusivo(elemento) -> bytes:
+def _c14n_lxml_nativo(elemento) -> bytes:
     """
-    C14N EXCLUSIVO (W3C, http://www.w3.org/2001/10/xml-exc-c14n#), via
-    suporte nativo do lxml — ao contrário do C14N não-exclusivo usado
-    pela DPS (hand-rolled por causa de um bug real do lxml nesse modo
-    específico, ver `_c14n`), o modo exclusivo do lxml não apresentou
-    esse problema nos testes feitos (ver integra-contador/xml_signer.py,
-    onde isso é de fato usado pra DCTFWeb/RSA-SHA256).
+    C14N NÃO-exclusivo (mesma URI que `_c14n` hand-rolled usa), calculado
+    com o suporte NATIVO do lxml sobre uma CÓPIA DESTACADA do elemento
+    (`copy.deepcopy`) — nunca sobre o elemento "vivo" dentro da árvore
+    maior, que tem um bug real e reproduzível no lxml (insere `xmlns=""`
+    espúrio num filho sem prefixo quando um descendente redeclara o
+    mesmo namespace com prefixo). Usado pela DCTFWeb (múltiplos
+    namespaces) em integra-contador/xml_signer.py — ver o histórico
+    completo lá. `_c14n` (hand-rolled) continua sendo o usado pra DPS
+    (só 1 namespace, já testado e aceito em produção).
     """
-    return etree.tostring(elemento, method="c14n", exclusive=True)
+    copia = copy.deepcopy(elemento)
+    return etree.tostring(copia, method="c14n")
 
 
 def assinar_elemento(
@@ -173,20 +178,19 @@ def assinar_elemento(
     `nome_atributo_id` — nome do atributo que identifica o elemento
     (case-sensitive; a DPS/NFS-e usa "Id", a DCTFWeb usa "id" minúsculo).
 
-    `algoritmo_assinatura` — "rsa-sha1" (padrão, usado pela DPS, com C14N
-    NÃO-exclusivo) ou "rsa-sha256" (usado pela DCTFWeb, com C14N
-    EXCLUSIVO — ver integra-contador/xml_signer.py). Troca junto
-    SignatureMethod/DigestMethod/CanonicalizationMethod — a DCTFWeb
-    recusou um de cada vez até os três baterem com o par "moderno"
-    (SHA-256 + C14N exclusivo).
+    `algoritmo_assinatura` — "rsa-sha1" (padrão, usado pela DPS, C14N
+    não-exclusivo hand-rolled) ou "rsa-sha256" (usado pela DCTFWeb,
+    também C14N não-exclusivo mas via lxml nativo + cópia destacada —
+    ver integra-contador/xml_signer.py pro histórico completo). Troca
+    junto SignatureMethod/DigestMethod.
     """
     if algoritmo_assinatura == "rsa-sha256":
         signature_method_uri = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
         hash_assinatura = hashes.SHA256()
         digest_method_uri = "http://www.w3.org/2001/04/xmlenc#sha256"
         digest_hasher = hashlib.sha256
-        canon_method_uri = "http://www.w3.org/2001/10/xml-exc-c14n#"
-        canonicalizar = _c14n_exclusivo
+        canon_method_uri = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+        canonicalizar = _c14n_lxml_nativo
     else:
         signature_method_uri = "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
         hash_assinatura = hashes.SHA1()
