@@ -106,3 +106,27 @@ class TransmitirDctfWebOut(BaseModel):
     ano_pa: str
     mes_pa: str
     resposta: dict
+
+
+class ListarParcelamentosSnOut(BaseModel):
+    contribuinte_cnpj: str
+    resposta: dict
+
+
+class ObterParcelamentoSnOut(BaseModel):
+    contribuinte_cnpj: str
+    numero_parcelamento: int
+    resposta: dict
+
+
+class ParcelasParaGerarSnOut(BaseModel):
+    contribuinte_cnpj: str
+    numero_parcelamento: int
+    resposta: dict
+
+
+class GerarGuiaParcelamentoSnOut(BaseModel):
+    contribuinte_cnpj: str
+    numero_parcelamento: int
+    parcela_para_emitir: int
+    resposta: dict

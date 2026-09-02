@@ -52,7 +52,11 @@ from schemas import (
     ExtratoDasOut,
     GerarDasOut,
     GerarGuiaDctfWebOut,
+    GerarGuiaParcelamentoSnOut,
     ListarApuracoesMitOut,
+    ListarParcelamentosSnOut,
+    ObterParcelamentoSnOut,
+    ParcelasParaGerarSnOut,
     ReciboDeclaracaoOut,
     SituacaoEncerramentoMitOut,
     SituacaoFiscalOut,
@@ -492,3 +496,92 @@ def consultar_situacao_fiscal(cnpj: str):
     except (ErroIntegraContador, ErroSitfis) as e:
         raise HTTPException(status_code=400, detail=str(e))
     return SituacaoFiscalOut(contribuinte_cnpj=cnpj, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/parcelamentos/simples-nacional",
+    response_model=ListarParcelamentosSnOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def listar_parcelamentos_sn(cnpj: str):
+    """
+    Lista os parcelamentos do Simples Nacional (comum, não especial) que
+    esse contribuinte já pediu (PARCSN.PEDIDOSPARC163) — só leitura,
+    devolve os números de parcelamento usados depois em
+    /parcelamentos/simples-nacional/{numero_parcelamento} pro detalhe.
+    Formato exato do campo com os números ainda não confirmado contra a
+    Serpro (ver catalogo.py) — o chamador precisa inspecionar `resposta`.
+    """
+    try:
+        resposta = chamar("PARCSN", "PEDIDOSPARC163", cnpj, {})
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ListarParcelamentosSnOut(contribuinte_cnpj=cnpj, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/parcelamentos/simples-nacional/{numero_parcelamento}",
+    response_model=ObterParcelamentoSnOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def obter_parcelamento_sn(cnpj: str, numero_parcelamento: int):
+    """
+    Detalhe de um parcelamento do Simples Nacional (PARCSN.OBTERPARC164)
+    — situação, parcelas pagas/total, valor consolidado etc. Nome do
+    campo de entrada (`numeroParcelamento`) inferido pelo padrão de
+    nomenclatura da Serpro, ainda não confirmado.
+    """
+    try:
+        resposta = chamar("PARCSN", "OBTERPARC164", cnpj, {"numeroParcelamento": numero_parcelamento})
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ObterParcelamentoSnOut(contribuinte_cnpj=cnpj, numero_parcelamento=numero_parcelamento, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/parcelamentos/simples-nacional/{numero_parcelamento}/parcelas",
+    response_model=ParcelasParaGerarSnOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def parcelas_para_gerar_sn(cnpj: str, numero_parcelamento: int):
+    """
+    Lista as parcelas disponíveis pra gerar guia (DAS) desse parcelamento
+    (PARCSN.PARCELASPARAGERAR162) — alimenta o seletor de competência na
+    hora de emitir a guia.
+    """
+    try:
+        resposta = chamar("PARCSN", "PARCELASPARAGERAR162", cnpj, {"numeroParcelamento": numero_parcelamento})
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ParcelasParaGerarSnOut(contribuinte_cnpj=cnpj, numero_parcelamento=numero_parcelamento, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/parcelamentos/simples-nacional/{numero_parcelamento}/guia",
+    response_model=GerarGuiaParcelamentoSnOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def gerar_guia_parcelamento_sn(cnpj: str, numero_parcelamento: int, parcela_para_emitir: int):
+    """
+    Emite o DAS de uma parcela específica desse parcelamento
+    (PARCSN.GERARDAS161) — `parcela_para_emitir` é a competência da
+    parcela (formato AAAAMM, a confirmar contra a Serpro). Só leitura da
+    perspectiva do contribuinte (reemitir a mesma parcela no mesmo dia
+    serve do cache), mas ainda assim é rota "Emitir" — gasta uma chamada
+    de verdade na primeira vez do dia.
+    """
+    try:
+        resposta = chamar(
+            "PARCSN",
+            "GERARDAS161",
+            cnpj,
+            {"numeroParcelamento": numero_parcelamento, "parcelaParaEmitir": parcela_para_emitir},
+        )
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return GerarGuiaParcelamentoSnOut(
+        contribuinte_cnpj=cnpj,
+        numero_parcelamento=numero_parcelamento,
+        parcela_para_emitir=parcela_para_emitir,
+        resposta=resposta,
+    )
