@@ -550,7 +550,7 @@ def parcelas_para_gerar_sn(cnpj: str, numero_parcelamento: int):
     hora de emitir a guia.
     """
     try:
-        resposta = chamar("PARCSN", "PARCELASPARAGERAR162", cnpj, {"numeroParcelamento": numero_parcelamento})
+        resposta = chamar("PARCSN", "PARCELASPARAGERAR162", cnpj, {})
     except ErroIntegraContador as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ParcelasParaGerarSnOut(contribuinte_cnpj=cnpj, numero_parcelamento=numero_parcelamento, resposta=resposta)
