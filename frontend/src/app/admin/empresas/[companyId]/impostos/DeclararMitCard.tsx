@@ -75,7 +75,9 @@ export function DeclararMitCard({
 
   async function consultarSituacao(prot: string, tentativa: number) {
     try {
-      const resposta = await fetch(`/admin/empresas/${companyId}/integra-contador/mit/situacao/${prot}`);
+      const resposta = await fetch(
+        `/admin/empresas/${companyId}/integra-contador/mit/situacao/${encodeURIComponent(prot)}`,
+      );
       const corpo = await resposta.json();
       if (!resposta.ok) {
         setErro(corpo.error ?? "Não foi possível consultar a situação do encerramento.");
