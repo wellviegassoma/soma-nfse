@@ -83,6 +83,11 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
                 Central Situação Fiscal
               </Button>
             </a>
+            <a href="/admin/fechamento/parcelamentos">
+              <Button type="button" variant="secondary">
+                Central Parcelamentos
+              </Button>
+            </a>
           </form>
           <BuscarTodasButton competencia={competencia} empresas={empresasComCertificado} />
         </div>
