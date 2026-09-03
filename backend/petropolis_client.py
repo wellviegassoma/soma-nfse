@@ -185,7 +185,23 @@ class ClientePetropolis:
                 f"Nenhuma empresa encontrada no ISS de Petrópolis pro CNPJ {cnpj} "
                 "(confira se está vinculada ao login do contador)."
             )
-        empresa_id = opcoes[0].get("value")
+        # A busca por CNPJ no site nem sempre filtra de verdade — já
+        # confirmado devolver mais de uma opção (ou não filtrar nada)
+        # pro mesmo parâmetro. Escolher sempre a primeira sem conferir
+        # arriscava selecionar a empresa ERRADA e trazer o resumo/guia
+        # de outro cliente do escritório, causando divergência falsa
+        # contra o faturamento do SOMA (achado real, empresa RRAD).
+        opcao_certa = next(
+            (o for o in opcoes if cnpj_limpo in _somente_digitos(o.text_content())), None
+        )
+        if opcao_certa is None:
+            opcoes_texto = "; ".join(o.text_content().strip() for o in opcoes[:10])
+            raise ErroPetropolis(
+                f"A busca no ISS de Petrópolis pro CNPJ {cnpj} não devolveu essa empresa "
+                f"entre as opções (achou {len(opcoes)}: {opcoes_texto}) — não assumindo a "
+                "primeira opção pra não pegar guia/resumo de empresa errada."
+            )
+        empresa_id = opcao_certa.get("value")
         self._sessao.post(LOGIN_URL, data={"clientes": empresa_id}, timeout=30)
 
     def _extrair_linha_debito(
