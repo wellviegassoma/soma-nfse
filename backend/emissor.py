@@ -22,7 +22,7 @@ from __future__ import annotations
 import gzip
 import base64
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 import dps_builder as db
@@ -30,6 +30,21 @@ import evento_builder as eb
 import xml_signer as xs
 from certificado import carregar_certificado_pfx, limpar_certificado_temporario, ErroCertificado
 from sefin_nacional_client import ClienteSefinNacional, ErroSefinNacional
+
+_FUSO_BRASILIA = timezone(timedelta(hours=-3))
+
+
+def agora_brasilia() -> datetime:
+    """
+    `datetime.now()` sozinho devolve o horário LOCAL do processo — que no
+    Railway é UTC, não Brasília. `dps_builder.montar_xml_dps` grava esse
+    valor com sufixo fixo "-03:00" (dhEmi), então usar `datetime.now()`
+    cru declarava um instante 3h no FUTURO em relação ao momento real de
+    processamento — a Receita rejeitava com
+    "A data de emissão da DPS não pode ser posterior à data do seu
+    processamento" (achado real, erro E0008, recorrente em produção).
+    """
+    return datetime.now(_FUSO_BRASILIA)
 
 
 def extrair_xml_da_resposta(resposta: dict) -> Optional[str]:
@@ -143,8 +158,8 @@ def emitir_nota(
         codigo_municipio_emissor=prestador.codigo_municipio_ibge,
         serie=prestador.serie_dps or "00001",
         numero_dps=numero_dps,
-        data_emissao=datetime.now(),
-        data_competencia=data_competencia or date.today(),
+        data_emissao=agora_brasilia(),
+        data_competencia=data_competencia or agora_brasilia().date(),
         prestador=db.DadosPrestador(
             cnpj=prestador.cnpj,
             inscricao_municipal=prestador.inscricao_municipal,
@@ -283,7 +298,7 @@ def cancelar_nota(
                 autor_documento=autor_documento,
                 motivo_codigo=motivo_codigo,
                 motivo_descricao=motivo_descricao,
-                data_evento=datetime.now(),
+                data_evento=agora_brasilia(),
                 ambiente_producao=(ambiente == "producao"),
             )
         )
