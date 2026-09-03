@@ -351,10 +351,12 @@ def gerar_xml_dps(dados: DadosDPS) -> tuple[str, str]:
     codigo_municipio_prestacao = _somente_digitos(codigo_municipio_prestacao).zfill(7)
 
     prest = dados.prestador
-    # A nota real aceita da SOMA NÃO inclui <IM> dentro de <prest> — então
-    # não incluímos por padrão. Se algum dia confirmarmos que é necessário
-    # para outro cliente/município, isso pode ser reativado.
-    im_xml = ""
+    # A nota real aceita da SOMA sem IM cadastrada não inclui <IM> dentro
+    # de <prest> — mas alguns municípios (ex.: Petrópolis/RJ) exigem a IM
+    # conforme o cadastro do prestador no CNC NFS-e nacional (erro E0116
+    # caso omitida quando exigida). Por isso: inclui só quando o
+    # prestador tem inscricao_municipal informada.
+    im_xml = f"<IM>{_escapar(prest.inscricao_municipal)}</IM>" if prest.inscricao_municipal else ""
     fone_xml = f"<fone>{_somente_digitos(prest.telefone)}</fone>" if prest.telefone else ""
     email_xml = f"<email>{_escapar(prest.email)}</email>" if prest.email else ""
 
