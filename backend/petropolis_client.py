@@ -191,25 +191,21 @@ class ClientePetropolis:
         )
         tree = lxml_html.fromstring(resp.text)
         opcoes = tree.xpath("//select[@name='clientes']/option[@value!='']")
-        if not opcoes:
-            # Diagnóstico temporário — descobrir de verdade o que a
-            # página devolveu em vez de seguir chutando o formato do
-            # parâmetro de busca.
-            selects = tree.xpath("//select")
-            selects_info = "; ".join(
-                f"name={s.get('name')!r} options={len(s.xpath('.//option'))}" for s in selects
-            )
-            raise ErroPetropolis(
-                f"Nenhuma empresa encontrada no ISS de Petrópolis pro CNPJ {cnpj} "
-                f"(confira se está vinculada ao login do contador). DEBUG status={resp.status_code} "
-                f"url={resp.url} selects=[{selects_info}] corpo(1500)={resp.text[:1500]!r}"
-            )
-        # A busca por CNPJ no site nem sempre filtra de verdade — já
-        # confirmado devolver mais de uma opção (ou não filtrar nada)
-        # pro mesmo parâmetro. Escolher sempre a primeira sem conferir
-        # arriscava selecionar a empresa ERRADA e trazer o resumo/guia
-        # de outro cliente do escritório, causando divergência falsa
-        # contra o faturamento do SOMA (achado real, empresa RRAD).
+
+        # A busca por CNPJ desse endpoint não filtra de verdade — devolve
+        # sempre o mesmo placeholder ("Informe o nome da empresa para
+        # consultar...", value=1) independente do CNPJ tentado (dígitos
+        # crus ou formatado, confirmado ao vivo em 2026-09-02). Escolher
+        # sempre a primeira opção sem conferir arriscava selecionar a
+        # empresa ERRADA e trazer o resumo/guia de outro cliente do
+        # escritório, causando divergência falsa contra o faturamento do
+        # SOMA (achado real, empresa RRAD) — provavelmente pegando sempre
+        # a mesma empresa de value=1 pra qualquer CNPJ consultado. A
+        # busca de verdade nesse site parece depender de JS client-side
+        # (autocomplete "digite pra buscar"), não desse parâmetro de URL
+        # — a real correção provavelmente exige achar o endpoint/fluxo
+        # certo (pedir ajuda de quem tem acesso ao site pra inspecionar a
+        # aba Network do navegador digitando um CNPJ na busca).
         opcao_certa = next(
             (o for o in opcoes if cnpj_limpo in _somente_digitos(o.text_content())), None
         )
@@ -217,11 +213,14 @@ class ClientePetropolis:
             opcoes_texto = "; ".join(
                 f"value={o.get('value')!r} text={o.text_content().strip()!r}" for o in opcoes[:10]
             )
+            print(
+                f"[petropolis_client] busca por CNPJ {cnpj} não encontrou a empresa — "
+                f"url={resp.url} status={resp.status_code} opcoes=[{opcoes_texto}]"
+            )
             raise ErroPetropolis(
-                f"A busca no ISS de Petrópolis pro CNPJ {cnpj} não devolveu essa empresa "
-                f"entre as opções (achou {len(opcoes)}: {opcoes_texto}) — não assumindo a "
-                "primeira opção pra não pegar guia/resumo de empresa errada. "
-                f"DEBUG url={resp.url} status={resp.status_code}"
+                f"Não consegui encontrar a empresa de CNPJ {cnpj} na busca do ISS de "
+                "Petrópolis (a busca por CNPJ desse site não está filtrando como esperado) "
+                "— avise o suporte técnico em vez de seguir sem essa confirmação."
             )
         empresa_id = opcao_certa.get("value")
         self._sessao.post(LOGIN_URL, data={"clientes": empresa_id}, timeout=30)
