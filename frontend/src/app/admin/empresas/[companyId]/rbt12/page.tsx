@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
+import { Input } from "@/components/ui/Input";
+import { Field } from "@/components/ui/Field";
+import { Button } from "@/components/ui/Button";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import {
   buscarFaturamentoMensal,
@@ -26,8 +29,13 @@ function formatCompetencia(competencia: string) {
   return `${mes}/${ano}`;
 }
 
+const COMPETENCIA_REGEX = /^\d{4}-\d{2}$/;
+
 export default async function Rbt12Page(props: PageProps<"/admin/empresas/[companyId]/rbt12">) {
   const { companyId } = await props.params;
+  const searchParams = await props.searchParams;
+  const competenciaParam =
+    typeof searchParams.competencia === "string" ? searchParams.competencia : undefined;
 
   const supabase = await createClient();
   const { data: company } = await supabase
@@ -62,11 +70,12 @@ export default async function Rbt12Page(props: PageProps<"/admin/empresas/[compa
   );
   const mesesComDadosReal = new Set(notas.filter((n) => !n.cancelada).map((n) => n.competencia));
 
-  const competenciaAtual = mesCorrenteBrasilia();
-  const meses = competenciasRbt12(competenciaAtual); // 12 meses anteriores à competência atual, mais recente primeiro
+  const competenciaAlvo =
+    competenciaParam && COMPETENCIA_REGEX.test(competenciaParam) ? competenciaParam : mesCorrenteBrasilia();
+  const meses = competenciasRbt12(competenciaAlvo); // 12 meses anteriores à competência alvo, mais recente primeiro
 
   const { rbt12, estimado, mesesDisponiveis, mesesManuais, empresaNova } = resolverRbt12({
-    competencia: competenciaAtual,
+    competencia: competenciaAlvo,
     receitaPorMes,
     mesesComDados,
     mesesManuais: mesesManuaisSet,
@@ -86,6 +95,21 @@ export default async function Rbt12Page(props: PageProps<"/admin/empresas/[compa
         </p>
       </div>
 
+      <Card className="p-6">
+        <form className="flex flex-wrap items-end gap-3">
+          <div className="w-[160px]">
+            <Field label="Competência do fechamento" htmlFor="competencia">
+              <Input id="competencia" name="competencia" type="month" defaultValue={competenciaAlvo} />
+            </Field>
+          </div>
+          <Button type="submit">Aplicar</Button>
+        </form>
+        <p className="mt-3 text-xs text-foreground/50">
+          Escolha a competência que você está fechando pra ver/editar a janela de 12 meses que
+          compõe o RBT12 dela — por padrão mostra a do mês corrente.
+        </p>
+      </Card>
+
       <ImportarPgdasdReceitaForm companyId={companyId} />
 
       {empresaNova && (
@@ -99,7 +123,7 @@ export default async function Rbt12Page(props: PageProps<"/admin/empresas/[compa
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card className="p-4">
           <div className="text-xs text-foreground/50">
-            RBT12 ({formatCompetencia(competenciaAtual)}){estimado ? " — estimado" : ""}
+            RBT12 ({formatCompetencia(competenciaAlvo)}){estimado ? " — estimado" : ""}
           </div>
           <div className="mt-1 text-lg font-semibold text-foreground">{formatMoney(rbt12)}</div>
         </Card>
@@ -117,7 +141,7 @@ export default async function Rbt12Page(props: PageProps<"/admin/empresas/[compa
 
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
-          Janela de 12 meses usada no RBT12 de {formatCompetencia(competenciaAtual)}
+          Janela de 12 meses usada no RBT12 de {formatCompetencia(competenciaAlvo)}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
