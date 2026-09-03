@@ -95,6 +95,17 @@ def _somente_digitos(texto: str) -> str:
     return re.sub(r"\D", "", texto)
 
 
+def _cnpj_formatado(cnpj_limpo: str) -> str:
+    """'36077179000122' -> '36.077.179/0001-22' — o campo de busca do
+    site é o mesmo usado pelo autocomplete "digite para buscar" da UI,
+    que parece esperar a máscara e não os dígitos crus (confirmado ao
+    vivo: buscar só com dígitos devolve a lista vazia/placeholder)."""
+    return (
+        f"{cnpj_limpo[0:2]}.{cnpj_limpo[2:5]}.{cnpj_limpo[5:8]}/"
+        f"{cnpj_limpo[8:12]}-{cnpj_limpo[12:14]}"
+    )
+
+
 def _valor_para_float(texto: str) -> float:
     """'55.300,00' -> 55300.0"""
     return float(texto.strip().replace(".", "").replace(",", "."))
@@ -175,7 +186,7 @@ class ClientePetropolis:
         cnpj_limpo = _somente_digitos(cnpj)
         resp = self._sessao.get(
             f"{BASE_URL}/iss-clientes_contador.php",
-            params={"nr_cpfcnpj": cnpj_limpo},
+            params={"nr_cpfcnpj": _cnpj_formatado(cnpj_limpo)},
             timeout=30,
         )
         tree = lxml_html.fromstring(resp.text)
