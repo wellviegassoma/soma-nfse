@@ -192,9 +192,17 @@ class ClientePetropolis:
         tree = lxml_html.fromstring(resp.text)
         opcoes = tree.xpath("//select[@name='clientes']/option[@value!='']")
         if not opcoes:
+            # Diagnóstico temporário — descobrir de verdade o que a
+            # página devolveu em vez de seguir chutando o formato do
+            # parâmetro de busca.
+            selects = tree.xpath("//select")
+            selects_info = "; ".join(
+                f"name={s.get('name')!r} options={len(s.xpath('.//option'))}" for s in selects
+            )
             raise ErroPetropolis(
                 f"Nenhuma empresa encontrada no ISS de Petrópolis pro CNPJ {cnpj} "
-                "(confira se está vinculada ao login do contador)."
+                f"(confira se está vinculada ao login do contador). DEBUG status={resp.status_code} "
+                f"url={resp.url} selects=[{selects_info}] corpo(1500)={resp.text[:1500]!r}"
             )
         # A busca por CNPJ no site nem sempre filtra de verdade — já
         # confirmado devolver mais de uma opção (ou não filtrar nada)
@@ -206,11 +214,14 @@ class ClientePetropolis:
             (o for o in opcoes if cnpj_limpo in _somente_digitos(o.text_content())), None
         )
         if opcao_certa is None:
-            opcoes_texto = "; ".join(o.text_content().strip() for o in opcoes[:10])
+            opcoes_texto = "; ".join(
+                f"value={o.get('value')!r} text={o.text_content().strip()!r}" for o in opcoes[:10]
+            )
             raise ErroPetropolis(
                 f"A busca no ISS de Petrópolis pro CNPJ {cnpj} não devolveu essa empresa "
                 f"entre as opções (achou {len(opcoes)}: {opcoes_texto}) — não assumindo a "
-                "primeira opção pra não pegar guia/resumo de empresa errada."
+                "primeira opção pra não pegar guia/resumo de empresa errada. "
+                f"DEBUG url={resp.url} status={resp.status_code}"
             )
         empresa_id = opcao_certa.get("value")
         self._sessao.post(LOGIN_URL, data={"clientes": empresa_id}, timeout=30)
