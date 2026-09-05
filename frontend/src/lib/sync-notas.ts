@@ -75,10 +75,25 @@ type CompanyParaSincronizar = {
     | null;
 };
 
+// Nota nova (não existia antes no banco) cuja competência declarada não
+// bate com o mês/ano da data de emissão real — sinal de que o imposto
+// dela pode cair retroativamente num período que já foi fechado.
+export type NotaDivergente = {
+  chaveAcesso: string | null;
+  numero: string | null;
+  competencia: string | null;
+  dataEmissao: string | null;
+  valorServico: number | null;
+  tomadorNome: string | null;
+  prestadorNome: string | null;
+};
+
 export type ResultadoSincronizacao = {
   companyId: string;
   status: "sucesso" | "erro" | "pulado";
   notas?: number;
+  notasNovas?: number;
+  notasDivergentes?: NotaDivergente[];
   erro?: string;
 };
 
@@ -152,6 +167,8 @@ export async function syncOneCompany(
     }
 
     const body: { notas: NotaBuscada[]; ultimo_nsu: number } = await resp.json();
+    let notasNovas = 0;
+    let notasDivergentes: NotaDivergente[] = [];
 
     if (body.notas.length > 0) {
       const linhas = body.notas.map((n) => ({
@@ -185,11 +202,29 @@ export async function syncOneCompany(
       }));
 
       // ignoreDuplicates: uma nota já sincronizada num dia anterior não é
-      // sobrescrita (chave_acesso é o identificador estável).
-      const { error: upsertError } = await admin
+      // sobrescrita (chave_acesso é o identificador estável). Com
+      // ON CONFLICT DO NOTHING, o RETURNING (via .select()) só traz de
+      // volta as linhas realmente inseridas agora — as duplicadas
+      // ignoradas não aparecem — então dá pra saber exatamente quais
+      // notas são novas nesta sincronização, sem round-trip extra.
+      const { data: linhasInseridas, error: upsertError } = await admin
         .from("notas_distribuidas")
-        .upsert(linhas, { onConflict: "company_id,chave_acesso", ignoreDuplicates: true });
+        .upsert(linhas, { onConflict: "company_id,chave_acesso", ignoreDuplicates: true })
+        .select("chave_acesso, numero, competencia, data_emissao, bate_competencia, valor_servico, tomador_nome, prestador_nome");
       if (upsertError) throw new Error(`Falha ao salvar notas: ${upsertError.message}`);
+
+      notasNovas = linhasInseridas?.length ?? 0;
+      notasDivergentes = (linhasInseridas ?? [])
+        .filter((n) => n.bate_competencia === false)
+        .map((n) => ({
+          chaveAcesso: n.chave_acesso,
+          numero: n.numero,
+          competencia: n.competencia,
+          dataEmissao: n.data_emissao,
+          valorServico: n.valor_servico,
+          tomadorNome: n.tomador_nome,
+          prestadorNome: n.prestador_nome,
+        }));
     }
 
     // ultimo_nsu_distribuicao não decide mais de onde a próxima busca
@@ -205,7 +240,13 @@ export async function syncOneCompany(
       })
       .eq("id", company.id);
 
-    return { companyId: company.id, status: "sucesso", notas: body.notas.length };
+    return {
+      companyId: company.id,
+      status: "sucesso",
+      notas: body.notas.length,
+      notasNovas,
+      notasDivergentes,
+    };
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : "Erro desconhecido na sincronização.";
     await admin

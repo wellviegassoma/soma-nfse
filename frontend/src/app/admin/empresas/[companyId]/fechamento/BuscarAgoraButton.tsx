@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { buscarAgora } from "@/lib/actions/fechamento";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { NotasDivergentesAlerta } from "@/components/fechamento/NotasDivergentesAlerta";
 
 export function BuscarAgoraButton({
   companyId,
@@ -35,11 +36,12 @@ export function BuscarAgoraButton({
       {state?.resultado && (
         <Alert tone={state.resultado.status === "sucesso" ? "success" : "danger"}>
           {state.resultado.status === "sucesso" &&
-            `Sincronizado agora — ${state.resultado.notas ?? 0} nota(s) processada(s).`}
+            `Sincronizado agora — ${state.resultado.notas ?? 0} nota(s) processada(s), ${state.resultado.notasNovas ?? 0} nova(s).`}
           {state.resultado.status === "erro" && `Erro: ${state.resultado.erro}`}
           {state.resultado.status === "pulado" && `Não sincronizado: ${state.resultado.erro}`}
         </Alert>
       )}
+      <NotasDivergentesAlerta notas={state?.resultado?.notasDivergentes} />
     </div>
   );
 }

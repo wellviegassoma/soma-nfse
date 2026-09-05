@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
-import { formatarDataHora } from "@/lib/formatters";
+import { formatarDataHora, formatarMoeda } from "@/lib/formatters";
 import { BuscarTodasButton } from "./BuscarTodasButton";
 import { BuscarHistoricoTodasButton } from "./BuscarHistoricoTodasButton";
 import { ExportarZipButton } from "./ExportarZipButton";
@@ -30,15 +30,26 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
       : mesCorrenteBrasilia();
 
   const supabase = await createClient();
-  const [{ data: companies }, { data: certs }] = await Promise.all([
-    supabase
-      .from("companies")
-      .select(
-        "id, legal_name, trade_name, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
-      )
-      .order("legal_name"),
-    supabase.from("certificates").select("company_id"),
-  ]);
+  const [{ data: companies }, { data: certs }, { data: notasDivergentesRaw, count: totalDivergentes }] =
+    await Promise.all([
+      supabase
+        .from("companies")
+        .select(
+          "id, legal_name, trade_name, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
+        )
+        .order("legal_name"),
+      supabase.from("certificates").select("company_id"),
+      // Pega da tabela em vez de guardar só o resultado do último clique —
+      // assim cobre também o que o agendamento automático diário trouxe
+      // sozinho, sem alguém precisar clicar em "Buscar todas agora".
+      supabase
+        .from("notas_distribuidas")
+        .select("numero, competencia, data_emissao, valor_servico, tomador_nome, prestador_nome, companies(legal_name, trade_name)", { count: "exact" })
+        .eq("bate_competencia", false)
+        .eq("cancelada", false)
+        .order("created_at", { ascending: false })
+        .limit(200),
+    ]);
 
   const idsComCertificado = new Set((certs ?? []).map((c) => c.company_id));
   const empresasComCertificado = (companies ?? [])
@@ -100,6 +111,55 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
           <BuscarHistoricoTodasButton empresas={empresasComCertificado} />
         </div>
       </Card>
+
+      {notasDivergentesRaw && notasDivergentesRaw.length > 0 && (
+        <Card className="border-warning/30 bg-warning-soft/40 p-6">
+          <div className="text-sm font-semibold text-warning">
+            Notas com competência divergente da emissão — {totalDivergentes ?? notasDivergentesRaw.length}
+          </div>
+          <p className="mt-1 text-xs text-foreground/60">
+            A competência informada é de um mês diferente do mês real da emissão — inclui tudo que
+            foi encontrado assim (busca manual ou o agendamento automático diário), não só o
+            último clique em &ldquo;Buscar todas agora&rdquo;. Pode gerar imposto retroativo num
+            período que já foi fechado; vale conferir cada uma.
+          </p>
+          <div className="mt-3 max-h-96 overflow-y-auto overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 bg-warning-soft">
+                <tr className="text-xs text-foreground/50">
+                  <th className="pr-4 py-1 font-medium">Empresa</th>
+                  <th className="pr-4 py-1 font-medium">Nota</th>
+                  <th className="pr-4 py-1 font-medium">Emitida em</th>
+                  <th className="pr-4 py-1 font-medium">Competência informada</th>
+                  <th className="pr-4 py-1 font-medium">Valor</th>
+                  <th className="pr-4 py-1 font-medium">Tomador/Prestador</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {notasDivergentesRaw.map((n, i) => {
+                  const empresa = Array.isArray(n.companies) ? n.companies[0] : n.companies;
+                  return (
+                    <tr key={i}>
+                      <td className="pr-4 py-1.5">
+                        {empresa?.trade_name || empresa?.legal_name || "—"}
+                      </td>
+                      <td className="pr-4 py-1.5">{n.numero ?? "—"}</td>
+                      <td className="pr-4 py-1.5">
+                        {n.data_emissao ? new Date(n.data_emissao).toLocaleDateString("pt-BR") : "—"}
+                      </td>
+                      <td className="pr-4 py-1.5">{n.competencia ?? "—"}</td>
+                      <td className="pr-4 py-1.5">
+                        {n.valor_servico != null ? formatarMoeda(n.valor_servico) : "—"}
+                      </td>
+                      <td className="pr-4 py-1.5">{n.tomador_nome || n.prestador_nome || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <Card className="divide-y divide-border overflow-hidden">
         {!companies || companies.length === 0 ? (
