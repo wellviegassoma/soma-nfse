@@ -14,6 +14,7 @@ import {
   REGIME_ESPECIAL_LABELS,
   type Company,
 } from "@/lib/types";
+import { MunicipioIbgeField } from "./MunicipioIbgeField";
 
 export function FiscalForm({ company }: { company: Company }) {
   const [state, formAction, pending] = useActionState(
@@ -70,13 +71,7 @@ export function FiscalForm({ company }: { company: Company }) {
           <Field label="CNAE principal" htmlFor="cnae">
             <Input id="cnae" name="cnae" defaultValue={company.cnae ?? ""} />
           </Field>
-          <Field label="Código IBGE do município" htmlFor="municipalityIbgeCode">
-            <Input
-              id="municipalityIbgeCode"
-              name="municipalityIbgeCode"
-              defaultValue={company.municipality_ibge_code ?? ""}
-            />
-          </Field>
+          <MunicipioIbgeField defaultValue={company.municipality_ibge_code ?? ""} />
           <Field label="Regime especial de tributação" htmlFor="regimeEspecialTributacao">
             <Select
               id="regimeEspecialTributacao"
