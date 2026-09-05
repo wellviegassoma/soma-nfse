@@ -59,7 +59,7 @@ export async function POST(
     receitaTrimestre,
     ehUltimoMesDoTrimestre,
     apuracaoMensal: company.irpj_csll_apuracao_mensal,
-    aliquotaIss: null,
+    issMensal: null,
   });
 
   const retencoes = await buscarRetencoesMensal(supabase, companyId);

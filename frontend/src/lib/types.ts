@@ -44,6 +44,13 @@ export const REGIME_ESPECIAL_LABELS: Record<number, string> = {
 
 export type CustomerType = "PF" | "PJ";
 
+export type IssTipo = "PERCENTUAL" | "FIXO";
+
+export const ISS_TIPO_LABELS: Record<IssTipo, string> = {
+  PERCENTUAL: "Percentual (% sobre a receita)",
+  FIXO: "Fixo (sociedade uniprofissional)",
+};
+
 export type Company = {
   id: string;
   organization_id: string;
@@ -73,6 +80,9 @@ export type Company = {
   sujeito_fator_r: boolean;
   irpj_csll_apuracao_mensal: boolean;
   iss_aliquota_padrao: number | null;
+  iss_tipo: IssTipo;
+  iss_valor_fixo_profissional: number | null;
+  iss_quantidade_profissionais: number | null;
   ativa: boolean;
   data_encerramento_soma: string | null;
 };

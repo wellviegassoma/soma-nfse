@@ -479,7 +479,10 @@ const updateFiscalSchema = z.object({
   allowRetroactiveEmission: z.boolean(),
   sujeitoFatorR: z.boolean(),
   irpjCsllApuracaoMensal: z.boolean(),
+  issTipo: z.enum(["PERCENTUAL", "FIXO"]),
   issAliquotaPadrao: z.string().optional().transform(percentualParaFracao),
+  issValorFixoProfissional: z.string().optional().transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
+  issQuantidadeProfissionais: z.string().optional().transform((v) => (v ? Number(v) : undefined)),
 });
 
 export async function updateCompanyFiscal(
@@ -502,7 +505,10 @@ export async function updateCompanyFiscal(
     allowRetroactiveEmission: formData.get("allowRetroactiveEmission") === "on",
     sujeitoFatorR: formData.get("sujeitoFatorR") === "on",
     irpjCsllApuracaoMensal: formData.get("irpjCsllApuracaoMensal") === "on",
+    issTipo: formData.get("issTipo") || "PERCENTUAL",
     issAliquotaPadrao: formData.get("issAliquotaPadrao") || undefined,
+    issValorFixoProfissional: formData.get("issValorFixoProfissional") || undefined,
+    issQuantidadeProfissionais: formData.get("issQuantidadeProfissionais") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -514,7 +520,7 @@ export async function updateCompanyFiscal(
   const { data: before } = await supabase
     .from("companies")
     .select(
-      "municipal_registration, data_abertura, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+      "municipal_registration, data_abertura, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
     )
     .eq("id", companyId)
     .single();
@@ -532,7 +538,10 @@ export async function updateCompanyFiscal(
     allow_retroactive_emission: rest.allowRetroactiveEmission,
     sujeito_fator_r: rest.sujeitoFatorR,
     irpj_csll_apuracao_mensal: rest.irpjCsllApuracaoMensal,
+    iss_tipo: rest.issTipo,
     iss_aliquota_padrao: rest.issAliquotaPadrao ?? null,
+    iss_valor_fixo_profissional: rest.issValorFixoProfissional ?? null,
+    iss_quantidade_profissionais: rest.issQuantidadeProfissionais ?? null,
   };
 
   const { error } = await supabase.from("companies").update(newValue).eq("id", companyId);

@@ -24,6 +24,7 @@ import {
   abaterRetencaoDoDas,
   calcularLucroPresumido,
   calcularSimplesNacional,
+  resolverIssMensal,
   valoresDevidosNoPeriodoMit,
 } from "@/lib/calculo-impostos";
 import { buscarAtividade, type TratamentoAtividade } from "@/lib/simples-nacional-atividades";
@@ -86,7 +87,7 @@ export default async function ImpostosPage(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, cnpj, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao, municipality_ibge_code",
+      "id, cnpj, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais, municipality_ibge_code",
     )
     .eq("id", companyId)
     .single();
@@ -432,12 +433,20 @@ export default async function ImpostosPage(
   const receitaTrimestre = somarFaturamento(notas, mesesTrimestre);
   const ehUltimoMesDoTrimestre = competencia === mesesTrimestre[2];
 
+  const issMensal = resolverIssMensal({
+    issTipo: company.iss_tipo,
+    aliquotaIss: company.iss_aliquota_padrao,
+    valorFixoProfissional: company.iss_valor_fixo_profissional,
+    quantidadeProfissionais: company.iss_quantidade_profissionais,
+    receitaMes,
+  });
+
   const resultado = calcularLucroPresumido({
     receitaMes,
     receitaTrimestre,
     ehUltimoMesDoTrimestre,
     apuracaoMensal: company.irpj_csll_apuracao_mensal,
-    aliquotaIss: company.iss_aliquota_padrao,
+    issMensal,
   });
 
   const retencoesLp = await buscarRetencoesMensal(supabase, companyId);
@@ -555,7 +564,7 @@ export default async function ImpostosPage(
                   href={`/admin/empresas/${companyId}/dados-fiscais`}
                   className="text-xs font-normal text-brand underline"
                 >
-                  configurar alíquota
+                  configurar ISS
                 </Link>
               )}
             </span>

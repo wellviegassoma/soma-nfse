@@ -8,6 +8,27 @@ import {
   ISS_MINIMO,
   type Anexo,
 } from "@/lib/simples-nacional-tabela";
+import type { IssTipo } from "@/lib/types";
+
+// ISS Fixo (sociedade uniprofissional — LC 116/2003 art. 9º §§1-3, comum
+// no Rio de Janeiro): valor por profissional habilitado × quantidade,
+// independente da receita do mês. PERCENTUAL é o caso já existente
+// (receita × alíquota, ex.: Petrópolis).
+export function resolverIssMensal(params: {
+  issTipo: IssTipo;
+  aliquotaIss: number | null;
+  valorFixoProfissional: number | null;
+  quantidadeProfissionais: number | null;
+  receitaMes: number;
+}): number | null {
+  if (params.issTipo === "FIXO") {
+    if (params.valorFixoProfissional == null || params.quantidadeProfissionais == null) {
+      return null;
+    }
+    return params.valorFixoProfissional * params.quantidadeProfissionais;
+  }
+  return params.aliquotaIss != null ? params.receitaMes * params.aliquotaIss : null;
+}
 
 export type ResultadoSimplesNacional = {
   anexo: Anexo;
@@ -106,9 +127,11 @@ export function calcularLucroPresumido(params: {
   receitaTrimestre: number;
   ehUltimoMesDoTrimestre: boolean;
   apuracaoMensal: boolean;
-  aliquotaIss: number | null;
+  // Já resolvido por `resolverIssMensal` — percentual sobre a receita OU
+  // fixo por profissional, dependendo do iss_tipo da empresa.
+  issMensal: number | null;
 }): ResultadoLucroPresumido {
-  const { receitaMes, receitaTrimestre, ehUltimoMesDoTrimestre, apuracaoMensal, aliquotaIss } =
+  const { receitaMes, receitaTrimestre, ehUltimoMesDoTrimestre, apuracaoMensal, issMensal } =
     params;
 
   const baseIrpjMes = receitaMes * PRESUNCAO_SERVICOS_IRPJ;
@@ -133,7 +156,7 @@ export function calcularLucroPresumido(params: {
 
   const pis = receitaMes * PIS_ALIQUOTA;
   const cofins = receitaMes * COFINS_ALIQUOTA;
-  const iss = aliquotaIss != null ? receitaMes * aliquotaIss : null;
+  const iss = issMensal;
 
   return {
     irpjBase,
@@ -276,7 +299,7 @@ export function calcularImpostoResumo(params: {
   receitaTrimestre: number;
   ehUltimoMesDoTrimestre: boolean;
   apuracaoMensal: boolean;
-  aliquotaIss: number | null;
+  issMensal: number | null;
 }): ResumoImposto | null {
   if (params.taxRegime === "SIMPLES_NACIONAL") {
     const r = calcularSimplesNacional({
@@ -295,7 +318,7 @@ export function calcularImpostoResumo(params: {
       receitaTrimestre: params.receitaTrimestre,
       ehUltimoMesDoTrimestre: params.ehUltimoMesDoTrimestre,
       apuracaoMensal: params.apuracaoMensal,
-      aliquotaIss: params.aliquotaIss,
+      issMensal: params.issMensal,
     });
     return {
       aliquotaEfetiva: params.receitaMes > 0 ? r.total / params.receitaMes : 0,

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { competenciasTrimestre, resolverRbt12 } from "@/lib/faturamento";
 import { resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
-import { calcularImpostoResumo } from "@/lib/calculo-impostos";
+import { calcularImpostoResumo, resolverIssMensal } from "@/lib/calculo-impostos";
 
 export const metadata = { title: "Visão geral — Painel SOMA" };
 
@@ -133,7 +133,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       supabase
         .from("companies")
         .select(
-          "id, legal_name, trade_name, person_type, created_at, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+          "id, legal_name, trade_name, person_type, created_at, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
         )
         .eq("ativa", true)
         .order("legal_name", { ascending: true }),
@@ -303,6 +303,13 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       });
       fatorRPercentual = resolverFatorR(fp12, rbt12);
     }
+    const issMensal = resolverIssMensal({
+      issTipo: empresa.iss_tipo,
+      aliquotaIss: empresa.iss_aliquota_padrao,
+      valorFixoProfissional: empresa.iss_valor_fixo_profissional,
+      quantidadeProfissionais: empresa.iss_quantidade_profissionais,
+      receitaMes: agr.faturamentoCompetencia,
+    });
     const imposto = calcularImpostoResumo({
       taxRegime: empresa.tax_regime,
       receitaMes: agr.faturamentoCompetencia,
@@ -312,7 +319,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       receitaTrimestre: mesesTrimestre.reduce((acc, m) => acc + receitaPorMes(m), 0),
       ehUltimoMesDoTrimestre,
       apuracaoMensal: empresa.irpj_csll_apuracao_mensal,
-      aliquotaIss: empresa.iss_aliquota_padrao,
+      issMensal,
     });
     return { empresa, agr, imposto, fatorRPercentual };
   });

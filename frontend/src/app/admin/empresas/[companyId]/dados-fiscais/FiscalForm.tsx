@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { updateCompanyFiscal } from "@/lib/actions/empresas";
 import { Button } from "@/components/ui/Button";
@@ -12,7 +12,9 @@ import {
   TAX_REGIME_LABELS,
   AMBIENTE_LABELS,
   REGIME_ESPECIAL_LABELS,
+  ISS_TIPO_LABELS,
   type Company,
+  type IssTipo,
 } from "@/lib/types";
 import { MunicipioIbgeField } from "./MunicipioIbgeField";
 
@@ -22,6 +24,7 @@ export function FiscalForm({ company }: { company: Company }) {
     undefined,
   );
   const isPF = company.person_type === "PF";
+  const [issTipo, setIssTipo] = useState<IssTipo>(company.iss_tipo);
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
@@ -207,22 +210,72 @@ export function FiscalForm({ company }: { company: Company }) {
               </span>
             </label>
             <Field
-              label="Alíquota de ISS do município (%)"
-              htmlFor="issAliquotaPadrao"
-              hint="Usada no cálculo agregado mensal de ISS"
+              label="Tipo de ISS"
+              htmlFor="issTipo"
+              hint="Fixo = sociedade uniprofissional (valor por profissional habilitado, não % sobre a receita)."
             >
-              <Input
-                id="issAliquotaPadrao"
-                name="issAliquotaPadrao"
-                type="number"
-                step="0.01"
-                min={0}
-                max={100}
-                defaultValue={
-                  company.iss_aliquota_padrao != null ? company.iss_aliquota_padrao * 100 : ""
-                }
-              />
+              <Select
+                id="issTipo"
+                name="issTipo"
+                value={issTipo}
+                onChange={(e) => setIssTipo(e.target.value as IssTipo)}
+              >
+                {Object.entries(ISS_TIPO_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
             </Field>
+            {issTipo === "PERCENTUAL" ? (
+              <Field
+                label="Alíquota de ISS do município (%)"
+                htmlFor="issAliquotaPadrao"
+                hint="Usada no cálculo agregado mensal de ISS"
+              >
+                <Input
+                  id="issAliquotaPadrao"
+                  name="issAliquotaPadrao"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  max={100}
+                  defaultValue={
+                    company.iss_aliquota_padrao != null ? company.iss_aliquota_padrao * 100 : ""
+                  }
+                />
+              </Field>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field
+                  label="Valor de ISS por profissional (R$)"
+                  htmlFor="issValorFixoProfissional"
+                  hint="Valor fixo do município por profissional habilitado"
+                >
+                  <Input
+                    id="issValorFixoProfissional"
+                    name="issValorFixoProfissional"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    defaultValue={company.iss_valor_fixo_profissional ?? ""}
+                  />
+                </Field>
+                <Field
+                  label="Quantidade de profissionais habilitados"
+                  htmlFor="issQuantidadeProfissionais"
+                >
+                  <Input
+                    id="issQuantidadeProfissionais"
+                    name="issQuantidadeProfissionais"
+                    type="number"
+                    step="1"
+                    min={0}
+                    defaultValue={company.iss_quantidade_profissionais ?? ""}
+                  />
+                </Field>
+              </div>
+            )}
           </div>
         </div>
       )}

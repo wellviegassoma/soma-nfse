@@ -72,7 +72,7 @@ export default async function CentralMitPage(props: PageProps<"/admin/fechamento
         receitaTrimestre,
         ehUltimoMesDoTrimestre,
         apuracaoMensal: company.irpj_csll_apuracao_mensal,
-        aliquotaIss: null,
+        issMensal: null,
       });
       const valoresMit = valoresDevidosNoPeriodoMit(resultado, retencaoMes, retencaoTrimestre);
 
