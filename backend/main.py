@@ -247,7 +247,7 @@ def _resposta_guia_pdf(pdf_bytes: bytes, resumo: dict) -> Response:
 @app.post("/petropolis/guia-iss", dependencies=[Depends(exigir_token_interno)])
 def buscar_guia_iss_petropolis(req: GuiaIssPetropolisRequest):
     try:
-        with ClientePetropolis() as cliente:
+        with ClientePetropolis(req.login, req.senha_md5) as cliente:
             pdf_bytes, resumo = cliente.buscar_guia_iss(req.cnpj, req.competencia)
     except ErroGuiaNaoConsolidada as e:
         # Não é bem um erro — é um estado válido (período ainda aberto).
@@ -271,7 +271,7 @@ def buscar_guia_iss_petropolis(req: GuiaIssPetropolisRequest):
 @app.post("/petropolis/consolidar-e-emitir-guia", dependencies=[Depends(exigir_token_interno)])
 def consolidar_e_emitir_guia_petropolis(req: GuiaIssPetropolisRequest):
     try:
-        with ClientePetropolis() as cliente:
+        with ClientePetropolis(req.login, req.senha_md5) as cliente:
             pdf_bytes, resumo = cliente.consolidar_e_buscar_guia(req.cnpj, req.competencia)
     except ErroPetropolis as e:
         raise HTTPException(status_code=422, detail=str(e))

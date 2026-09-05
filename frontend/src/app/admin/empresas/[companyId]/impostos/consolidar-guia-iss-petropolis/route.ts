@@ -30,7 +30,12 @@ export async function POST(
         "Content-Type": "application/json",
         "X-Internal-Token": process.env.NFSE_ENGINE_INTERNAL_TOKEN ?? "",
       },
-      body: JSON.stringify({ cnpj: empresa.cnpj, competencia }),
+      body: JSON.stringify({
+        cnpj: empresa.cnpj,
+        competencia,
+        login: empresa.loginProprio?.login,
+        senha_md5: empresa.loginProprio?.senhaMd5,
+      }),
       cache: "no-store",
     });
   } catch {

@@ -141,9 +141,13 @@ def _competencia_do_vencimento(vencimento: str) -> tuple[int, int] | None:
 
 class ClientePetropolis:
     """
-    Sessão autenticada no ISS de Petrópolis com o login único do
-    escritório (variáveis de ambiente PETROPOLIS_LOGIN_ISS/
-    PETROPOLIS_SENHA_MD5).
+    Sessão autenticada no ISS de Petrópolis. Por padrão usa o login único
+    do escritório (variáveis de ambiente PETROPOLIS_LOGIN_ISS/
+    PETROPOLIS_SENHA_MD5) e escolhe a empresa alvo numa lista de
+    clientes. Se `login`/`senha_md5` forem passados (login próprio da
+    empresa no site), entra direto nos dados dela — sem lista de
+    clientes pra escolher, então não precisa (nem tenta) selecionar por
+    CNPJ.
 
     Uso:
         with ClientePetropolis() as cliente:
@@ -151,9 +155,13 @@ class ClientePetropolis:
             # resumo = {"valor_servicos": 55300.0, "valor_iss": 1106.0}
     """
 
-    def __init__(self):
-        self._login = os.environ.get("PETROPOLIS_LOGIN_ISS")
-        self._senha_md5 = os.environ.get("PETROPOLIS_SENHA_MD5")
+    def __init__(self, login: str | None = None, senha_md5: str | None = None):
+        # Login próprio da empresa (quando informado) substitui o login
+        # único do escritório — nesse caso o site já abre direto nos
+        # dados dessa empresa, sem lista de clientes pra escolher.
+        self._login_proprio = bool(login and senha_md5)
+        self._login = login or os.environ.get("PETROPOLIS_LOGIN_ISS")
+        self._senha_md5 = senha_md5 or os.environ.get("PETROPOLIS_SENHA_MD5")
         if not self._login or not self._senha_md5:
             raise ErroPetropolis(
                 "PETROPOLIS_LOGIN_ISS / PETROPOLIS_SENHA_MD5 não configurados no servidor."
@@ -295,7 +303,8 @@ class ClientePetropolis:
     ) -> tuple[bytes, dict[str, float]]:
         ano_mes_alvo = _ano_mes_da_competencia(competencia)
 
-        self._selecionar_empresa_por_cnpj(cnpj)
+        if not self._login_proprio:
+            self._selecionar_empresa_por_cnpj(cnpj)
 
         resp = self._sessao.get(
             f"{BASE_URL}/iss-levantamento_debitos.php",
@@ -365,6 +374,7 @@ class ClientePetropolis:
         teve confirmação explícita do usuário de que o valor bate.
         """
         ano, mes = _ano_mes_da_competencia(competencia)
-        self._selecionar_empresa_por_cnpj(cnpj)
+        if not self._login_proprio:
+            self._selecionar_empresa_por_cnpj(cnpj)
         self._consolidar_periodo(ano, mes)
         return self.buscar_guia_iss(cnpj, competencia)

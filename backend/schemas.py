@@ -184,3 +184,8 @@ class ParametrosServicoRequest(BaseModel):
 class GuiaIssPetropolisRequest(BaseModel):
     cnpj: str
     competencia: Optional[str] = None  # "YYYY-MM" — None = guia mais recente pendente
+    # Login próprio da empresa no site da Prefeitura (quando existir) —
+    # se omitido, usa o login único do escritório (env vars) e escolhe a
+    # empresa numa lista, como sempre foi.
+    login: Optional[str] = None
+    senha_md5: Optional[str] = None

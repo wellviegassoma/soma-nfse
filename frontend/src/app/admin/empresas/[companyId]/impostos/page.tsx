@@ -32,6 +32,7 @@ import { DeclararPgdasCard } from "./DeclararPgdasCard";
 import { DeclararMitCard } from "./DeclararMitCard";
 import { BuscarGuiaIssButton } from "./BuscarGuiaIssButton";
 import { BuscarGuiaIssPetropolisButton } from "./BuscarGuiaIssPetropolisButton";
+import { PetropolisCredencialForm } from "./PetropolisCredencialForm";
 
 // Código IBGE do município do Rio de Janeiro — o Nota Carioca só existe
 // pra empresas estabelecidas nessa cidade, e só pra quem paga ISS por
@@ -96,6 +97,16 @@ export default async function ImpostosPage(
   const notasPorAtividade = await buscarFaturamentoPorAtividade(supabase, companyId);
   const atividadesDoMes = agruparPorAtividade(notasPorAtividade, competencia);
 
+  let loginPetropolis: string | null = null;
+  if (company.municipality_ibge_code === IBGE_PETROPOLIS) {
+    const { data: credencial } = await supabase
+      .from("petropolis_credenciais")
+      .select("login")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    loginPetropolis = credencial?.login ?? null;
+  }
+
   const competenciaFilterForm = (
     <Card className="p-6">
       <form className="flex flex-wrap items-end gap-3">
@@ -118,11 +129,14 @@ export default async function ImpostosPage(
         <BuscarGuiaIssButton companyId={companyId} competencia={competencia} />
       )}
       {company.municipality_ibge_code === IBGE_PETROPOLIS && (
-        <BuscarGuiaIssPetropolisButton
-          companyId={companyId}
-          competencia={competencia}
-          faturamentoSoma={receitaMes}
-        />
+        <div className="flex flex-col gap-2">
+          <BuscarGuiaIssPetropolisButton
+            companyId={companyId}
+            competencia={competencia}
+            faturamentoSoma={receitaMes}
+          />
+          <PetropolisCredencialForm companyId={companyId} loginAtual={loginPetropolis} />
+        </div>
       )}
     </>
   );
