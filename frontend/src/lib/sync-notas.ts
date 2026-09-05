@@ -261,6 +261,7 @@ export async function syncAllCompanies(
       "id, cnpj, cpf, nfse_ambiente, ultimo_nsu_distribuicao, certificates(encrypted_file, encrypted_password, expires_at)",
       { count: "exact" },
     )
+    .eq("ativa", true)
     .order("id");
   if (paginacao) {
     query = query.range(paginacao.offset, paginacao.offset + paginacao.limite - 1);

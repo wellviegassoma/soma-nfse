@@ -135,6 +135,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
         .select(
           "id, legal_name, trade_name, person_type, created_at, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
         )
+        .eq("ativa", true)
         .order("legal_name", { ascending: true }),
       buscarTudoPaginado<DpsRow>((from, to) =>
         supabase

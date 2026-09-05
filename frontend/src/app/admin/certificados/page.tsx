@@ -29,6 +29,7 @@ export default async function AdminCertificadosPage(props: PageProps<"/admin/cer
   const { data } = await supabase
     .from("companies")
     .select("id, legal_name, trade_name, certificates(expires_at)")
+    .eq("ativa", true)
     .order("legal_name", { ascending: true });
 
   const empresas = (data ?? []) as unknown as EmpresaComCertificado[];

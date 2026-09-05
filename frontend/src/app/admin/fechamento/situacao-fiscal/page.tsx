@@ -24,6 +24,7 @@ export default async function CentralSituacaoFiscalPage() {
   const { data: companies } = await supabase
     .from("companies")
     .select("id, legal_name, trade_name, cnpj")
+    .eq("ativa", true)
     .not("cnpj", "is", null)
     .order("legal_name");
 

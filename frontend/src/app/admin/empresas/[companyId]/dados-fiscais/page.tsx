@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/Card";
 import type { Company } from "@/lib/types";
 import { FiscalForm } from "./FiscalForm";
 import { CompanyNameForm } from "./CompanyNameForm";
+import { StatusSomaForm } from "./StatusSomaForm";
 
 export const metadata = { title: "Dados fiscais — Painel SOMA" };
 
@@ -16,7 +17,7 @@ export default async function AdminCompanyFiscalPage(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, organization_id, person_type, cnpj, cpf, legal_name, trade_name, created_at, municipal_registration, data_abertura, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao",
+      "id, organization_id, person_type, cnpj, cpf, legal_name, trade_name, created_at, municipal_registration, data_abertura, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao, ativa, data_encerramento_soma",
     )
     .eq("id", companyId)
     .single();
@@ -34,6 +35,13 @@ export default async function AdminCompanyFiscalPage(
       </Card>
       <Card className="max-w-2xl p-6 sm:p-8">
         <FiscalForm company={company as Company} />
+      </Card>
+      <Card className="max-w-2xl p-6 sm:p-8">
+        <StatusSomaForm
+          companyId={company.id}
+          ativa={company.ativa}
+          dataEncerramentoSoma={company.data_encerramento_soma}
+        />
       </Card>
     </div>
   );

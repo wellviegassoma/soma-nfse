@@ -33,6 +33,7 @@ export default async function CentralMitPage(props: PageProps<"/admin/fechamento
     .from("companies")
     .select("id, legal_name, trade_name, cnpj, irpj_csll_apuracao_mensal")
     .eq("tax_regime", "LUCRO_PRESUMIDO")
+    .eq("ativa", true)
     .not("cnpj", "is", null)
     .order("legal_name");
 

@@ -73,6 +73,8 @@ export type Company = {
   sujeito_fator_r: boolean;
   irpj_csll_apuracao_mensal: boolean;
   iss_aliquota_padrao: number | null;
+  ativa: boolean;
+  data_encerramento_soma: string | null;
 };
 
 export type Organization = {

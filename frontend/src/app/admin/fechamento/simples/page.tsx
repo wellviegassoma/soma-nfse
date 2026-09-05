@@ -36,6 +36,7 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
     .from("companies")
     .select("id, legal_name, trade_name, cnpj, data_abertura, sujeito_fator_r")
     .eq("tax_regime", "SIMPLES_NACIONAL")
+    .eq("ativa", true)
     .not("cnpj", "is", null)
     .order("legal_name");
 

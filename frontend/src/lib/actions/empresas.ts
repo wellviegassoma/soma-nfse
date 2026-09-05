@@ -551,3 +551,86 @@ export async function updateCompanyFiscal(
   revalidatePath(`/admin/empresas/${companyId}/dados-fiscais`);
   return { success: true };
 }
+
+const inativarEmpresaSchema = z.object({
+  companyId: uuidLike,
+  dataEncerramentoSoma: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data de encerramento."),
+});
+
+export async function inativarEmpresa(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireSomaStaff();
+
+  const parsed = inativarEmpresaSchema.safeParse({
+    companyId: formData.get("companyId"),
+    dataEncerramentoSoma: formData.get("dataEncerramentoSoma"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const { companyId, dataEncerramentoSoma } = parsed.data;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("companies")
+    .update({ ativa: false, data_encerramento_soma: dataEncerramentoSoma })
+    .eq("id", companyId);
+
+  if (error) return { error: "Não foi possível inativar a empresa." };
+
+  await logAudit({
+    companyId,
+    action: "UPDATE",
+    entity: "company_ativa",
+    entityId: companyId,
+    newValue: { ativa: false, data_encerramento_soma: dataEncerramentoSoma },
+  });
+
+  revalidatePath(`/admin/empresas/${companyId}/dados-fiscais`);
+  revalidatePath(`/admin/empresas/${companyId}`);
+  revalidatePath("/admin/empresas");
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function reativarEmpresa(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireSomaStaff();
+
+  const parsed = z.object({ companyId: uuidLike }).safeParse({
+    companyId: formData.get("companyId"),
+  });
+  if (!parsed.success) {
+    return { error: "Dados inválidos." };
+  }
+  const { companyId } = parsed.data;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("companies")
+    .update({ ativa: true, data_encerramento_soma: null })
+    .eq("id", companyId);
+
+  if (error) return { error: "Não foi possível reativar a empresa." };
+
+  await logAudit({
+    companyId,
+    action: "UPDATE",
+    entity: "company_ativa",
+    entityId: companyId,
+    newValue: { ativa: true, data_encerramento_soma: null },
+  });
+
+  revalidatePath(`/admin/empresas/${companyId}/dados-fiscais`);
+  revalidatePath(`/admin/empresas/${companyId}`);
+  revalidatePath("/admin/empresas");
+  revalidatePath("/admin");
+  return { success: true };
+}

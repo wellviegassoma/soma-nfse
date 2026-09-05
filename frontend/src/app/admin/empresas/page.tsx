@@ -3,19 +3,22 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { formatarDocumentoEmpresa } from "@/lib/formatters";
+import { formatarDocumentoEmpresa, STATUS_PILL_CLASSES } from "@/lib/formatters";
 
 export const metadata = { title: "Empresas — Painel SOMA" };
 
 export default async function AdminEmpresasPage(props: PageProps<"/admin/empresas">) {
   const searchParams = await props.searchParams;
   const q = typeof searchParams.q === "string" ? searchParams.q.trim() : "";
+  const mostrarInativas = searchParams.inativas === "1";
 
   const supabase = await createClient();
   let query = supabase
     .from("companies")
-    .select("id, legal_name, trade_name, cnpj, cpf, created_at")
+    .select("id, legal_name, trade_name, cnpj, cpf, created_at, ativa")
     .order("legal_name", { ascending: true });
+
+  if (!mostrarInativas) query = query.eq("ativa", true);
 
   if (q) {
     // PostgREST usa vírgula/parênteses como separador na sintaxe de `.or()`
@@ -67,6 +70,16 @@ export default async function AdminEmpresasPage(props: PageProps<"/admin/empresa
             </Button>
           </Link>
         )}
+        <Link
+          href={{
+            pathname: "/admin/empresas",
+            query: { ...(q ? { q } : {}), ...(mostrarInativas ? {} : { inativas: "1" }) },
+          }}
+        >
+          <Button type="button" variant="ghost">
+            {mostrarInativas ? "Ocultar inativas" : "Mostrar inativas"}
+          </Button>
+        </Link>
       </form>
 
       {!companies || companies.length === 0 ? (
@@ -84,8 +97,13 @@ export default async function AdminEmpresasPage(props: PageProps<"/admin/empresa
                 className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-surface-muted"
               >
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-foreground">
+                  <div className="flex items-center gap-2 truncate text-sm font-semibold text-foreground">
                     {company.trade_name || company.legal_name}
+                    {!company.ativa && (
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_PILL_CLASSES.neutral}`}>
+                        Inativa
+                      </span>
+                    )}
                   </div>
                   <div className="truncate text-xs text-foreground/50">
                     {company.legal_name}

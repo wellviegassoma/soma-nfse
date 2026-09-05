@@ -25,6 +25,7 @@ export default async function CentralParcelamentosPage(props: PageProps<"/admin/
     .from("companies")
     .select("id, legal_name, trade_name, cnpj")
     .eq("tax_regime", "SIMPLES_NACIONAL")
+    .eq("ativa", true)
     .not("cnpj", "is", null)
     .order("legal_name");
 
