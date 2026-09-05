@@ -317,7 +317,7 @@ export const consultarSocietario = tool({
 export const listarEmpresas = tool({
   description: "Lista empresas filtrando por regime tributário e/ou cidade.",
   inputSchema: z.object({
-    regimeTributario: z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL"]).optional(),
+    regimeTributario: z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "IMUNE_ISENTO"]).optional(),
     cidade: z.string().optional(),
   }),
   execute: async ({ regimeTributario, cidade }) => {

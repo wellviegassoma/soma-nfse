@@ -15,12 +15,13 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   ANALISTA_CONTABIL: "Analista Contábil",
 };
 
-export type TaxRegime = "SIMPLES_NACIONAL" | "LUCRO_PRESUMIDO" | "LUCRO_REAL";
+export type TaxRegime = "SIMPLES_NACIONAL" | "LUCRO_PRESUMIDO" | "LUCRO_REAL" | "IMUNE_ISENTO";
 
 export const TAX_REGIME_LABELS: Record<TaxRegime, string> = {
   SIMPLES_NACIONAL: "Simples Nacional",
   LUCRO_PRESUMIDO: "Lucro Presumido",
   LUCRO_REAL: "Lucro Real",
+  IMUNE_ISENTO: "Imune/Isento",
 };
 
 export type NfseAmbiente = "HOMOLOGACAO" | "PRODUCAO";

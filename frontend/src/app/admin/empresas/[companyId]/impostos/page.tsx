@@ -155,6 +155,19 @@ export default async function ImpostosPage(
     );
   }
 
+  if (company.tax_regime === "IMUNE_ISENTO") {
+    return (
+      <div className="flex flex-col gap-6">
+        {competenciaFilterForm}
+        <Alert tone="warning">
+          Empresa imune/isenta — sem cálculo automático de IRPJ/CSLL/PIS/COFINS aqui (depende das
+          condições específicas da imunidade/isenção, não só do faturamento).
+        </Alert>
+        {guiaIssBotao}
+      </div>
+    );
+  }
+
   if (company.tax_regime === "SIMPLES_NACIONAL") {
     const receitaManualPorMes = await buscarReceitaManual(supabase, companyId);
     const { receitaPorMes, mesesComDados, mesesManuais } = receitaComManual(notas, receitaManualPorMes);

@@ -20,7 +20,7 @@ export async function buscarCnpjAction(
   return buscarDadosCnpj(digits);
 }
 
-const taxRegimeEnum = z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL"]);
+const taxRegimeEnum = z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "IMUNE_ISENTO"]);
 
 const createCompanySchema = z.object({
   organizationName: z.string().trim().min(2, "Informe o nome da empresa/organização."),
@@ -469,7 +469,7 @@ const updateFiscalSchema = z.object({
   companyId: uuidLike,
   municipalRegistration: z.string().trim().optional(),
   dataAbertura: z.string().trim().optional(),
-  taxRegime: z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL"]).optional(),
+  taxRegime: z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "IMUNE_ISENTO"]).optional(),
   cnae: z.string().trim().optional(),
   municipalityIbgeCode: z.string().trim().optional(),
   nfseAmbiente: z.enum(["HOMOLOGACAO", "PRODUCAO"]),

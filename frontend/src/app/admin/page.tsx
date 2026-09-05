@@ -34,6 +34,7 @@ const SIGLA_REGIME: Record<string, string> = {
   SIMPLES_NACIONAL: "SN",
   LUCRO_PRESUMIDO: "LP",
   LUCRO_REAL: "LR",
+  IMUNE_ISENTO: "II",
 };
 
 type DpsRow = {
