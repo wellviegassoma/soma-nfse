@@ -40,6 +40,7 @@ type NotaRow = {
   valor_servico: number | null;
   prestador_nome: string | null;
   tomador_nome: string | null;
+  descricao_servico: string | null;
   equiparacao_hospitalar: boolean;
 };
 
@@ -68,7 +69,7 @@ export default async function AdminFechamentoPage(
     supabase
       .from("notas_distribuidas")
       .select(
-        "id, numero, direcao, cancelada, valor_servico, prestador_nome, tomador_nome, equiparacao_hospitalar",
+        "id, numero, direcao, cancelada, valor_servico, prestador_nome, tomador_nome, descricao_servico, equiparacao_hospitalar",
       )
       .eq("company_id", companyId)
       .gte("competencia", `${competencia}-01`)
@@ -166,24 +167,29 @@ export default async function AdminFechamentoPage(
         ) : (
           <div className="divide-y divide-border">
             {saidaAtivas.map((n) => (
-              <div key={n.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
-                <span className="w-16 shrink-0 text-foreground/50">{n.numero || "—"}</span>
-                <span className="min-w-0 flex-1 truncate">{n.tomador_nome || "—"}</span>
-                <span className="shrink-0 font-medium">{formatMoney(n.valor_servico ?? 0)}</span>
-                {company?.tax_regime === "LUCRO_PRESUMIDO" && (
-                  <EquiparacaoHospitalarToggle
-                    notaId={n.id}
-                    companyId={companyId}
-                    marcado={n.equiparacao_hospitalar}
-                  />
+              <div key={n.id} className="flex flex-col gap-1 px-5 py-3 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="w-16 shrink-0 text-foreground/50">{n.numero || "—"}</span>
+                  <span className="min-w-0 flex-1 truncate">{n.tomador_nome || "—"}</span>
+                  <span className="shrink-0 font-medium">{formatMoney(n.valor_servico ?? 0)}</span>
+                  {company?.tax_regime === "LUCRO_PRESUMIDO" && (
+                    <EquiparacaoHospitalarToggle
+                      notaId={n.id}
+                      companyId={companyId}
+                      marcado={n.equiparacao_hospitalar}
+                    />
+                  )}
+                  <a
+                    href={`/admin/empresas/${companyId}/fechamento/notas/${n.id}/pdf`}
+                    target="_blank"
+                    className="shrink-0 text-xs font-medium text-brand hover:underline"
+                  >
+                    PDF
+                  </a>
+                </div>
+                {company?.tax_regime === "LUCRO_PRESUMIDO" && n.descricao_servico && (
+                  <p className="pl-16 text-xs text-foreground/50">{n.descricao_servico}</p>
                 )}
-                <a
-                  href={`/admin/empresas/${companyId}/fechamento/notas/${n.id}/pdf`}
-                  target="_blank"
-                  className="shrink-0 text-xs font-medium text-brand hover:underline"
-                >
-                  PDF
-                </a>
               </div>
             ))}
           </div>
