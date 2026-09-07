@@ -8,6 +8,7 @@ import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { formatarDataHora } from "@/lib/formatters";
 import { BuscarAgoraButton } from "./BuscarAgoraButton";
 import { BuscarHistoricoButton } from "./BuscarHistoricoButton";
+import { EquiparacaoHospitalarToggle } from "./EquiparacaoHospitalarToggle";
 
 export const metadata = { title: "Fechamento — Painel SOMA" };
 export const maxDuration = 300;
@@ -39,6 +40,7 @@ type NotaRow = {
   valor_servico: number | null;
   prestador_nome: string | null;
   tomador_nome: string | null;
+  equiparacao_hospitalar: boolean;
 };
 
 export default async function AdminFechamentoPage(
@@ -59,13 +61,15 @@ export default async function AdminFechamentoPage(
     supabase
       .from("companies")
       .select(
-        "cnpj, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
+        "cnpj, tax_regime, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
       )
       .eq("id", companyId)
       .single(),
     supabase
       .from("notas_distribuidas")
-      .select("id, numero, direcao, cancelada, valor_servico, prestador_nome, tomador_nome")
+      .select(
+        "id, numero, direcao, cancelada, valor_servico, prestador_nome, tomador_nome, equiparacao_hospitalar",
+      )
       .eq("company_id", companyId)
       .gte("competencia", `${competencia}-01`)
       .lt("competencia", primeiroDiaMesSeguinte(competencia)),
@@ -166,6 +170,13 @@ export default async function AdminFechamentoPage(
                 <span className="w-16 shrink-0 text-foreground/50">{n.numero || "—"}</span>
                 <span className="min-w-0 flex-1 truncate">{n.tomador_nome || "—"}</span>
                 <span className="shrink-0 font-medium">{formatMoney(n.valor_servico ?? 0)}</span>
+                {company?.tax_regime === "LUCRO_PRESUMIDO" && (
+                  <EquiparacaoHospitalarToggle
+                    notaId={n.id}
+                    companyId={companyId}
+                    marcado={n.equiparacao_hospitalar}
+                  />
+                )}
                 <a
                   href={`/admin/empresas/${companyId}/fechamento/notas/${n.id}/pdf`}
                   target="_blank"

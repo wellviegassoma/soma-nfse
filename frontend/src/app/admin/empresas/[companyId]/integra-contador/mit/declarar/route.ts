@@ -5,7 +5,7 @@ import {
   buscarFaturamentoMensal,
   buscarRetencoesMensal,
   competenciasTrimestre,
-  somarFaturamento,
+  somarFaturamentoPorEquiparacao,
   somarRetencoes,
 } from "@/lib/faturamento";
 import { calcularLucroPresumido, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
@@ -49,14 +49,20 @@ export async function POST(
   }
 
   const notas = await buscarFaturamentoMensal(supabase, companyId);
-  const receitaMes = somarFaturamento(notas, [competencia]);
   const mesesTrimestre = competenciasTrimestre(competencia);
-  const receitaTrimestre = somarFaturamento(notas, mesesTrimestre);
   const ehUltimoMesDoTrimestre = competencia === mesesTrimestre[2];
+  const { hospitalar: receitaMesHospitalar, geral: receitaMesGeral } = somarFaturamentoPorEquiparacao(
+    notas,
+    [competencia],
+  );
+  const { hospitalar: receitaTrimestreHospitalar, geral: receitaTrimestreGeral } =
+    somarFaturamentoPorEquiparacao(notas, mesesTrimestre);
 
   const resultado = calcularLucroPresumido({
-    receitaMes,
-    receitaTrimestre,
+    receitaMesGeral,
+    receitaMesHospitalar,
+    receitaTrimestreGeral,
+    receitaTrimestreHospitalar,
     ehUltimoMesDoTrimestre,
     apuracaoMensal: company.irpj_csll_apuracao_mensal,
     issMensal: null,

@@ -17,6 +17,7 @@ import {
   receitaComManual,
   resolverRbt12,
   somarFaturamento,
+  somarFaturamentoPorEquiparacao,
   somarRetencoes,
 } from "@/lib/faturamento";
 import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
@@ -432,6 +433,12 @@ export default async function ImpostosPage(
   const mesesTrimestre = competenciasTrimestre(competencia);
   const receitaTrimestre = somarFaturamento(notas, mesesTrimestre);
   const ehUltimoMesDoTrimestre = competencia === mesesTrimestre[2];
+  const { hospitalar: receitaMesHospitalar, geral: receitaMesGeral } = somarFaturamentoPorEquiparacao(
+    notas,
+    [competencia],
+  );
+  const { hospitalar: receitaTrimestreHospitalar, geral: receitaTrimestreGeral } =
+    somarFaturamentoPorEquiparacao(notas, mesesTrimestre);
 
   const issMensal = resolverIssMensal({
     issTipo: company.iss_tipo,
@@ -442,8 +449,10 @@ export default async function ImpostosPage(
   });
 
   const resultado = calcularLucroPresumido({
-    receitaMes,
-    receitaTrimestre,
+    receitaMesGeral,
+    receitaMesHospitalar,
+    receitaTrimestreGeral,
+    receitaTrimestreHospitalar,
     ehUltimoMesDoTrimestre,
     apuracaoMensal: company.irpj_csll_apuracao_mensal,
     issMensal,

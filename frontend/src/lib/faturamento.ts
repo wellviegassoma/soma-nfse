@@ -6,6 +6,9 @@ export type NotaFaturamento = {
   competencia: string; // "YYYY-MM"
   valor: number;
   cancelada: boolean;
+  // Presunção de 8%/12% (IRPJ/CSLL) em vez de 32%/32% no Lucro Presumido
+  // — ver resolverBasesLucroPresumido em calculo-impostos.ts.
+  equiparacaoHospitalar: boolean;
 };
 
 type DpsRow = {
@@ -21,6 +24,7 @@ type NotaDistribuidaRow = {
   competencia: string | null;
   cancelada: boolean;
   direcao: string;
+  equiparacao_hospitalar: boolean;
 };
 
 // Mesma lógica de unificação/dedup do admin/page.tsx (Visão geral), mas
@@ -39,10 +43,19 @@ export async function buscarFaturamentoMensal(
       .eq("company_id", companyId),
     supabase
       .from("notas_distribuidas")
-      .select("chave_acesso, valor_servico, competencia, cancelada, direcao")
+      .select("chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar")
       .eq("company_id", companyId)
       .eq("direcao", "saida"),
   ]);
+
+  // equiparacao_hospitalar só existe em notas_distribuidas (única tabela
+  // que a tela de Fechamento deixa marcar por nota) — uma nota emitida
+  // por aqui (dps) e já espelhada lá usa o flag de lá, não um "false"
+  // implícito só porque a linha de dps não tem essa coluna.
+  const equiparacaoPorChave = new Map<string, boolean>();
+  for (const d of (distribuidas ?? []) as NotaDistribuidaRow[]) {
+    if (d.chave_acesso) equiparacaoPorChave.set(d.chave_acesso, d.equiparacao_hospitalar);
+  }
 
   const vistos = new Set<string>();
   const unificadas: NotaFaturamento[] = [];
@@ -57,6 +70,7 @@ export async function buscarFaturamentoMensal(
       competencia: nota.data_competencia.slice(0, 7),
       valor: Number(nota.valor),
       cancelada,
+      equiparacaoHospitalar: chaveAcesso ? (equiparacaoPorChave.get(chaveAcesso) ?? false) : false,
     });
   }
 
@@ -67,6 +81,7 @@ export async function buscarFaturamentoMensal(
       competencia: (nota.competencia ?? "").slice(0, 7),
       valor: Number(nota.valor_servico ?? 0),
       cancelada: nota.cancelada,
+      equiparacaoHospitalar: nota.equiparacao_hospitalar,
     });
   }
 
@@ -295,6 +310,24 @@ export function somarFaturamento(notas: NotaFaturamento[], competencias: string[
   return notas
     .filter((n) => !n.cancelada && alvo.has(n.competencia))
     .reduce((acc, n) => acc + n.valor, 0);
+}
+
+// Mesma soma de somarFaturamento, mas separada em duas fatias — usada
+// pelo Lucro Presumido pra aplicar a presunção certa em cada uma (ver
+// resolverBasesLucroPresumido em calculo-impostos.ts).
+export function somarFaturamentoPorEquiparacao(
+  notas: NotaFaturamento[],
+  competencias: string[],
+): { hospitalar: number; geral: number } {
+  const alvo = new Set(competencias);
+  let hospitalar = 0;
+  let geral = 0;
+  for (const n of notas) {
+    if (n.cancelada || !alvo.has(n.competencia)) continue;
+    if (n.equiparacaoHospitalar) hospitalar += n.valor;
+    else geral += n.valor;
+  }
+  return { hospitalar, geral };
 }
 
 // Combina o faturamento real (notas) com o manual (`buscarReceitaManual`)

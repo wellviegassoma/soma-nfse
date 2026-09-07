@@ -104,6 +104,12 @@ const IRPJ_ADICIONAL_LIMITE_TRIMESTRE = 60_000;
 export const CSLL_ALIQUOTA = 0.09;
 const PRESUNCAO_SERVICOS_IRPJ = 0.32;
 const PRESUNCAO_SERVICOS_CSLL = 0.32;
+// Equiparação hospitalar (Lei 9.249/95 arts. 15 e 20) — só a fatia da
+// receita marcada como tal (nota por nota, ver equiparacao_hospitalar
+// em notas_distribuidas) usa essa presunção menor; o resto continua na
+// presunção "serviços" acima.
+const PRESUNCAO_HOSPITALAR_IRPJ = 0.08;
+const PRESUNCAO_HOSPITALAR_CSLL = 0.12;
 const PIS_ALIQUOTA = 0.0065; // regime cumulativo
 const COFINS_ALIQUOTA = 0.03; // regime cumulativo
 
@@ -120,23 +126,45 @@ export type ResultadoLucroPresumido = {
   ehUltimoMesDoTrimestre: boolean;
   adicionalIrpjAplicado: boolean;
   baseTrimestreIrpj: number;
+  // Só diverge de baseTrimestreIrpj quando há receita com equiparação
+  // hospitalar — IRPJ e CSLL têm presunções diferentes nesse caso
+  // (8%/12%), diferente da regra geral onde as duas coincidem (32%/32%).
+  baseTrimestreCsll: number;
 };
 
 export function calcularLucroPresumido(params: {
-  receitaMes: number;
-  receitaTrimestre: number;
+  receitaMesGeral: number;
+  receitaMesHospitalar: number;
+  receitaTrimestreGeral: number;
+  receitaTrimestreHospitalar: number;
   ehUltimoMesDoTrimestre: boolean;
   apuracaoMensal: boolean;
   // Já resolvido por `resolverIssMensal` — percentual sobre a receita OU
   // fixo por profissional, dependendo do iss_tipo da empresa.
   issMensal: number | null;
 }): ResultadoLucroPresumido {
-  const { receitaMes, receitaTrimestre, ehUltimoMesDoTrimestre, apuracaoMensal, issMensal } =
-    params;
+  const {
+    receitaMesGeral,
+    receitaMesHospitalar,
+    receitaTrimestreGeral,
+    receitaTrimestreHospitalar,
+    ehUltimoMesDoTrimestre,
+    apuracaoMensal,
+    issMensal,
+  } = params;
 
-  const baseIrpjMes = receitaMes * PRESUNCAO_SERVICOS_IRPJ;
-  const baseIrpjTrimestre = receitaTrimestre * PRESUNCAO_SERVICOS_IRPJ;
-  const baseCsllMes = receitaMes * PRESUNCAO_SERVICOS_CSLL;
+  const receitaMes = receitaMesGeral + receitaMesHospitalar;
+
+  const baseIrpjMes =
+    receitaMesGeral * PRESUNCAO_SERVICOS_IRPJ + receitaMesHospitalar * PRESUNCAO_HOSPITALAR_IRPJ;
+  const baseIrpjTrimestre =
+    receitaTrimestreGeral * PRESUNCAO_SERVICOS_IRPJ +
+    receitaTrimestreHospitalar * PRESUNCAO_HOSPITALAR_IRPJ;
+  const baseCsllMes =
+    receitaMesGeral * PRESUNCAO_SERVICOS_CSLL + receitaMesHospitalar * PRESUNCAO_HOSPITALAR_CSLL;
+  const baseCsllTrimestre =
+    receitaTrimestreGeral * PRESUNCAO_SERVICOS_CSLL +
+    receitaTrimestreHospitalar * PRESUNCAO_HOSPITALAR_CSLL;
 
   // IRPJ/CSLL sempre mostram a estimativa do MÊS (base do próprio mês),
   // não zerado nos dois primeiros meses do trimestre esperando o
@@ -171,6 +199,7 @@ export function calcularLucroPresumido(params: {
     ehUltimoMesDoTrimestre,
     adicionalIrpjAplicado: adicionalIrpj > 0,
     baseTrimestreIrpj: baseIrpjTrimestre,
+    baseTrimestreCsll: baseCsllTrimestre,
   };
 }
 
@@ -233,7 +262,7 @@ export function valoresDevidosNoPeriodoMit(
   // só a do mês de fechamento.
   if (resultado.ehUltimoMesDoTrimestre) {
     const irpjBruto = resultado.baseTrimestreIrpj * IRPJ_ALIQUOTA + resultado.irpjAdicional;
-    const csllBruto = resultado.baseTrimestreIrpj * CSLL_ALIQUOTA; // presunção de CSLL == presunção de IRPJ pra serviços neste sistema
+    const csllBruto = resultado.baseTrimestreCsll * CSLL_ALIQUOTA;
     return {
       irpj: Math.max(0, irpjBruto - retencaoTrimestre.irrf),
       csll: Math.max(0, csllBruto - retencaoTrimestre.contribuicoesSociais * RETENCAO_CSLL_PARTE),
@@ -300,6 +329,11 @@ export function calcularImpostoResumo(params: {
   ehUltimoMesDoTrimestre: boolean;
   apuracaoMensal: boolean;
   issMensal: number | null;
+  // Fatia de receitaMes/receitaTrimestre com equiparação hospitalar
+  // (presunção 8%/12% em vez de 32%/32%) — só relevante pro Lucro
+  // Presumido; 0 por padrão (nenhuma equiparação).
+  receitaMesHospitalar?: number;
+  receitaTrimestreHospitalar?: number;
 }): ResumoImposto | null {
   if (params.taxRegime === "SIMPLES_NACIONAL") {
     const r = calcularSimplesNacional({
@@ -313,9 +347,13 @@ export function calcularImpostoResumo(params: {
   }
 
   if (params.taxRegime === "LUCRO_PRESUMIDO") {
+    const receitaMesHospitalar = params.receitaMesHospitalar ?? 0;
+    const receitaTrimestreHospitalar = params.receitaTrimestreHospitalar ?? 0;
     const r = calcularLucroPresumido({
-      receitaMes: params.receitaMes,
-      receitaTrimestre: params.receitaTrimestre,
+      receitaMesGeral: params.receitaMes - receitaMesHospitalar,
+      receitaMesHospitalar,
+      receitaTrimestreGeral: params.receitaTrimestre - receitaTrimestreHospitalar,
+      receitaTrimestreHospitalar,
       ehUltimoMesDoTrimestre: params.ehUltimoMesDoTrimestre,
       apuracaoMensal: params.apuracaoMensal,
       issMensal: params.issMensal,

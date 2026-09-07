@@ -52,6 +52,7 @@ type NotaDistribuidaRow = {
   competencia: string | null;
   cancelada: boolean;
   direcao: string;
+  equiparacao_hospitalar: boolean;
 };
 
 // Uma nota emitida pelo próprio soma-nfse, uma vez processada pelo
@@ -63,9 +64,17 @@ type NotaUnificada = {
   valor: number;
   cancelada: boolean;
   chaveAcesso: string | null;
+  equiparacaoHospitalar: boolean;
 };
 
 function unificarNotasDeSaida(dpsRows: DpsRow[], distribuidas: NotaDistribuidaRow[]): NotaUnificada[] {
+  // equiparacao_hospitalar só existe em notas_distribuidas — ver
+  // comentário equivalente em lib/faturamento.ts.
+  const equiparacaoPorChave = new Map<string, boolean>();
+  for (const d of distribuidas) {
+    if (d.chave_acesso) equiparacaoPorChave.set(d.chave_acesso, d.equiparacao_hospitalar);
+  }
+
   const vistos = new Set<string>();
   const unificadas: NotaUnificada[] = [];
 
@@ -81,6 +90,7 @@ function unificarNotasDeSaida(dpsRows: DpsRow[], distribuidas: NotaDistribuidaRo
       valor: Number(nota.valor),
       cancelada,
       chaveAcesso,
+      equiparacaoHospitalar: chaveAcesso ? (equiparacaoPorChave.get(chaveAcesso) ?? false) : false,
     });
   }
 
@@ -94,6 +104,7 @@ function unificarNotasDeSaida(dpsRows: DpsRow[], distribuidas: NotaDistribuidaRo
       valor: Number(nota.valor_servico ?? 0),
       cancelada: nota.cancelada,
       chaveAcesso: nota.chave_acesso,
+      equiparacaoHospitalar: nota.equiparacao_hospitalar,
     });
   }
 
@@ -146,7 +157,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       buscarTudoPaginado<NotaDistribuidaRow>((from, to) =>
         supabase
           .from("notas_distribuidas")
-          .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao")
+          .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar")
           .eq("direcao", "saida")
           .range(from, to),
       ),
@@ -196,6 +207,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   type Agregado = {
     notasCompetencia: number;
     faturamentoCompetencia: number;
+    faturamentoHospitalarCompetencia: number;
     notasRejeitadasCompetencia: number;
     notasCanceladasCompetencia: number;
     notasTotal: number;
@@ -206,6 +218,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   const vazio = (): Agregado => ({
     notasCompetencia: 0,
     faturamentoCompetencia: 0,
+    faturamentoHospitalarCompetencia: 0,
     notasRejeitadasCompetencia: 0,
     notasCanceladasCompetencia: 0,
     notasTotal: 0,
@@ -229,6 +242,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       if (!nota.cancelada) {
         agr.notasCompetencia += 1;
         agr.faturamentoCompetencia += nota.valor;
+        if (nota.equiparacaoHospitalar) agr.faturamentoHospitalarCompetencia += nota.valor;
         notasCompetenciaTotal += 1;
         faturamentoCompetenciaTotal += nota.valor;
       } else {
@@ -253,11 +267,21 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   // Receita por empresa/mês (não cancelada) — base pro RBT12 (Simples) e
   // pro trimestre (Lucro Presumido) de cada empresa na coluna de imposto.
   const porEmpresaPorMes = new Map<string, Map<string, number>>();
+  // Só a fatia com equiparação hospitalar — o "geral" de cada mês é
+  // sempre porEmpresaPorMes(mes) - porEmpresaPorMesHospitalar(mes), não
+  // precisa de um terceiro mapa.
+  const porEmpresaPorMesHospitalar = new Map<string, Map<string, number>>();
   for (const nota of notasUnificadas) {
     if (nota.cancelada) continue;
     const porMes = porEmpresaPorMes.get(nota.companyId) ?? new Map<string, number>();
     porMes.set(nota.competencia, (porMes.get(nota.competencia) ?? 0) + nota.valor);
     porEmpresaPorMes.set(nota.companyId, porMes);
+
+    if (nota.equiparacaoHospitalar) {
+      const porMesHosp = porEmpresaPorMesHospitalar.get(nota.companyId) ?? new Map<string, number>();
+      porMesHosp.set(nota.competencia, (porMesHosp.get(nota.competencia) ?? 0) + nota.valor);
+      porEmpresaPorMesHospitalar.set(nota.companyId, porMesHosp);
+    }
   }
   const porEmpresaPorMesManual = new Map<string, Map<string, number>>();
   for (const r of receitasManuais ?? []) {
@@ -273,6 +297,8 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
     const agr = porEmpresa.get(empresa.id) ?? vazio();
     const porMes = porEmpresaPorMes.get(empresa.id);
     const receitaPorMes = (mes: string) => porMes?.get(mes) ?? 0;
+    const porMesHospitalar = porEmpresaPorMesHospitalar.get(empresa.id);
+    const receitaHospitalarPorMes = (mes: string) => porMesHospitalar?.get(mes) ?? 0;
 
     // RBT12 usa faturamento manual quando informado — tem prioridade
     // sobre o real, tanto pra preencher meses sem nota quanto pra
@@ -320,6 +346,8 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       ehUltimoMesDoTrimestre,
       apuracaoMensal: empresa.irpj_csll_apuracao_mensal,
       issMensal,
+      receitaMesHospitalar: agr.faturamentoHospitalarCompetencia,
+      receitaTrimestreHospitalar: mesesTrimestre.reduce((acc, m) => acc + receitaHospitalarPorMes(m), 0),
     });
     return { empresa, agr, imposto, fatorRPercentual };
   });

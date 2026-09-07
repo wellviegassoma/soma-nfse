@@ -475,6 +475,32 @@ export async function finalizarExportacaoFechamento(
   return { ok: true, empresasFaltando };
 }
 
+// Marcação por nota, não por serviço cadastrado — a mesma prestação
+// pode ser equiparação hospitalar numa nota e não noutra, mesmo do
+// mesmo serviço (ver calcularLucroPresumido em lib/calculo-impostos.ts
+// pra como isso entra no cálculo de IRPJ/CSLL). Só existe em
+// notas_distribuidas — ver comentário na migration.
+export async function marcarEquiparacaoHospitalar(
+  notaId: string,
+  companyId: string,
+  valor: boolean,
+): Promise<{ error?: string }> {
+  await requireSomaStaff();
+  const admin = createAdminClient();
+
+  const { error } = await admin
+    .from("notas_distribuidas")
+    .update({ equiparacao_hospitalar: valor })
+    .eq("id", notaId)
+    .eq("company_id", companyId);
+
+  if (error) return { error: "Não foi possível salvar a classificação." };
+
+  revalidatePath(`/admin/empresas/${companyId}/fechamento`);
+  revalidatePath(`/admin/empresas/${companyId}/impostos`);
+  return {};
+}
+
 // Cópia local — evita importar de fechamento-export.ts só por causa dessa
 // função de uma linha (o restante do módulo é "server-only" por lidar com
 // XML/PDF, não faz sentido puxar isso aqui só pela data).
