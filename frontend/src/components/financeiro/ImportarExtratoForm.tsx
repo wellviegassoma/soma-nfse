@@ -27,13 +27,15 @@ export function ImportarExtratoForm({
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-xs text-foreground/60">
           Conta
-          <Select name="contaId" required defaultValue={contas[0]?.id ?? ""} className="w-64">
-            {contas.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.banco} · {c.agencia}/{c.conta}
-              </option>
-            ))}
-          </Select>
+          <div className="w-64">
+            <Select name="contaId" required defaultValue={contas[0]?.id ?? ""}>
+              {contas.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.banco} · {c.agencia}/{c.conta}
+                </option>
+              ))}
+            </Select>
+          </div>
         </label>
         <label className="flex flex-col gap-1 text-xs text-foreground/60">
           Arquivo (.ofx ou .csv)

@@ -42,32 +42,36 @@ export function ContaDadosForm({
       <input type="hidden" name="contaId" value={conta.id} />
       <label className="flex flex-col gap-1 text-xs text-foreground/60">
         Tipo
-        <Select name="tipo" defaultValue={conta.tipo} className="w-40">
-          {TIPOS.map((t) => (
-            <option key={t} value={t}>
-              {CONTA_TIPO_LABELS[t]}
-            </option>
-          ))}
-        </Select>
+        <div className="w-40">
+          <Select name="tipo" defaultValue={conta.tipo}>
+            {TIPOS.map((t) => (
+              <option key={t} value={t}>
+                {CONTA_TIPO_LABELS[t]}
+              </option>
+            ))}
+          </Select>
+        </div>
       </label>
       <label className="flex flex-col gap-1 text-xs text-foreground/60">
         Saldo inicial
-        <Input
-          name="saldoInicial"
-          type="number"
-          step="0.01"
-          defaultValue={Number(conta.saldo_inicial).toFixed(2)}
-          className="w-32"
-        />
+        <div className="w-32">
+          <Input
+            name="saldoInicial"
+            type="number"
+            step="0.01"
+            defaultValue={Number(conta.saldo_inicial).toFixed(2)}
+          />
+        </div>
       </label>
       <label className="flex flex-col gap-1 text-xs text-foreground/60">
         Data do saldo
-        <Input
-          name="dataSaldoInicial"
-          type="date"
-          defaultValue={conta.data_saldo_inicial ?? ""}
-          className="w-40"
-        />
+        <div className="w-40">
+          <Input
+            name="dataSaldoInicial"
+            type="date"
+            defaultValue={conta.data_saldo_inicial ?? ""}
+          />
+        </div>
       </label>
       <Button type="submit" variant="secondary" loading={pending}>
         Salvar

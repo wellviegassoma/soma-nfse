@@ -181,27 +181,30 @@ function Campos({
 
       <div className="flex flex-wrap items-end gap-4 rounded-lg border border-border bg-surface-muted/40 p-4">
         <Field label="Parcelas" htmlFor="parcelas">
-          <Input
-            id="parcelas"
-            name="parcelas"
-            type="number"
-            min="1"
-            max="360"
-            value={parcelas}
-            onChange={(e) => setParcelas(e.target.value)}
-            className="w-24"
-          />
+          <div className="w-24">
+            <Input
+              id="parcelas"
+              name="parcelas"
+              type="number"
+              min="1"
+              max="360"
+              value={parcelas}
+              onChange={(e) => setParcelas(e.target.value)}
+            />
+          </div>
         </Field>
         {nParcelas > 1 && (
           <>
             <Field label="Frequência" htmlFor="frequencia">
-              <Select id="frequencia" name="frequencia" defaultValue="MENSAL" className="w-40">
-                {FREQUENCIAS.map((f) => (
-                  <option key={f} value={f}>
-                    {FREQUENCIA_LABELS[f]}
-                  </option>
-                ))}
-              </Select>
+              <div className="w-40">
+                <Select id="frequencia" name="frequencia" defaultValue="MENSAL">
+                  {FREQUENCIAS.map((f) => (
+                    <option key={f} value={f}>
+                      {FREQUENCIA_LABELS[f]}
+                    </option>
+                  ))}
+                </Select>
+              </div>
             </Field>
             <p className="pb-3 text-xs text-foreground/60">
               {nParcelas} parcelas

@@ -19,7 +19,9 @@ export function CentroCustoForm({ companyId }: { companyId: string }) {
       {state?.error && <Alert tone="danger">{state.error}</Alert>}
       <input type="hidden" name="companyId" value={companyId} />
       <div className="flex flex-wrap items-end gap-3">
-        <Input name="nome" required placeholder="Ex.: Unidade Centro" className="w-64" />
+        <div className="w-64">
+          <Input name="nome" required placeholder="Ex.: Unidade Centro" />
+        </div>
         <Button type="submit" variant="secondary" loading={pending}>
           + Adicionar centro de custo
         </Button>

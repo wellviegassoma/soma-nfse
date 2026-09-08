@@ -118,6 +118,7 @@ export default async function FinanceiroEmpresaPage(
               { href: "fluxo-caixa", label: "Fluxo de caixa" },
               { href: "painel", label: "Painel de acompanhamento" },
               { href: "cobranca", label: "Cobrança" },
+              { href: "orcamento", label: "Orçamento" },
               { href: "contatos", label: "Contatos" },
               { href: "config", label: "Categorias e centros de custo" },
             ].map((l) => (

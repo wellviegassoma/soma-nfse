@@ -129,16 +129,18 @@ export function CobrancaConta({
           <form action={vincularAction} className="flex flex-wrap items-end gap-2">
             <input type="hidden" name="companyId" value={companyId} />
             <input type="hidden" name="agendamentoId" value={agendamentoId} />
-            <Select name="dpsId" required defaultValue="" className="w-72">
-              <option value="" disabled>
-                Vincular NFS-e emitida...
-              </option>
-              {notasDisponiveis.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.rotulo}
+            <div className="w-72">
+              <Select name="dpsId" required defaultValue="">
+                <option value="" disabled>
+                  Vincular NFS-e emitida...
                 </option>
-              ))}
-            </Select>
+                {notasDisponiveis.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.rotulo}
+                  </option>
+                ))}
+              </Select>
+            </div>
             <Button type="submit" variant="secondary" loading={vinculando}>
               Vincular
             </Button>

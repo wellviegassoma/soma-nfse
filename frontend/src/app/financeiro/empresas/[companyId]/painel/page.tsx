@@ -7,11 +7,13 @@ import { formatarBRL, CATEGORIA_GRUPO_LABELS, type CategoriaGrupo } from "@/lib/
 import {
   montarPainelCaixa,
   montarPainelCompetencia,
+  montarComparativoOrcado,
   type AgendamentoResumo,
   type CategoriaResumo,
   type LancamentoResumo,
   type RateioCategoria,
 } from "@/lib/financeiro-relatorios";
+import type { CategoriaNatureza } from "@/lib/financeiro";
 import { mesCorrenteBrasilia, ultimasCompetencias } from "@/lib/competencia";
 
 export const metadata = { title: "Financeiro — Painel de acompanhamento" };
@@ -37,7 +39,12 @@ export default async function PainelPage(
   await requireFinanceiroAccess(companyId);
 
   const searchParams = await props.searchParams;
-  const regime = searchParams.regime === "competencia" ? "competencia" : "caixa";
+  const regimeBruto = searchParams.regime;
+  const regime =
+    regimeBruto === "competencia" || regimeBruto === "orcado" ? regimeBruto : "caixa";
+  // O comparativo é de um mês só — orçamento mês a mês numa grade de 6 colunas
+  // vira ilegível. Usa o mês corrente.
+  const mesComparativo = mesCorrenteBrasilia();
 
   const supabase = await createClient();
   const [
@@ -46,13 +53,17 @@ export default async function PainelPage(
     { data: agendamentosData },
     { data: rateiosData },
     { data: lancamentosData },
+    { data: orcamentoData },
   ] = await Promise.all([
     supabase
       .from("companies")
       .select("id, legal_name, trade_name")
       .eq("id", companyId)
       .single(),
-    supabase.from("fin_categorias").select("id, nome, grupo").eq("company_id", companyId),
+    supabase
+      .from("fin_categorias")
+      .select("id, nome, grupo, natureza")
+      .eq("company_id", companyId),
     supabase
       .from("fin_agendamentos")
       .select("id, tipo, vencimento, valor_bruto, status")
@@ -64,11 +75,26 @@ export default async function PainelPage(
       .from("fin_lancamentos")
       .select("agendamento_id, data, valor")
       .eq("company_id", companyId),
+    supabase
+      .from("fin_orcamento")
+      .select("categoria_id, competencia, valor")
+      .eq("company_id", companyId),
   ]);
 
   if (!company) notFound();
 
-  const categorias = (categoriasData ?? []) as unknown as CategoriaResumo[];
+  const categorias = (categoriasData ?? []) as unknown as (CategoriaResumo & {
+    natureza: CategoriaNatureza;
+  })[];
+  const orcamento = ((orcamentoData ?? []) as unknown as {
+    categoria_id: string;
+    competencia: string;
+    valor: number;
+  }[]).map((o) => ({
+    categoriaId: o.categoria_id,
+    competencia: o.competencia,
+    valor: Number(o.valor),
+  }));
   const agendamentos = ((agendamentosData ?? []) as unknown as {
     id: string;
     tipo: "RECEBER" | "PAGAR";
@@ -109,6 +135,19 @@ export default async function PainelPage(
       ? montarPainelCompetencia(agendamentos, rateios, categorias, competencias)
       : montarPainelCaixa(lancamentos, agendamentos, rateios, categorias, competencias);
 
+  // O comparativo usa sempre o regime de CAIXA: comparar orçamento com
+  // competência misturaria "o que planejei gastar" com "o que devo mas ainda
+  // não paguei", e o mês fecharia estourado sem o dinheiro ter saído.
+  const comparativo =
+    regime === "orcado"
+      ? montarComparativoOrcado(
+          montarPainelCaixa(lancamentos, agendamentos, rateios, categorias, [mesComparativo]),
+          orcamento,
+          categorias,
+          mesComparativo,
+        )
+      : null;
+
   const base = `/financeiro/empresas/${companyId}/painel`;
 
   return (
@@ -133,11 +172,12 @@ export default async function PainelPage(
           [
             ["caixa", "Caixa", "quando o dinheiro se moveu"],
             ["competencia", "Competência", "quando a conta venceu"],
+            ["orcado", "Realizado × Orçado", "o mês corrente contra o planejado"],
           ] as const
         ).map(([valor, texto, dica]) => (
           <Link
             key={valor}
-            href={valor === "caixa" ? base : `${base}?regime=competencia`}
+            href={valor === "caixa" ? base : `${base}?regime=${valor}`}
             title={dica}
             className={`border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
               regime === valor
@@ -151,12 +191,77 @@ export default async function PainelPage(
       </div>
 
       <p className="-mt-3 text-xs text-foreground/55">
-        {regime === "caixa"
-          ? "Regime de caixa: cada valor entra no mês em que o dinheiro entrou ou saiu da conta. Baixa parcial é rateada entre as categorias na mesma proporção do lançamento. Transferência entre contas próprias fica de fora."
-          : "Regime de competência: cada valor entra no mês do vencimento, pago ou não. Agendamento cancelado fica de fora."}
+        {regime === "caixa" &&
+          "Regime de caixa: cada valor entra no mês em que o dinheiro entrou ou saiu da conta. Baixa parcial é rateada entre as categorias na mesma proporção do lançamento. Transferência entre contas próprias fica de fora."}
+        {regime === "competencia" &&
+          "Regime de competência: cada valor entra no mês do vencimento, pago ou não. Agendamento cancelado fica de fora."}
+        {regime === "orcado" &&
+          "Realizado (pelo caixa) contra o orçado do mês corrente. Variação positiva é a favor nos dois sentidos: receita acima do previsto ou despesa abaixo dele."}
       </p>
 
-      {painel.grupos.length === 0 ? (
+      {comparativo ? (
+        comparativo.linhas.length === 0 ? (
+          <Card className="p-8 text-center text-sm text-foreground/55">
+            Nada orçado nem realizado em {mesComparativo}. Defina o orçamento em{" "}
+            <Link
+              href={`/financeiro/empresas/${companyId}/orcamento`}
+              className="text-brand hover:underline"
+            >
+              Orçamento
+            </Link>
+            .
+          </Card>
+        ) : (
+          <Card className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs uppercase tracking-wide text-foreground/50">
+                  <th className="px-5 py-3 text-left font-medium">Categoria</th>
+                  <th className="px-4 py-3 text-right font-medium">Orçado</th>
+                  <th className="px-4 py-3 text-right font-medium">Realizado</th>
+                  <th className="px-5 py-3 text-right font-medium">Variação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {comparativo.linhas.map((l) => (
+                  <tr key={l.categoriaId}>
+                    <td className="px-5 py-2.5 text-foreground/80">{l.nome}</td>
+                    <td className="px-4 py-2.5 text-right">{celula(l.orcado)}</td>
+                    <td className="px-4 py-2.5 text-right">{celula(l.realizado)}</td>
+                    <td
+                      className={`px-5 py-2.5 text-right font-medium ${
+                        l.favoravel ? "text-success" : "text-danger"
+                      }`}
+                    >
+                      {l.variacao > 0 ? "+" : ""}
+                      {formatarBRL(l.variacao)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-border">
+                  <td className="px-5 py-3 font-semibold text-foreground">Resultado</td>
+                  <td className="px-4 py-3 text-right font-semibold">
+                    {celula(comparativo.orcado)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold">
+                    {celula(comparativo.realizado)}
+                  </td>
+                  <td
+                    className={`px-5 py-3 text-right font-semibold ${
+                      comparativo.variacao >= 0 ? "text-success" : "text-danger"
+                    }`}
+                  >
+                    {comparativo.variacao > 0 ? "+" : ""}
+                    {formatarBRL(comparativo.variacao)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </Card>
+        )
+      ) : painel.grupos.length === 0 ? (
         <Card className="p-8 text-center text-sm text-foreground/55">
           Nenhum movimento no período.
         </Card>

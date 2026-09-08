@@ -39,31 +39,29 @@ export function BaixaForm({
       )}
       <input type="hidden" name="companyId" value={companyId} />
       <input type="hidden" name="agendamentoId" value={agendamentoId} />
-      <Select name="contaId" required defaultValue={contas[0]?.id ?? ""} className="w-52">
-        {contas.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.banco} · {c.agencia}/{c.conta}
-          </option>
-        ))}
-      </Select>
-      <Input
-        name="data"
-        type="date"
-        required
-        defaultValue={hoje}
-        className="w-40"
-        aria-label="Data da baixa"
-      />
-      <Input
-        name="valor"
-        type="number"
-        step="0.01"
-        min="0.01"
-        required
-        defaultValue={valorSugerido.toFixed(2)}
-        className="w-32"
-        aria-label="Valor da baixa"
-      />
+      <div className="w-52">
+        <Select name="contaId" required defaultValue={contas[0]?.id ?? ""}>
+          {contas.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.banco} · {c.agencia}/{c.conta}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="w-40">
+        <Input name="data" type="date" required defaultValue={hoje} aria-label="Data da baixa" />
+      </div>
+      <div className="w-32">
+        <Input
+          name="valor"
+          type="number"
+          step="0.01"
+          min="0.01"
+          required
+          defaultValue={valorSugerido.toFixed(2)}
+          aria-label="Valor da baixa"
+        />
+      </div>
       <Button type="submit" loading={pending}>
         {tipo === "PAGAR" ? "Pagar" : "Receber"}
       </Button>

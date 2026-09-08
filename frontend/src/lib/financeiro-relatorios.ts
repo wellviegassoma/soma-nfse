@@ -272,3 +272,102 @@ export function projetarFluxoCaixa(
     };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Realizado × Orçado
+// ---------------------------------------------------------------------------
+
+export type LinhaOrcamento = {
+  categoriaId: string;
+  competencia: string;
+  valor: number; // sempre positivo, como o usuário digitou
+};
+
+export type ComparativoLinha = {
+  categoriaId: string;
+  nome: string;
+  grupo: CategoriaGrupo;
+  orcado: number; // já com sinal
+  realizado: number;
+  variacao: number;
+  /** true quando a variação é a favor: receita acima ou despesa abaixo. */
+  favoravel: boolean;
+};
+
+export type Comparativo = {
+  competencia: string;
+  linhas: ComparativoLinha[];
+  orcado: number;
+  realizado: number;
+  variacao: number;
+};
+
+/**
+ * Compara realizado com orçado numa competência.
+ *
+ * O orçamento é guardado SEM sinal (o usuário digita 3000 de aluguel, não
+ * -3000) e ganha o sinal aqui, pela `natureza` da categoria. É o que permite
+ * comparar direto com o realizado, que já vem com sinal.
+ *
+ * Com os dois do mesmo lado, "favorável" fica sendo a mesma conta nos dois
+ * casos: variação positiva. Receita acima do orçado dá positivo; despesa
+ * abaixo do orçado também, porque -2.800 realizado menos -3.000 orçado é +200.
+ */
+export function montarComparativoOrcado(
+  painel: Painel,
+  orcamento: LinhaOrcamento[],
+  categorias: (CategoriaResumo & { natureza: "ENTRADA" | "SAIDA" })[],
+  competencia: string,
+): Comparativo {
+  const porCategoria = new Map(categorias.map((c) => [c.id, c]));
+
+  const realizadoPorCategoria = new Map<string, number>();
+  for (const g of painel.grupos) {
+    for (const l of g.linhas) {
+      realizadoPorCategoria.set(l.categoriaId, l.porCompetencia[competencia] ?? 0);
+    }
+  }
+
+  const orcadoPorCategoria = new Map<string, number>();
+  for (const o of orcamento) {
+    if (o.competencia !== competencia) continue;
+    const cat = porCategoria.get(o.categoriaId);
+    if (!cat) continue;
+    const sinal = cat.natureza === "ENTRADA" ? 1 : -1;
+    orcadoPorCategoria.set(o.categoriaId, sinal * Number(o.valor));
+  }
+
+  // Categoria entra se tem orçado OU realizado — orçar e não gastar é
+  // informação tão relevante quanto gastar sem ter orçado.
+  const ids = new Set([...realizadoPorCategoria.keys(), ...orcadoPorCategoria.keys()]);
+
+  const linhas: ComparativoLinha[] = [];
+  for (const id of ids) {
+    const cat = porCategoria.get(id);
+    if (!cat) continue;
+    const orcado = orcadoPorCategoria.get(id) ?? 0;
+    const realizado = realizadoPorCategoria.get(id) ?? 0;
+    if (orcado === 0 && realizado === 0) continue;
+    const variacao = round2(realizado - orcado);
+    linhas.push({
+      categoriaId: id,
+      nome: cat.nome,
+      grupo: cat.grupo,
+      orcado,
+      realizado,
+      variacao,
+      favoravel: variacao >= 0,
+    });
+  }
+
+  linhas.sort(
+    (a, b) =>
+      ORDEM_GRUPOS.indexOf(a.grupo) - ORDEM_GRUPOS.indexOf(b.grupo) ||
+      Math.abs(b.variacao) - Math.abs(a.variacao),
+  );
+
+  const orcado = round2(linhas.reduce((s, l) => s + l.orcado, 0));
+  const realizado = round2(linhas.reduce((s, l) => s + l.realizado, 0));
+
+  return { competencia, linhas, orcado, realizado, variacao: round2(realizado - orcado) };
+}

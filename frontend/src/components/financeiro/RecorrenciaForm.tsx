@@ -141,7 +141,9 @@ function Campos({
         </label>
         {temFim ? (
           <Field label="Último vencimento" htmlFor="dataFim">
-            <Input id="dataFim" name="dataFim" type="date" className="w-48" />
+            <div className="w-48">
+              <Input id="dataFim" name="dataFim" type="date" />
+            </div>
           </Field>
         ) : (
           <p className="pb-2 text-xs text-foreground/55">

@@ -2324,6 +2324,56 @@ Observação: a régua padrão da SOMA Contabilidade Integrada ficou criada no
 banco (é a configuração default, editável pela própria tela). As contas e o
 contato de teste foram apagados.
 
+**Fase AF — Módulo Financeiro, F6: orçamento e migração do Nibo (orçamento
+validado ao vivo; migração validada até onde dá sem a chave, 2026-09-08)**
+
+- [x] `fin_orcamento` (valor por categoria x competência) + `fin_copiar_orcamento`
+      pra puxar o mês anterior sem sobrescrever o que já foi ajustado. Orçamento
+      guardado SEM sinal: o usuário digita 3000 de aluguel, não -3000, e o
+      sentido vem da natureza da categoria na hora de comparar
+- [x] Aba "Realizado × Orçado" no Painel. Com os dois do mesmo lado,
+      "favorável" vira a mesma conta nos dois casos — variação positiva:
+      receita acima do orçado dá positivo, e despesa abaixo também, porque
+      -2.800 realizado menos -3.000 orçado é +200. Validado ao vivo: receita
+      +2.000, aluguel +200, marketing não gasto +500, resultado +2.700
+- [x] O comparativo usa sempre o regime de CAIXA. Comparar orçamento com
+      competência misturaria "o que planejei gastar" com "o que devo mas ainda
+      não paguei", e o mês fecharia estourado sem o dinheiro ter saído
+- [x] **Bug de layout pego medindo o DOM:** o `cn()` do projeto é um join
+      simples, sem tailwind-merge, então `w-36` passado pro `Input` (que já é
+      `w-full`) não valia nada — o campo renderizava com 562px em vez de 144 e
+      truncava o nome da categoria ao lado. Afetava 9 pontos do módulo.
+      Corrigido com div de largura em volta, sem alterar os componentes
+      compartilhados
+- [x] Cliente da API do Nibo (`lib/nibo/`) com base e header confirmados na
+      documentação oficial: `https://api.nibo.com.br/empresas/v1/` com header
+      `apitoken`, paginação OData. **Validado contra o servidor real** com um
+      token inválido: o Nibo respondeu "Api token inválido", o que prova que a
+      URL e o nome do header estão certos e que o erro sobe limpo, sem vazar o
+      token
+- [x] Mapeamento Nibo → SOMA em funções puras e testadas: grupo da categoria
+      por palavra-chave (o Nibo manda texto livre por empresa), natureza, tipo
+      de contato, sentido do agendamento, tipo de conta. O que não dá pra
+      deduzir é REPORTADO, não silenciado — categoria no grupo errado desloca
+      o DRE inteiro
+- [x] Coluna `nibo_id` (única por empresa) nas cinco tabelas de destino: é o
+      que torna a migração idempotente. Rodar duas vezes não duplica, e uma
+      queda no meio é retomada com o mesmo comando
+- [x] `dryRun` é o padrão e só sai com `?dryRun=false` explícito — o padrão
+      seguro tem de ser o que acontece quando alguém erra o parâmetro
+- [x] Rota `/api/financeiro/migrar-nibo` autenticada por CRON_SECRET, com o
+      token do Nibo vindo em header e nunca gravado. Adicionada ao middleware
+      como rota EXATA, não como prefixo `/api/financeiro/` — prefixo abriria de
+      graça qualquer rota futura naquela pasta. Guardas testadas: 401 sem auth,
+      400 sem token e 400 sem companyId
+- [ ] **A migração nunca rodou com uma chave válida.** Só o caminho de erro foi
+      exercitado contra a API real; o caminho feliz depende do token do Nibo, e
+      as formas dos campos vêm da documentação, não de uma resposta observada.
+      Rodar em dryRun primeiro é obrigatório — o procedimento está em
+      `docs/financeiro.md`
+- [ ] Fora do escopo: histórico de pagamentos do Nibo (sem a conta bancária de
+      cada baixa o saldo sairia errado; a Conciliação reconstrói o caixa melhor)
+
 ## Backend (Fase C em diante)
 
 ```bash

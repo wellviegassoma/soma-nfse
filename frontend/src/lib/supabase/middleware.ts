@@ -1,7 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/login", "/esqueci-senha", "/redefinir-senha"];
+// A migração do Nibo entra aqui como rota EXATA, e não como prefixo
+// /api/financeiro/: prefixo abriria de graça qualquer rota futura criada
+// naquela pasta, que é exatamente o tipo de brecha que ninguém revisa depois.
+// Ela se autentica sozinha por CRON_SECRET, igual aos crons.
+const PUBLIC_ROUTES = [
+  "/login",
+  "/esqueci-senha",
+  "/redefinir-senha",
+  "/api/financeiro/migrar-nibo",
+];
 // /api/cron/ não usa sessão de usuário — autentica sozinha via
 // CRON_SECRET (ver route.ts), porque quem chama é o Vercel Cron, não um
 // navegador logado. Sem essa exceção, o middleware redireciona a

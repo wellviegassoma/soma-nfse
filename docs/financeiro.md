@@ -258,3 +258,56 @@ descartada depois da migração.
 
 - Corte do Nibo: por empresa (as 6 do GF, uma de cada vez) ou tudo de uma vez?
 - Import de maquininha (Cielo, Stone, Rede, PagSeguro): entra em alguma fase ou fica fora?
+
+## Como migrar uma empresa do Nibo
+
+A migração é uma rota chamada por `curl`, não uma tela: roda uma vez por
+empresa e o token do Nibo é credencial — não deve passar por formulário, nem
+ser gravado no banco, nem entrar no repositório.
+
+O token é POR EMPRESA, em Empresa → Mais opções → Configurações → API
+(plano Gestão Financeira Premium). Mantenha-o numa variável de ambiente da sua
+máquina; ele morre junto com a requisição.
+
+**1. Simule primeiro.** `dryRun` é o padrão: só lê o Nibo e devolve o relatório
+do que faria, sem gravar nada.
+
+```bash
+export NIBO_TOKEN='cole-o-token-aqui'
+export CRON_SECRET='o-mesmo-do-.env.local'
+curl -s -X POST \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  -H "x-nibo-token: $NIBO_TOKEN" \
+  "http://localhost:3000/api/financeiro/migrar-nibo?companyId=<UUID_DA_EMPRESA>" | jq
+```
+
+**2. Leia o relatório.** Confira `categorias.incertas` (as que não deu pra
+deduzir o grupo e caíram em "Custos e despesas operacionais"),
+`agendamentos.ignorados` (com o motivo de cada um) e os `avisos`.
+
+**3. Execute.** Só com `dryRun=false` explícito — qualquer outro valor mantém a
+simulação, porque o padrão seguro tem de ser o que acontece quando se erra o
+parâmetro.
+
+```bash
+curl -s -X POST \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  -H "x-nibo-token: $NIBO_TOKEN" \
+  "http://localhost:3000/api/financeiro/migrar-nibo?companyId=<UUID>&dryRun=false" | jq
+```
+
+**4. Limpe o token do ambiente** (`unset NIBO_TOKEN`) e, se quiser, revogue-o
+no Nibo depois de migrar todas as empresas.
+
+### O que a migração traz e o que não traz
+
+Traz: contas bancárias (com saldo de abertura), categorias, centros de custo,
+contatos, e agendamentos com o rateio de categoria e centro de custo.
+
+**Não traz o histórico de pagamentos.** Sem saber por qual conta bancária cada
+baixa passou, o saldo sairia errado — e reimportar o extrato pela Conciliação
+reconstrói o caixa com mais fidelidade do que o Nibo entrega. Agendamento já
+liquidado no Nibo entra como EM ABERTO, e o relatório avisa quantos foram.
+
+É idempotente: cada registro guarda o `nibo_id` de origem, então rodar duas
+vezes não duplica. Uma queda no meio pode ser retomada com o mesmo comando.
