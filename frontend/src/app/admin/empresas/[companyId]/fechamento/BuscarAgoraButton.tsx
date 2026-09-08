@@ -19,11 +19,21 @@ export function BuscarAgoraButton({
 
   return (
     <div className="flex flex-col gap-2">
-      <form action={formAction}>
+      <form action={formAction} className="flex flex-wrap items-center gap-2">
         <input type="hidden" name="companyId" value={companyId} />
         <input type="hidden" name="competencia" value={competencia} />
         <Button type="submit" variant="secondary" loading={pending}>
           Buscar agora ({competencia})
+        </Button>
+        <Button
+          type="submit"
+          name="forcarDesdeZero"
+          value="true"
+          variant="ghost"
+          loading={pending}
+          title="Ignora o que já foi sincronizado e escaneia o histórico completo de novo — mais lento, use se desconfiar que alguma nota ficou de fora."
+        >
+          Buscar tudo novamente
         </Button>
       </form>
       {buscaHistorica && (

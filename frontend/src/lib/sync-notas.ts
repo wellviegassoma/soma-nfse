@@ -17,18 +17,25 @@ const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
 // pulando sempre o documento bem na fronteira de cada página de ~50 —
 // ver o comentário lá pra o diagnóstico completo). Já corrigido.
 //
-// Além disso, confirmado ao vivo que o NSU não é um índice que só
-// cresce pra sempre — é a posição dentro de uma janela de documentos
-// disponíveis pra consulta que parece ter um teto (pra uma empresa
-// real, só ~384 documentos disponíveis no total, não milhares, mesmo
-// a empresa existindo desde 2018). Com isso, escanear tudo desde o NSU
-// 0 em toda busca (em vez de guardar um checkpoint e só revisitar uma
-// janela recente, como este arquivo fazia antes) deixou de ser caro:
-// testado ao vivo, escanear tudo levou ~16s — bem mais rápido do que a
-// suposição antiga de que isso demoraria minutos. Removida a lógica de
-// checkpoint/janela: mais simples e sem risco de um checkpoint antigo
-// apontar pra um lugar errado. O dedup por chave_acesso (ignoreDuplicates
-// no upsert) já torna reprocessar tudo seguro e barato.
+// Escanear tudo desde o NSU 0 em toda busca (em vez de usar um
+// checkpoint) foi testado e funcionou bem enquanto as empresas tinham
+// poucos documentos — mas empresas com histórico grande (1000+
+// documentos já distribuídos) precisam de muitos lotes pra chegar até
+// o fim, e cada lote é uma chamada ao adn.nfse.gov.br: quando o Sefin
+// está lento, isso estoura o timeout de 45s bem antes de terminar
+// (visto em produção repetidamente em empresas de alto volume). Por
+// isso o checkpoint voltou: `nsu_inicial` agora usa
+// `company.ultimo_nsu_distribuicao` por padrão pra "Buscar agora" no
+// mês corrente, escaneando só o que é novo desde a última sincronização
+// bem-sucedida. Continuam escaneando do zero (nsu_inicial=0), sempre:
+// a busca de histórico ("Buscar últimos 12 meses", `mesesAnteriores>0`,
+// que precisa ver NSUs antigos que o checkpoint já passou), a busca de
+// uma competência passada (mesmo motivo), e o parâmetro explícito
+// `forcarDesdeZero` (botão "Buscar tudo novamente" — a válvula de
+// escape manual pro risco de um checkpoint antigo apontar pro lugar
+// errado, sem precisar reverter esse código de novo). O dedup por
+// chave_acesso (ignoreDuplicates no upsert) torna reprocessar notas já
+// vistas seguro e barato dos dois jeitos.
 const MAX_LOTES_BUSCA = 150;
 
 // Meses considerados por "Buscar últimos 12 meses" — janela de N+1
@@ -103,6 +110,7 @@ export async function syncOneCompany(
   company: CompanyParaSincronizar,
   competencia?: string, // "YYYY-MM" — se omitido, usa o mês corrente
   mesesAnteriores?: number, // >0 = busca de histórico (janela de N+1 meses)
+  forcarDesdeZero?: boolean, // true = ignora o checkpoint, escaneia do NSU 0
 ): Promise<ResultadoSincronizacao> {
   const certificado = Array.isArray(company.certificates)
     ? company.certificates[0]
@@ -133,6 +141,12 @@ export async function syncOneCompany(
     const competenciaAlvo = competencia && /^\d{4}-\d{2}$/.test(competencia) ? competencia : mesCorrente;
     const [anoAlvo, mesAlvo] = competenciaAlvo.split("-").map(Number);
 
+    // Checkpoint só é seguro pra busca do mês corrente sem janela de
+    // histórico — uma competência passada ou "últimos N meses" precisa
+    // enxergar NSUs antigos que o checkpoint já deixou pra trás.
+    const usaCheckpoint = !forcarDesdeZero && !mesesAnteriores && competenciaAlvo === mesCorrente;
+    const nsuInicial = usaCheckpoint ? company.ultimo_nsu_distribuicao ?? 0 : 0;
+
     const resp = await fetch(`${process.env.NFSE_ENGINE_URL}/notas/buscar`, {
       method: "POST",
       headers: {
@@ -144,7 +158,7 @@ export async function syncOneCompany(
         ambiente,
         ano: anoAlvo,
         mes: mesAlvo,
-        nsu_inicial: 0,
+        nsu_inicial: nsuInicial,
         max_lotes: MAX_LOTES_BUSCA,
         cnpj_consulta: documentoConsulta,
         meses_anteriores: mesesAnteriores ?? 0,

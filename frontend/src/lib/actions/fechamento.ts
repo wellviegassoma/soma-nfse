@@ -70,6 +70,7 @@ export async function buscarAgora(
   if (typeof companyId !== "string") return { error: "Empresa inválida." };
   const competenciaRaw = formData.get("competencia");
   const competencia = typeof competenciaRaw === "string" ? competenciaRaw : undefined;
+  const forcarDesdeZero = formData.get("forcarDesdeZero") === "true";
 
   const admin = createAdminClient();
   const { data: company } = await admin
@@ -81,7 +82,7 @@ export async function buscarAgora(
     .single();
   if (!company) return { error: "Empresa não encontrada." };
 
-  const resultado = await syncOneCompany(admin, company, competencia);
+  const resultado = await syncOneCompany(admin, company, competencia, undefined, forcarDesdeZero);
   revalidatePath(`/admin/empresas/${companyId}/fechamento`);
   return { resultado };
 }
