@@ -59,6 +59,16 @@ async function salvarNotaImportada(
   return { ok: true };
 }
 
+// A página de fechamento de uma empresa (`maxDuration = 300`) só faz UMA
+// sincronização por clique, sem risco de travar outras empresas — bem
+// diferente do lote de "Buscar todas agora" (ver TIMEOUT_LOTE_MS padrão
+// em sync-notas.ts). Uma janela maior aqui é o que permite uma empresa
+// com backlog grande (ex.: META, com uns 1000-5000 documentos represados)
+// finalmente completar uma varredura inteira e salvar o checkpoint — sem
+// isso ela nunca teria uma primeira sincronização bem-sucedida da qual
+// partir.
+const TIMEOUT_BUSCA_INDIVIDUAL_MS = 240_000;
+
 export type BuscarAgoraState = { resultado?: ResultadoSincronizacao; error?: string } | undefined;
 
 export async function buscarAgora(
@@ -82,7 +92,14 @@ export async function buscarAgora(
     .single();
   if (!company) return { error: "Empresa não encontrada." };
 
-  const resultado = await syncOneCompany(admin, company, competencia, undefined, forcarDesdeZero);
+  const resultado = await syncOneCompany(
+    admin,
+    company,
+    competencia,
+    undefined,
+    forcarDesdeZero,
+    TIMEOUT_BUSCA_INDIVIDUAL_MS,
+  );
   revalidatePath(`/admin/empresas/${companyId}/fechamento`);
   return { resultado };
 }
@@ -105,7 +122,14 @@ export async function buscarHistoricoAgora(
     .single();
   if (!company) return { error: "Empresa não encontrada." };
 
-  const resultado = await syncOneCompany(admin, company, undefined, MESES_ANTERIORES_HISTORICO);
+  const resultado = await syncOneCompany(
+    admin,
+    company,
+    undefined,
+    MESES_ANTERIORES_HISTORICO,
+    undefined,
+    TIMEOUT_BUSCA_INDIVIDUAL_MS,
+  );
   revalidatePath(`/admin/empresas/${companyId}/fechamento`);
   return { resultado };
 }

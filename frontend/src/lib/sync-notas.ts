@@ -38,6 +38,14 @@ const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
 // vistas seguro e barato dos dois jeitos.
 const MAX_LOTES_BUSCA = 150;
 
+// Timeout padrão do fetch ao backend — usado por syncAllCompanies
+// (cron / "Buscar todas agora"), onde uma empresa travada não pode
+// comer o orçamento de tempo do lote inteiro. Um `timeoutMs` maior,
+// passado por quem chama syncOneCompany fora desse contexto de lote
+// (ver TIMEOUT_BUSCA_INDIVIDUAL_MS em actions/fechamento.ts), sobrepõe
+// esse padrão.
+const TIMEOUT_LOTE_MS = 45_000;
+
 // Meses considerados por "Buscar últimos 12 meses" — janela de N+1
 // meses terminando no mês corrente (ver meses_anteriores no backend).
 const MESES_ANTERIORES_HISTORICO = 11;
@@ -111,6 +119,7 @@ export async function syncOneCompany(
   competencia?: string, // "YYYY-MM" — se omitido, usa o mês corrente
   mesesAnteriores?: number, // >0 = busca de histórico (janela de N+1 meses)
   forcarDesdeZero?: boolean, // true = ignora o checkpoint, escaneia do NSU 0
+  timeoutMs?: number, // default TIMEOUT_LOTE_MS — ver comentário na constante
 ): Promise<ResultadoSincronizacao> {
   const certificado = Array.isArray(company.certificates)
     ? company.certificates[0]
@@ -171,8 +180,17 @@ export async function syncOneCompany(
       // maxDuration, isso já travou o cron inteiro: a função é matada
       // pela plataforma no meio do await, antes de devolver resposta —
       // e o after() que dispararia o próximo lote nunca chega a ser
-      // registrado, silenciando o resto do agendamento.
-      signal: AbortSignal.timeout(45_000),
+      // registrado, silenciando o resto do agendamento. Por isso o
+      // padrão (usado por syncAllCompanies/cron) fica curto — `timeoutMs`
+      // deixa o "Buscar agora" de uma única empresa (que tem seu próprio
+      // orçamento de até 300s na página, sem risco de travar outras
+      // empresas de um lote) usar uma janela bem maior: necessário pra
+      // uma empresa com backlog grande nunca ter conseguido completar
+      // uma varredura sequer (o throttle de 1,5s entre lotes no backend
+      // some rápido no total) — sem completar uma vez, o checkpoint
+      // nunca avança e ela fica presa reiniciando do mesmo lugar pra
+      // sempre. Caso real: a META, com uns 1000-5000 documentos represados.
+      signal: AbortSignal.timeout(timeoutMs ?? TIMEOUT_LOTE_MS),
     });
 
     if (!resp.ok) {
