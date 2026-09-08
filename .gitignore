@@ -4,3 +4,6 @@ __pycache__/
 supabase/.temp/
 backend/.env
 backups/
+
+# Configuração pessoal do Claude Code (permissões da máquina, não do time)
+.claude/settings.local.json
