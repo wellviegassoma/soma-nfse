@@ -7,3 +7,9 @@ backups/
 
 # Configuração pessoal do Claude Code (permissões da máquina, não do time)
 .claude/settings.local.json
+
+# Saída dos scripts de importação — plano.json e relatorio.txt contêm nome e
+# CPF/CNPJ de clientes/fornecedores reais (PII). Nunca versionar.
+scripts/import-nibo-planilha/plano.json
+scripts/import-nibo-planilha/relatorio.txt
+scripts/import-nibo-planilha/gravacao_log.txt

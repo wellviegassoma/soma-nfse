@@ -14,6 +14,7 @@ import {
 import { AtivarCobrancaButton } from "@/components/financeiro/AtivarCobrancaButton";
 import { CobrancaConta } from "@/components/financeiro/CobrancaConta";
 import { ReguaCobranca } from "@/components/financeiro/ReguaCobranca";
+import { paginarTudo } from "@/lib/supabase-paginacao";
 
 export const metadata = { title: "Financeiro — Cobrança" };
 
@@ -24,51 +25,66 @@ export default async function CobrancaPage(
   await requireFinanceiroAccess(companyId);
 
   const supabase = await createClient();
-  const [
-    { data: company },
-    { data: etapasData },
-    { data: contasData },
-    { data: contatosData },
-    { data: enviosData },
-    { data: notasData },
-  ] = await Promise.all([
-    supabase
-      .from("companies")
-      .select("id, legal_name, trade_name")
-      .eq("id", companyId)
-      .single(),
-    supabase
-      .from("fin_cobranca_etapas")
-      .select("id, nome, dias_relativos, canal, template, ativa")
-      .eq("company_id", companyId)
-      .order("dias_relativos"),
-    supabase
-      .from("fin_agendamentos")
-      .select(
-        "id, descricao, vencimento, valor_liquido, valor_liquidado, contato_id, dps_id",
-      )
-      .eq("company_id", companyId)
-      .eq("tipo", "RECEBER")
-      .in("status", ["ABERTO", "PARCIAL"])
-      .order("vencimento"),
-    supabase
-      .from("fin_contatos")
-      .select("id, nome")
-      .eq("company_id", companyId),
-    supabase
-      .from("fin_cobranca_envios")
-      .select("agendamento_id, etapa_id, canal, enviado_em")
-      .eq("company_id", companyId),
-    // Notas emitidas da empresa, pra oferecer o vínculo manual.
-    supabase
-      .from("dps")
-      .select("id, numero_dps, serie, valor, descricao, data_competencia")
-      .eq("company_id", companyId)
-      .order("created_at", { ascending: false })
-      .limit(100),
-  ]);
+  const [{ data: company }, { data: etapasData }, { data: enviosData }, { data: notasData }] =
+    await Promise.all([
+      supabase
+        .from("companies")
+        .select("id, legal_name, trade_name")
+        .eq("id", companyId)
+        .single(),
+      supabase
+        .from("fin_cobranca_etapas")
+        .select("id, nome, dias_relativos, canal, template, ativa")
+        .eq("company_id", companyId)
+        .order("dias_relativos"),
+      supabase
+        .from("fin_cobranca_envios")
+        .select("agendamento_id, etapa_id, canal, enviado_em")
+        .eq("company_id", companyId),
+      // Notas emitidas da empresa, pra oferecer o vínculo manual.
+      supabase
+        .from("dps")
+        .select("id, numero_dps, serie, valor, descricao, data_competencia")
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: false })
+        .limit(100),
+    ]);
 
   if (!company) notFound();
+
+  // fin_agendamentos e fin_contatos não têm teto por empresa — sem paginar,
+  // o PostgREST corta em 1000 linhas sem avisar (fin_contatos da SOMA já tem
+  // 543, de histórico real importado, e cresce com o tempo).
+  type AgendamentoCobrancaRow = {
+    id: string;
+    descricao: string | null;
+    vencimento: string;
+    valor_liquido: number;
+    valor_liquidado: number;
+    contato_id: string | null;
+    dps_id: string | null;
+  };
+  const [contasData, contatosData] = await Promise.all([
+    paginarTudo<AgendamentoCobrancaRow>((from, to) =>
+      supabase
+        .from("fin_agendamentos")
+        .select(
+          "id, descricao, vencimento, valor_liquido, valor_liquidado, contato_id, dps_id",
+        )
+        .eq("company_id", companyId)
+        .eq("tipo", "RECEBER")
+        .in("status", ["ABERTO", "PARCIAL"])
+        .order("vencimento")
+        .range(from, to),
+    ),
+    paginarTudo<{ id: string; nome: string }>((from, to) =>
+      supabase
+        .from("fin_contatos")
+        .select("id, nome")
+        .eq("company_id", companyId)
+        .range(from, to),
+    ),
+  ]);
 
   const etapas = ((etapasData ?? []) as unknown as {
     id: string;
@@ -114,18 +130,8 @@ export default async function CobrancaPage(
     );
   }
 
-  type Conta = {
-    id: string;
-    descricao: string | null;
-    vencimento: string;
-    valor_liquido: number;
-    valor_liquidado: number;
-    contato_id: string | null;
-    dps_id: string | null;
-  };
-
-  const contas = (contasData ?? []) as unknown as Conta[];
-  const contatos = (contatosData ?? []) as unknown as { id: string; nome: string }[];
+  const contas = contasData;
+  const contatos = contatosData;
   const envios = (enviosData ?? []) as unknown as {
     agendamento_id: string;
     etapa_id: string | null;

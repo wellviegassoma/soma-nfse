@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { paginarTudo } from "@/lib/supabase-paginacao";
 import { nibo, NiboError } from "./client";
 import {
   mapearAgendamento,
@@ -86,18 +87,24 @@ export async function importarEmpresaDoNibo(params: {
       .filter((c) => c.grupoIncerto)
       .map((c) => `${c.nome} (grupo no Nibo: ${c.grupoOriginal ?? "vazio"})`);
 
-    const { data: catsExistentes } = await db
-      .from("fin_categorias")
-      .select("id, nome, nibo_id")
-      .eq("company_id", companyId);
+    // Sem paginar, o PostgREST corta em 1000 linhas sem avisar — a checagem
+    // de idempotência abaixo passaria a duplicar em silêncio a partir da
+    // milésima categoria/contato/agendamento já existente. Achado real: o
+    // histórico da SOMA importado da planilha já passa disso em agendamentos.
+    const catsExistentes = await paginarTudo<{ id: string; nome: string; nibo_id: string | null }>(
+      (from, to) =>
+        db
+          .from("fin_categorias")
+          .select("id, nome, nibo_id")
+          .eq("company_id", companyId)
+          .range(from, to),
+    );
     const catPorNibo = new Map(
-      (catsExistentes ?? []).filter((c) => c.nibo_id).map((c) => [c.nibo_id as string, c.id]),
+      catsExistentes.filter((c) => c.nibo_id).map((c) => [c.nibo_id as string, c.id]),
     );
     // Empresa que já tem o plano padrão semeado: casa por nome pra não criar
     // "Aluguel" duas vezes só porque uma veio do seed e outra do Nibo.
-    const catPorNome = new Map(
-      (catsExistentes ?? []).map((c) => [c.nome.trim().toLowerCase(), c.id]),
-    );
+    const catPorNome = new Map(catsExistentes.map((c) => [c.nome.trim().toLowerCase(), c.id]));
 
     for (const c of catsMapeadas) {
       if (catPorNibo.has(c.niboId)) {
@@ -134,14 +141,16 @@ export async function importarEmpresaDoNibo(params: {
     // -----------------------------------------------------------------------
     // Centros de custo
     // -----------------------------------------------------------------------
-    const { data: centrosExistentes } = await db
-      .from("fin_centros_custo")
-      .select("id, nome, nibo_id")
-      .eq("company_id", companyId);
+    const centrosExistentes = await paginarTudo<{ id: string; nome: string; nibo_id: string | null }>(
+      (from, to) =>
+        db
+          .from("fin_centros_custo")
+          .select("id, nome, nibo_id")
+          .eq("company_id", companyId)
+          .range(from, to),
+    );
     const centroPorNibo = new Map(
-      (centrosExistentes ?? [])
-        .filter((c) => c.nibo_id)
-        .map((c) => [c.nibo_id as string, c.id]),
+      centrosExistentes.filter((c) => c.nibo_id).map((c) => [c.nibo_id as string, c.id]),
     );
 
     for (const c of centros) {
@@ -166,14 +175,16 @@ export async function importarEmpresaDoNibo(params: {
     // -----------------------------------------------------------------------
     // Contas bancárias (extrato_contas_bancarias é o cadastro canônico)
     // -----------------------------------------------------------------------
-    const { data: contasExistentes } = await db
-      .from("extrato_contas_bancarias")
-      .select("id, nibo_id")
-      .eq("company_id", companyId);
+    const contasExistentes = await paginarTudo<{ id: string; nibo_id: string | null }>(
+      (from, to) =>
+        db
+          .from("extrato_contas_bancarias")
+          .select("id, nibo_id")
+          .eq("company_id", companyId)
+          .range(from, to),
+    );
     const contaPorNibo = new Map(
-      (contasExistentes ?? [])
-        .filter((c) => c.nibo_id)
-        .map((c) => [c.nibo_id as string, c.id]),
+      contasExistentes.filter((c) => c.nibo_id).map((c) => [c.nibo_id as string, c.id]),
     );
 
     for (const bruta of contas) {
@@ -206,14 +217,16 @@ export async function importarEmpresaDoNibo(params: {
     // -----------------------------------------------------------------------
     // Contatos
     // -----------------------------------------------------------------------
-    const { data: contatosExistentes } = await db
-      .from("fin_contatos")
-      .select("id, nibo_id")
-      .eq("company_id", companyId);
+    const contatosExistentes = await paginarTudo<{ id: string; nibo_id: string | null }>(
+      (from, to) =>
+        db
+          .from("fin_contatos")
+          .select("id, nibo_id")
+          .eq("company_id", companyId)
+          .range(from, to),
+    );
     const contatoPorNibo = new Map(
-      (contatosExistentes ?? [])
-        .filter((c) => c.nibo_id)
-        .map((c) => [c.nibo_id as string, c.id]),
+      contatosExistentes.filter((c) => c.nibo_id).map((c) => [c.nibo_id as string, c.id]),
     );
 
     for (const bruto of contatos) {
@@ -248,12 +261,20 @@ export async function importarEmpresaDoNibo(params: {
     // pela conciliação reconstrói o caixa com mais fidelidade. Agendamento já
     // liquidado no Nibo entra como LIQUIDADO sem lançamento — ver aviso.
     // -----------------------------------------------------------------------
-    const { data: agsExistentes } = await db
-      .from("fin_agendamentos")
-      .select("nibo_id")
-      .eq("company_id", companyId)
-      .not("nibo_id", "is", null);
-    const agsJaImportados = new Set((agsExistentes ?? []).map((a) => a.nibo_id as string));
+    // O ponto mais crítico dos cinco: a SOMA já tem 7.136 agendamentos
+    // (histórico real importado da planilha do Nibo) — bem acima dos 1000
+    // que o PostgREST devolveria sem paginar. Sem esta correção, rodar esta
+    // migração via API para a SOMA hoje duplicaria silenciosamente milhares
+    // de agendamentos que já existem.
+    const agsExistentes = await paginarTudo<{ nibo_id: string }>((from, to) =>
+      db
+        .from("fin_agendamentos")
+        .select("nibo_id")
+        .eq("company_id", companyId)
+        .not("nibo_id", "is", null)
+        .range(from, to),
+    );
+    const agsJaImportados = new Set(agsExistentes.map((a) => a.nibo_id));
 
     let liquidadosSemLancamento = 0;
 

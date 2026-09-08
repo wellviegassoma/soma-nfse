@@ -22,6 +22,7 @@ import { ToggleRecorrenciaButton } from "./ToggleRecorrenciaButton";
 import { GerarRecorrenciasButton } from "./GerarRecorrenciasButton";
 import { FREQUENCIA_LABELS, type RecorrenciaFrequencia } from "@/lib/financeiro";
 import { hojeBrasilia } from "@/lib/competencia";
+import { paginarTudo } from "@/lib/supabase-paginacao";
 
 type Conta = { id: string; banco: string; agencia: string; conta: string };
 
@@ -51,8 +52,6 @@ export async function AgendamentosView({
   const supabase = await createClient();
   const [
     { data: company },
-    { data: agendamentosData },
-    { data: contatosData },
     { data: categoriasData },
     { data: centrosData },
     { data: contasData },
@@ -63,21 +62,6 @@ export async function AgendamentosView({
       .select("id, legal_name, trade_name")
       .eq("id", companyId)
       .single(),
-    supabase
-      .from("fin_agendamentos")
-      .select(
-        "id, company_id, tipo, contato_id, vencimento, previsto_para, descricao, referencia, detalhamento, valor_bruto, ret_iss, ret_irrf, ret_csll, ret_inss, ret_pis, ret_cofins, ret_outras, desconto, juros, multa, valor_liquido, valor_liquidado, status, parcela_num, parcela_de, reembolsavel",
-      )
-      .eq("company_id", companyId)
-      .eq("tipo", tipo)
-      .in("status", ["ABERTO", "PARCIAL"])
-      .order("vencimento", { ascending: true }),
-    supabase
-      .from("fin_contatos")
-      .select("id, nome, tipo")
-      .eq("company_id", companyId)
-      .eq("ativo", true)
-      .order("nome"),
     supabase
       .from("fin_categorias")
       .select("id, nome, grupo, natureza, sistema, ativo")
@@ -109,11 +93,35 @@ export async function AgendamentosView({
 
   if (!company) notFound();
 
-  const agendamentos = (agendamentosData ?? []) as unknown as FinAgendamento[];
-  const contatos = (contatosData ?? []) as unknown as Pick<
-    FinContato,
-    "id" | "nome" | "tipo"
-  >[];
+  // fin_agendamentos e fin_contatos não têm teto por empresa — sem paginar,
+  // o PostgREST corta em 1000 linhas sem avisar (o histórico real da SOMA já
+  // passa disso, e a lista de contatos, 543 hoje, cresce com o tempo).
+  const [agendamentosData, contatosData] = await Promise.all([
+    paginarTudo<FinAgendamento>((from, to) =>
+      supabase
+        .from("fin_agendamentos")
+        .select(
+          "id, company_id, tipo, contato_id, vencimento, previsto_para, descricao, referencia, detalhamento, valor_bruto, ret_iss, ret_irrf, ret_csll, ret_inss, ret_pis, ret_cofins, ret_outras, desconto, juros, multa, valor_liquido, valor_liquidado, status, parcela_num, parcela_de, reembolsavel",
+        )
+        .eq("company_id", companyId)
+        .eq("tipo", tipo)
+        .in("status", ["ABERTO", "PARCIAL"])
+        .order("vencimento", { ascending: true })
+        .range(from, to),
+    ),
+    paginarTudo<Pick<FinContato, "id" | "nome" | "tipo">>((from, to) =>
+      supabase
+        .from("fin_contatos")
+        .select("id, nome, tipo")
+        .eq("company_id", companyId)
+        .eq("ativo", true)
+        .order("nome")
+        .range(from, to),
+    ),
+  ]);
+
+  const agendamentos = agendamentosData;
+  const contatos = contatosData;
   // Categoria de sistema não é escolhível na mão: ela é destino de cálculo
   // (juros, multa, desconto, retenção), não classificação de uma conta.
   const categorias = ((categoriasData ?? []) as unknown as FinCategoria[]).filter(

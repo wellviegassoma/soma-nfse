@@ -15,6 +15,7 @@ import {
 } from "@/lib/financeiro-relatorios";
 import type { CategoriaNatureza } from "@/lib/financeiro";
 import { mesCorrenteBrasilia, ultimasCompetencias } from "@/lib/competencia";
+import { paginarTudo } from "@/lib/supabase-paginacao";
 
 export const metadata = { title: "Financeiro — Painel de acompanhamento" };
 
@@ -23,6 +24,13 @@ const MESES = 6;
 function rotulo(c: string) {
   const [ano, mes] = c.split("-");
   return `${mes}/${ano.slice(2)}`;
+}
+
+/** "2026-04" -> "2026-04-30" (o dia 0 do mês seguinte é o último do atual). */
+function ultimoDiaDoMes(competencia: string): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const dia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  return `${competencia}-${String(dia).padStart(2, "0")}`;
 }
 
 function celula(valor: number | undefined) {
@@ -43,45 +51,89 @@ export default async function PainelPage(
   const regime =
     regimeBruto === "competencia" || regimeBruto === "orcado" ? regimeBruto : "caixa";
   // O comparativo é de um mês só — orçamento mês a mês numa grade de 6 colunas
-  // vira ilegível. Usa o mês corrente.
+  // vira ilegível. Usa o mês corrente, que é sempre o mais recente dos 6
+  // meses abaixo — por isso o range de datas que filtra a busca cobre os
+  // dois casos com uma consulta só.
   const mesComparativo = mesCorrenteBrasilia();
+  // Mais antigo primeiro, pra a tabela ler da esquerda pra direita.
+  const competencias = ultimasCompetencias(mesComparativo, MESES).reverse();
+  const dataInicio = `${competencias[0]}-01`;
+  const dataFim = ultimoDiaDoMes(competencias[competencias.length - 1]);
 
   const supabase = await createClient();
-  const [
-    { data: company },
-    { data: categoriasData },
-    { data: agendamentosData },
-    { data: rateiosData },
-    { data: lancamentosData },
-    { data: orcamentoData },
-  ] = await Promise.all([
-    supabase
-      .from("companies")
-      .select("id, legal_name, trade_name")
-      .eq("id", companyId)
-      .single(),
-    supabase
-      .from("fin_categorias")
-      .select("id, nome, grupo, natureza")
-      .eq("company_id", companyId),
-    supabase
-      .from("fin_agendamentos")
-      .select("id, tipo, vencimento, valor_bruto, status")
-      .eq("company_id", companyId),
-    // O rateio não tem company_id (depende do agendamento), então o filtro vem
-    // pela RLS, que já corta por empresa via o pai.
-    supabase.from("fin_agendamento_categorias").select("agendamento_id, categoria_id, valor"),
-    supabase
-      .from("fin_lancamentos")
-      .select("agendamento_id, data, valor")
-      .eq("company_id", companyId),
-    supabase
-      .from("fin_orcamento")
-      .select("categoria_id, competencia, valor")
-      .eq("company_id", companyId),
-  ]);
+  const [{ data: company }, { data: categoriasData }, { data: orcamentoData }] =
+    await Promise.all([
+      supabase
+        .from("companies")
+        .select("id, legal_name, trade_name")
+        .eq("id", companyId)
+        .single(),
+      supabase
+        .from("fin_categorias")
+        .select("id, nome, grupo, natureza")
+        .eq("company_id", companyId),
+      supabase
+        .from("fin_orcamento")
+        .select("categoria_id, competencia, valor")
+        .eq("company_id", companyId),
+    ]);
 
   if (!company) notFound();
+
+  // fin_agendamentos, fin_agendamento_categorias e fin_lancamentos não têm
+  // teto por empresa (a SOMA já tem ~7.100/7.230/7.100 de histórico real
+  // importado). Duas correções em cima disso, achadas ao vivo com esse
+  // volume real:
+  // 1) sem paginar, o PostgREST corta em 1000 linhas sem avisar, e o Painel
+  //    silenciosamente resumiria só uma fração do histórico;
+  // 2) mesmo paginando, buscar TODO o histórico pra usar só os últimos 6
+  //    meses levou 26s pra carregar — por isso o filtro de data abaixo, que
+  //    reduz o volume trazido ao que a tela realmente mostra.
+  type AgendamentoRow = {
+    id: string;
+    tipo: "RECEBER" | "PAGAR";
+    vencimento: string;
+    valor_bruto: number;
+    status: string;
+  };
+  type RateioRow = { agendamento_id: string; categoria_id: string; valor: number };
+  type LancamentoRow = { agendamento_id: string | null; data: string; valor: number };
+
+  const [agendamentosData, lancamentosData] = await Promise.all([
+    paginarTudo<AgendamentoRow>((from, to) =>
+      supabase
+        .from("fin_agendamentos")
+        .select("id, tipo, vencimento, valor_bruto, status")
+        .eq("company_id", companyId)
+        .gte("vencimento", dataInicio)
+        .lte("vencimento", dataFim)
+        .range(from, to),
+    ),
+    paginarTudo<LancamentoRow>((from, to) =>
+      supabase
+        .from("fin_lancamentos")
+        .select("agendamento_id, data, valor")
+        .eq("company_id", companyId)
+        .gte("data", dataInicio)
+        .lte("data", dataFim)
+        .range(from, to),
+    ),
+  ]);
+
+  // O rateio não tem company_id nem data (depende do agendamento) — filtra
+  // pelos ids já resolvidos acima, em vez de trazer o rateio de todo o
+  // histórico da empresa pra descartar quase tudo depois.
+  const idsAgendamentos = agendamentosData.map((a) => a.id);
+  const rateiosData: RateioRow[] =
+    idsAgendamentos.length === 0
+      ? []
+      : await paginarTudo<RateioRow>((from, to) =>
+          supabase
+            .from("fin_agendamento_categorias")
+            .select("agendamento_id, categoria_id, valor")
+            .in("agendamento_id", idsAgendamentos)
+            .range(from, to),
+        );
 
   const categorias = (categoriasData ?? []) as unknown as (CategoriaResumo & {
     natureza: CategoriaNatureza;
@@ -95,40 +147,23 @@ export default async function PainelPage(
     competencia: o.competencia,
     valor: Number(o.valor),
   }));
-  const agendamentos = ((agendamentosData ?? []) as unknown as {
-    id: string;
-    tipo: "RECEBER" | "PAGAR";
-    vencimento: string;
-    valor_bruto: number;
-    status: string;
-  }[]).map<AgendamentoResumo>((a) => ({
+  const agendamentos = agendamentosData.map<AgendamentoResumo>((a) => ({
     id: a.id,
     tipo: a.tipo,
     vencimento: a.vencimento,
     valorBruto: Number(a.valor_bruto),
     status: a.status,
   }));
-  const rateios = ((rateiosData ?? []) as unknown as {
-    agendamento_id: string;
-    categoria_id: string;
-    valor: number;
-  }[]).map<RateioCategoria>((r) => ({
+  const rateios = rateiosData.map<RateioCategoria>((r) => ({
     agendamentoId: r.agendamento_id,
     categoriaId: r.categoria_id,
     valor: Number(r.valor),
   }));
-  const lancamentos = ((lancamentosData ?? []) as unknown as {
-    agendamento_id: string | null;
-    data: string;
-    valor: number;
-  }[]).map<LancamentoResumo>((l) => ({
+  const lancamentos = lancamentosData.map<LancamentoResumo>((l) => ({
     agendamentoId: l.agendamento_id,
     data: l.data,
     valor: Number(l.valor),
   }));
-
-  // Mais antigo primeiro, pra a tabela ler da esquerda pra direita.
-  const competencias = ultimasCompetencias(mesCorrenteBrasilia(), MESES).reverse();
 
   const painel =
     regime === "competencia"

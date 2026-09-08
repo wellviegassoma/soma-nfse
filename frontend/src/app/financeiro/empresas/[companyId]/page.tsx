@@ -12,6 +12,7 @@ import {
 } from "@/lib/financeiro";
 import { hojeBrasilia } from "@/lib/competencia";
 import { projetarFluxoCaixaDiario, type AgendamentoAberto } from "@/lib/financeiro-relatorios";
+import { paginarTudo } from "@/lib/supabase-paginacao";
 import { AtivarFinanceiroButton } from "./AtivarFinanceiroButton";
 import { FluxoCaixaChart } from "@/components/financeiro/FluxoCaixaChart";
 import { ProximasContas, type ProximaConta } from "@/components/financeiro/ProximasContas";
@@ -49,45 +50,55 @@ export default async function FinanceiroEmpresaPage(
   await requireFinanceiroAccess(companyId);
 
   const supabase = await createClient();
-  const [
-    { data: company },
-    { data: contasData },
-    { data: categorias },
-    { data: contatos },
-    { data: lancamentosData },
-    { data: abertosData },
-  ] = await Promise.all([
-    supabase
-      .from("companies")
-      .select("id, legal_name, trade_name, person_type, cnpj, cpf")
-      .eq("id", companyId)
-      .single(),
-    supabase
-      .from("extrato_contas_bancarias")
-      .select("id, banco, agencia, conta, tipo, saldo_inicial, data_saldo_inicial")
-      .eq("company_id", companyId)
-      .eq("ativo", true)
-      .order("created_at", { ascending: true }),
-    supabase.from("fin_categorias").select("id").eq("company_id", companyId),
-    supabase
-      .from("fin_contatos")
-      .select("id, nome")
-      .eq("company_id", companyId)
-      .eq("ativo", true),
-    supabase
-      .from("fin_lancamentos")
-      .select("conta_id, data, valor")
-      .eq("company_id", companyId),
-    supabase
-      .from("fin_agendamentos")
-      .select(
-        "id, tipo, contato_id, descricao, vencimento, previsto_para, valor_liquido, valor_liquidado",
-      )
-      .eq("company_id", companyId)
-      .in("status", ["ABERTO", "PARCIAL"]),
-  ]);
+  const [{ data: company }, { data: contasData }, { data: categorias }, { data: contatos }] =
+    await Promise.all([
+      supabase
+        .from("companies")
+        .select("id, legal_name, trade_name, person_type, cnpj, cpf")
+        .eq("id", companyId)
+        .single(),
+      supabase
+        .from("extrato_contas_bancarias")
+        .select("id, banco, agencia, conta, tipo, saldo_inicial, data_saldo_inicial")
+        .eq("company_id", companyId)
+        .eq("ativo", true)
+        .order("created_at", { ascending: true }),
+      // .limit(1) basta: só precisamos saber se existe alguma, não a lista
+      // inteira (contagem de categorias é decoração de outra tela).
+      supabase.from("fin_categorias").select("id").eq("company_id", companyId).limit(1),
+      supabase
+        .from("fin_contatos")
+        .select("id, nome")
+        .eq("company_id", companyId)
+        .eq("ativo", true),
+    ]);
 
   if (!company) notFound();
+
+  // fin_lancamentos e fin_agendamentos crescem sem teto por empresa (a SOMA
+  // já tem ~7.100 de cada, de histórico real importado) — sem paginar, o
+  // PostgREST corta em 1000 linhas SEM avisar, e a soma abaixo silenciosamente
+  // usaria só uma fração dos dados. Achado ao vivo: o saldo consolidado desta
+  // própria tela saiu R$ 646.949,23 em vez de -R$ 2.273,77 antes desta correção.
+  const [lancamentosData, abertosData] = await Promise.all([
+    paginarTudo<{ conta_id: string; data: string; valor: number }>((from, to) =>
+      supabase
+        .from("fin_lancamentos")
+        .select("conta_id, data, valor")
+        .eq("company_id", companyId)
+        .range(from, to),
+    ),
+    paginarTudo<AgendamentoAberto2>((from, to) =>
+      supabase
+        .from("fin_agendamentos")
+        .select(
+          "id, tipo, contato_id, descricao, vencimento, previsto_para, valor_liquido, valor_liquidado",
+        )
+        .eq("company_id", companyId)
+        .in("status", ["ABERTO", "PARCIAL"])
+        .range(from, to),
+    ),
+  ]);
 
   const documento = formatarDocumentoEmpresa(company);
   const contas = (contasData ?? []) as unknown as Conta[];
@@ -130,14 +141,9 @@ export default async function FinanceiroEmpresaPage(
   // Mesmo cálculo da função fin_saldo_conta no banco: saldo inicial +
   // lançamentos a partir da data do saldo inicial. Feito aqui pra somar
   // todas as contas numa consulta só (ver contas/page.tsx, mesma lógica).
-  const lancamentos = (lancamentosData ?? []) as unknown as {
-    conta_id: string;
-    data: string;
-    valor: number;
-  }[];
   const saldoPorConta = new Map<string, number>();
   for (const c of contas) saldoPorConta.set(c.id, Number(c.saldo_inicial));
-  for (const l of lancamentos) {
+  for (const l of lancamentosData) {
     const conta = contas.find((c) => c.id === l.conta_id);
     if (!conta) continue;
     if (conta.data_saldo_inicial && l.data < conta.data_saldo_inicial) continue;
@@ -149,7 +155,7 @@ export default async function FinanceiroEmpresaPage(
     ((contatos ?? []) as { id: string; nome: string }[]).map((c) => [c.id, c.nome]),
   );
 
-  const abertos = (abertosData ?? []) as unknown as AgendamentoAberto2[];
+  const abertos = abertosData;
   const hoje = hojeBrasilia();
 
   const paraFluxo: AgendamentoAberto[] = abertos.map((a) => ({

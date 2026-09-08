@@ -7,6 +7,7 @@ import { formatarBRL, formatarDataBr } from "@/lib/financeiro";
 import { CONTA_TIPO_LABELS, type ContaTipo } from "@/lib/financeiro";
 import { TransferenciaForm } from "@/components/financeiro/TransferenciaForm";
 import { ContaDadosForm } from "./ContaDadosForm";
+import { paginarTudo } from "@/lib/supabase-paginacao";
 
 export const metadata = { title: "Financeiro — Contas e saldos" };
 
@@ -29,28 +30,34 @@ export default async function ContasPage(
   await requireFinanceiroAccess(companyId);
 
   const supabase = await createClient();
-  const [{ data: company }, { data: contasData }, { data: lancamentosData }] =
-    await Promise.all([
-      supabase
-        .from("companies")
-        .select("id, legal_name, trade_name")
-        .eq("id", companyId)
-        .single(),
-      supabase
-        .from("extrato_contas_bancarias")
-        .select("id, banco, agencia, conta, tipo, saldo_inicial, data_saldo_inicial")
-        .eq("company_id", companyId)
-        .eq("ativo", true)
-        .order("banco"),
-      supabase
-        .from("fin_lancamentos")
-        .select("conta_id, data, valor")
-        .eq("company_id", companyId),
-    ]);
+  const [{ data: company }, { data: contasData }] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("id, legal_name, trade_name")
+      .eq("id", companyId)
+      .single(),
+    supabase
+      .from("extrato_contas_bancarias")
+      .select("id, banco, agencia, conta, tipo, saldo_inicial, data_saldo_inicial")
+      .eq("company_id", companyId)
+      .eq("ativo", true)
+      .order("banco"),
+  ]);
 
   if (!company) notFound();
   const contas = (contasData ?? []) as unknown as Conta[];
-  const lancamentos = (lancamentosData ?? []) as unknown as Lancamento[];
+
+  // fin_lancamentos não tem teto por empresa (a SOMA já tem ~7.100 de
+  // histórico real) — sem paginar, o PostgREST corta em 1000 linhas sem
+  // avisar, e o saldo somado abaixo ficaria errado em silêncio. Achado ao
+  // vivo nesta mesma tela antes desta correção.
+  const lancamentos = await paginarTudo<Lancamento>((from, to) =>
+    supabase
+      .from("fin_lancamentos")
+      .select("conta_id, data, valor")
+      .eq("company_id", companyId)
+      .range(from, to),
+  );
 
   // Mesmo cálculo da função fin_saldo_conta no banco: saldo inicial +
   // lançamentos a partir da data do saldo inicial. Feito aqui pra listar todas

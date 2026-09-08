@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { formatarBRL, formatarDataBr, valorEmAberto } from "@/lib/financeiro";
 import { projetarFluxoCaixa } from "@/lib/financeiro-relatorios";
 import { mesCorrenteBrasilia, hojeBrasilia, competenciasNoIntervalo } from "@/lib/competencia";
+import { paginarTudo } from "@/lib/supabase-paginacao";
 
 export const metadata = { title: "Financeiro — Fluxo de caixa" };
 
@@ -30,29 +31,18 @@ export default async function FluxoCaixaPage(
   await requireFinanceiroAccess(companyId);
 
   const supabase = await createClient();
-  const [{ data: company }, { data: contasData }, { data: lancData }, { data: abertosData }] =
-    await Promise.all([
-      supabase
-        .from("companies")
-        .select("id, legal_name, trade_name")
-        .eq("id", companyId)
-        .single(),
-      supabase
-        .from("extrato_contas_bancarias")
-        .select("id, banco, saldo_inicial, data_saldo_inicial")
-        .eq("company_id", companyId)
-        .eq("ativo", true),
-      supabase
-        .from("fin_lancamentos")
-        .select("conta_id, data, valor")
-        .eq("company_id", companyId),
-      supabase
-        .from("fin_agendamentos")
-        .select("tipo, vencimento, previsto_para, valor_liquido, valor_liquidado, descricao")
-        .eq("company_id", companyId)
-        .in("status", ["ABERTO", "PARCIAL"])
-        .order("vencimento"),
-    ]);
+  const [{ data: company }, { data: contasData }] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("id, legal_name, trade_name")
+      .eq("id", companyId)
+      .single(),
+    supabase
+      .from("extrato_contas_bancarias")
+      .select("id, banco, saldo_inicial, data_saldo_inicial")
+      .eq("company_id", companyId)
+      .eq("ativo", true),
+  ]);
 
   if (!company) notFound();
 
@@ -70,22 +60,46 @@ export default async function FluxoCaixaPage(
     valor_liquidado: number;
     descricao: string | null;
   };
+  type LancamentoSaldo = { conta_id: string; data: string; valor: number };
 
   const contas = (contasData ?? []) as unknown as Conta[];
-  const lancamentos = (lancData ?? []) as unknown as {
-    conta_id: string;
-    data: string;
-    valor: number;
-  }[];
-  const abertos = (abertosData ?? []) as unknown as Aberto[];
+
+  // fin_lancamentos e fin_agendamentos não têm teto por empresa (a SOMA já
+  // tem ~7.100 de histórico real) — sem paginar, o PostgREST corta em 1000
+  // linhas sem avisar, e o saldo abaixo ficaria errado em silêncio.
+  const [lancamentos, abertos] = await Promise.all([
+    paginarTudo<LancamentoSaldo>((from, to) =>
+      supabase
+        .from("fin_lancamentos")
+        .select("conta_id, data, valor")
+        .eq("company_id", companyId)
+        .range(from, to),
+    ),
+    paginarTudo<Aberto>((from, to) =>
+      supabase
+        .from("fin_agendamentos")
+        .select("tipo, vencimento, previsto_para, valor_liquido, valor_liquidado, descricao")
+        .eq("company_id", companyId)
+        .in("status", ["ABERTO", "PARCIAL"])
+        .order("vencimento")
+        .range(from, to),
+    ),
+  ]);
 
   // Mesma regra da função fin_saldo_conta: saldo inicial + lançamentos a
-  // partir da data do saldo inicial.
+  // partir da data do saldo inicial. Agrupa lançamentos por conta primeiro
+  // (Map) em vez do loop aninhado contas×lançamentos de antes — o mesmo
+  // resultado, sem crescer O(contas × lançamentos) a cada mês de histórico.
+  const lancamentosPorConta = new Map<string, LancamentoSaldo[]>();
+  for (const l of lancamentos) {
+    const lista = lancamentosPorConta.get(l.conta_id) ?? [];
+    lista.push(l);
+    lancamentosPorConta.set(l.conta_id, lista);
+  }
   let saldoAtual = 0;
   for (const c of contas) {
     saldoAtual += Number(c.saldo_inicial);
-    for (const l of lancamentos) {
-      if (l.conta_id !== c.id) continue;
+    for (const l of lancamentosPorConta.get(c.id) ?? []) {
       if (c.data_saldo_inicial && l.data < c.data_saldo_inicial) continue;
       saldoAtual += Number(l.valor);
     }

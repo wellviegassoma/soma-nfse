@@ -2374,6 +2374,71 @@ validado ao vivo; migração validada até onde dá sem a chave, 2026-09-08)**
 - [ ] Fora do escopo: histórico de pagamentos do Nibo (sem a conta bancária de
       cada baixa o saldo sairia errado; a Conciliação reconstrói o caixa melhor)
 
+**Fase AG — Importação real do histórico da SOMA + correção crítica de
+paginação (concluído e validado ao vivo, 2026-09-08)**
+
+Primeira carga de dado real de produção no módulo Financeiro: as exportações
+"Contas Recebidas" e "Contas Pagas" do Nibo em Excel (não a API — essas
+exportações trazem histórico já liquidado com a coluna Banco, o que a API não
+dá). Script em `scripts/import-nibo-planilha/`, fora do código do produto.
+
+- [x] 7.136 agendamentos (3.741 a receber + 3.395 a pagar) com lançamento,
+      período 16/01/2023–04/09/2026, todos LIQUIDADO. 543 contatos novos, 48
+      categorias novas (20 já batiam com o padrão da SOMA e foram
+      reaproveitadas), 5 contas bancárias novas (Cora, BTG, Itaú, Cora SCD, e
+      uma "Outros" pra 10 linhas sem banco identificável no Nibo — zeram entre
+      si, é a mesma operação vista dos dois lados)
+- [x] Rateio por `Id` repetido (o Nibo divide uma transação em várias linhas
+      quando há mais de uma categoria) agrupado num agendamento só antes de
+      gravar — confirmado por construção que a soma do rateio sempre fecha com
+      `valor_bruto`, porque os dois vêm do mesmo loop sobre as mesmas linhas
+- [x] Categoria usada nos dois sentidos na planilha ("Clinica Medica" em
+      recebidas E pagas, "Estorno" idem — só 7 das 7.136 linhas) resolvida pela
+      soma de maior valor, não pela primeira ocorrência; documentado que a
+      natureza aqui é só metadado, o Painel calcula o sinal pelo tipo do
+      agendamento
+- [x] `--dry` antes de `--commit`: fechou 100% (0 contato/categoria/conta sem
+      resolver) antes de qualquer escrita em produção. Confirmado com o
+      usuário o resumo (volume, contas sem agência/número reais, decisão de
+      cliente×fornecedor) antes de rodar
+- [x] Idempotente por `nibo_id = "planilha:<TIPO>:<REC|PAG>:<Id>"` — mesmo
+      padrão da fase F6, útil porque a gravação real fez ~22 mil inserts em
+      lotes de 500 e uma queda no meio seria retomada com o mesmo comando
+- [x] **Bug crítico pego na validação pós-import, não na importação em si:**
+      o saldo consolidado da tela saiu R$ 646.949,23 em vez de -R$ 2.273,77.
+      Causa: o PostgREST corta qualquer leitura em 1000 linhas por padrão, sem
+      avisar — nenhuma página do módulo Financeiro (fases AA a AF) paginava as
+      leituras de `fin_lancamentos`/`fin_agendamentos`/`fin_agendamento_categorias`,
+      porque nenhum teste anterior tinha passado de algumas dezenas de linhas.
+      O valor errado era, byte a byte, a soma exata das primeiras 1000 linhas
+      que o banco devolveu — confirmado isolando a chamada REST com
+      `Content-Range: 0-999/*`
+- [x] Corrigido com `lib/supabase-paginacao.ts` (pagina em lotes de 1000 até
+      esgotar) aplicado em toda leitura dessas três tabelas sem filtro que já
+      as limitasse: painel, fluxo de caixa, contas, cobrança, dashboard,
+      `AgendamentosView` e a migração via API (`lib/nibo/importar.ts` — a
+      checagem de idempotência por `nibo_id` também lia sem paginar, e como a
+      SOMA já passa de 1000 agendamentos, rodar aquela migração agora teria
+      duplicado silenciosamente milhares de linhas)
+- [x] Corrigido também o custo da correção: paginar tudo pra recalcular o
+      Painel (que só mostra 6 meses) levou **26s** — buscava os 3,5 anos
+      inteiros pra usar uma fração. Filtrado por data (`vencimento`/`data`)
+      antes de buscar, caiu pra **1,7s** (~15×). Dashboard e Contas continuam
+      sem esse filtro de propósito — o saldo é a soma desde sempre, não dá
+      pra recortar por período —, ficam em 4–7s, aceitável mas candidato a
+      uma função de agregação SQL no banco (RPC) se o histórico continuar
+      crescendo, em vez de somar em JS depois de trazer linha por linha
+- [x] Validado ao vivo, com sessão real: saldo consolidado, saldo por conta
+      (todas as 5 batendo com o cálculo independente via `curl` paginado
+      manualmente) e o Painel de Acompanhamento renderizando os 6 meses reais
+      corretamente, incluindo a categoria ambígua com sinal trocado mês a mês
+- [ ] Os saldos calculados **não são o saldo real de hoje** das contas — são
+      só a soma líquida do que veio nestas duas planilhas (operações com
+      terceiros). Provavelmente não incluem transferências internas entre as
+      próprias contas da SOMA (o Nibo exportaria isso separado). Definir o
+      saldo inicial de cada conta, ou reconciliar via extrato OFX real pelo
+      módulo Conciliação, fica para o usuário
+
 ## Backend (Fase C em diante)
 
 ```bash
