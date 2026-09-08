@@ -371,3 +371,62 @@ export function montarComparativoOrcado(
 
   return { competencia, linhas, orcado, realizado, variacao: round2(realizado - orcado) };
 }
+
+// ---------------------------------------------------------------------------
+// Fluxo de caixa projetado — granularidade DIÁRIA (tela inicial)
+// ---------------------------------------------------------------------------
+
+function somarDiasIso(iso: string, dias: number): string {
+  const [a, m, d] = iso.split("-").map(Number);
+  const alvo = new Date(Date.UTC(a, m - 1, d + dias));
+  return alvo.toISOString().slice(0, 10);
+}
+
+export type PontoFluxoDiario = {
+  data: string; // YYYY-MM-DD
+  entradas: number;
+  saidas: number;
+  saldoFinal: number;
+};
+
+/**
+ * Mesma lógica de projetarFluxoCaixa, em granularidade DIÁRIA — é o que a
+ * tela inicial precisa pro gráfico dos próximos N dias. Um balde por MÊS
+ * esconderia exatamente o que essa tela existe pra mostrar: em que dia
+ * específico o caixa aperta.
+ *
+ * Mesma regra de vencido: cai no primeiro dia da grade (hoje), inteiro — ela
+ * vai ser paga, e escondê-la é o jeito mais fácil de projetar um caixa que
+ * não existe.
+ */
+export function projetarFluxoCaixaDiario(
+  saldoAtual: number,
+  abertos: AgendamentoAberto[],
+  hoje: string,
+  dias: number,
+): PontoFluxoDiario[] {
+  const datas: string[] = [];
+  for (let i = 0; i < dias; i++) datas.push(somarDiasIso(hoje, i));
+
+  const entradas: Record<string, number> = {};
+  const saidas: Record<string, number> = {};
+  for (const d of datas) {
+    entradas[d] = 0;
+    saidas[d] = 0;
+  }
+
+  for (const a of abertos) {
+    const dataEsperada = a.previstoPara ?? a.vencimento;
+    const data = dataEsperada < hoje ? hoje : dataEsperada;
+    if (!(data in entradas)) continue; // além do horizonte mostrado
+
+    if (a.tipo === "RECEBER") entradas[data] = round2(entradas[data] + a.emAberto);
+    else saidas[data] = round2(saidas[data] + a.emAberto);
+  }
+
+  let saldo = saldoAtual;
+  return datas.map((d) => {
+    saldo = round2(saldo + entradas[d] - saidas[d]);
+    return { data: d, entradas: entradas[d], saidas: saidas[d], saldoFinal: saldo };
+  });
+}
