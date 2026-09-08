@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/sync-notas",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/financeiro-recorrencias",
+      "schedule": "0 5 * * *"
     }
   ]
 }

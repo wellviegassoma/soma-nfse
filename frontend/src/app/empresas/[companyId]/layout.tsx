@@ -44,7 +44,10 @@ export default async function CompanyLayout(
         userName={userName}
       />
       <div className="mx-auto max-w-5xl px-4 py-8">
-        <CompanyTabs companyId={companyId} />
+        <CompanyTabs
+          companyId={companyId}
+          mostrarFinanceiro={isSomaStaff || access.role === "ADMIN_CLIENTE"}
+        />
         {props.children}
       </div>
     </div>

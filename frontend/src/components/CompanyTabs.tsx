@@ -4,7 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 
-export function CompanyTabs({ companyId }: { companyId: string }) {
+export function CompanyTabs({
+  companyId,
+  mostrarFinanceiro = false,
+}: {
+  companyId: string;
+  // Financeiro fica fora pra EMISSOR (recepção de clínica) — quem decide é o
+  // layout, que conhece o papel. Mesmo critério de pode_financeiro() na RLS.
+  mostrarFinanceiro?: boolean;
+}) {
   const pathname = usePathname();
   const base = `/empresas/${companyId}`;
   const tabs = [
@@ -12,6 +20,9 @@ export function CompanyTabs({ companyId }: { companyId: string }) {
     { href: `${base}/notas`, label: "Notas" },
     { href: `${base}/tomadores`, label: "Tomadores" },
     { href: `${base}/precificacao`, label: "Precificação" },
+    ...(mostrarFinanceiro
+      ? [{ href: `/financeiro/empresas/${companyId}`, label: "Financeiro" }]
+      : []),
   ];
 
   return (

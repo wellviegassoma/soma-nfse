@@ -2041,6 +2041,289 @@ servidor (concluído, 2026-08-31)**
       seguro adivinhar isso numa declaração com efeito legal real, mesma
       lição do MIT acima
 
+**Fase AA — Módulo Financeiro, fundação (F1) (concluído e validado ao vivo,
+2026-09-07)**
+
+Início do módulo que vai **substituir o Nibo Gestão Financeira** — na SOMA e
+nos clientes. Especificação completa em [`docs/financeiro.md`](docs/financeiro.md),
+escrita a partir de um levantamento do Nibo real (conta SOMA, navegando as
+telas) + a API pública (`nibo.readme.io`).
+
+- [x] Papel novo `ANALISTA_FINANCEIRO` em migration própria
+      (`20260907140000_fase_aa_papel_financeiro.sql`) — mesmo motivo de
+      `fase_o_papeis_analistas`: valor de enum novo não pode ser usado na
+      mesma transação em que é criado
+- [x] `20260907141000_fase_aa_financeiro_fundacao.sql`: `fin_contatos`,
+      `fin_categorias`, `fin_centros_custo`, a função
+      `fin_seed_categorias_padrao()` e as policies
+- [x] **Diferença de RLS em relação a Legalização e Extratos.** Naqueles dois
+      a policy é `is_soma_staff() or is_<modulo>_analista()` — grosseira, sem
+      recorte por empresa, porque cliente nenhum entra. No Financeiro o
+      cliente entra e vê o próprio dinheiro, então toda policy passa por
+      `pode_financeiro(company_id)` (staff SOMA, analista financeiro, ou
+      `ADMIN_CLIENTE` da própria empresa). **`EMISSOR` fica de fora de
+      propósito** — recepção de clínica não deve ver saldo, fornecedor nem
+      folha
+- [x] **Conta bancária não foi duplicada**: `extrato_contas_bancarias` (do
+      módulo Extratos) virou o cadastro canônico e só ganhou `tipo`,
+      `saldo_inicial` e `data_saldo_inicial`. Consequência: a policy dela foi
+      ampliada pra deixar o cliente ver as próprias contas — antes era só
+      staff + analista contábil. `extratos_mensais` (controle de ENTREGA do
+      extrato pro setor contábil) continua interno, sem acesso de cliente
+- [x] Categorias são **por empresa** e o cliente também edita (decisão do
+      Wellington). Cada empresa nasce com o plano padrão nos 4 grupos da DFC,
+      semeado sob demanda ao abrir o módulo — não em massa nas ~215 empresas,
+      já que só um punhado usa financeiro. As de sistema (juros, multa,
+      desconto, retenções) não podem ser desativadas nem ter grupo/natureza
+      alterados, porque o cálculo do lançamento depende delas
+- [x] Telas: `/financeiro` (painel SOMA), `/financeiro/empresas/{id}` (resumo
+      + ativação), `/contatos`, `/config` (categorias e centros de custo).
+      Entrada pelo header do `/admin` e por uma aba "Financeiro" no painel do
+      cliente (escondida do EMISSOR)
+- [x] `next build` limpo, `tsc --noEmit` limpo, `eslint` limpo
+- [x] **Bug pego na verificação:** `pode_financeiro()` devolvia NULL (não
+      `false`) pra usuário sem vínculo — `user_company_role()` devolve NULL e
+      `NULL = 'ADMIN_CLIENTE'` é NULL, então `false or false or NULL` = NULL.
+      Na RLS já negava (policy que avalia NULL não libera a linha), então
+      nunca houve brecha; o risco era futuro, porque em plpgsql
+      `if not pode_financeiro(x) then raise` NÃO dispara com NULL — falharia
+      ABERTA. Corrigido com `coalesce(..., false)` em
+      `20260907142000_fase_aa_pode_financeiro_estrito.sql`
+- [x] **Aplicado em produção** (`supabase db push`, projeto
+      `ufmagkrdktkqwgvdolbi`) e validado ao vivo com sessão real:
+      **Extratos continua funcionando** (lista as 289 empresas e as contas
+      normalmente — era a única regressão possível, já que a policy de
+      `extrato_contas_bancarias` mudou); ativação da SOMA Contabilidade
+      Integrada semeou as 36 categorias nos 4 grupos; a tela de configuração
+      mostra "Inativar" só nas não-sistema; criação de contato gravou e a
+      lista atualizou (registro de teste apagado em seguida)
+- [ ] Fases seguintes (ver `docs/financeiro.md`): F2 lançamentos, F3 extrato e
+      conciliação (OFX/CSV/PDF), F4 relatórios, F5 cobrança, F6 migração do Nibo
+
+**Fase AB — Módulo Financeiro, F2: agendamentos e lançamentos (concluído e
+validado ao vivo, 2026-09-07)**
+
+O miolo que substitui o dia a dia do Nibo. Migration
+`20260907150000_fase_ab_financeiro_lancamentos.sql`, aplicada em produção.
+
+- [x] `fin_agendamentos` (a conta a pagar/receber), `fin_agendamento_categorias`
+      e `fin_agendamento_centros_custo` (rateio), `fin_lancamentos` (a baixa),
+      `fin_transferencias`, `fin_recorrencias`, `fin_anexos`
+- [x] **Agendamento não é lançamento.** Um agendamento aceita baixa parcial e
+      várias baixas — foi o achado central do levantamento do Nibo. `status` e
+      `valor_liquidado` são mantidos por trigger a partir da soma dos
+      lançamentos, nunca escritos à mão, pra "em aberto" jamais divergir do que
+      foi realmente baixado
+- [x] **Desvio deliberado da spec:** retenções (7 campos) e ajustes (desconto,
+      juros, multa) viraram COLUNAS do agendamento em vez de tabelas filhas —
+      são valores únicos, não listas. Isso permitiu `valor_liquido` ser
+      `GENERATED ALWAYS`, eliminando a chance de o líquido divergir das parcelas
+- [x] `fin_lancamentos.valor` guarda o SINAL (entra positivo, sai negativo), o
+      que faz saldo virar um `sum()` puro. `fin_saldo_conta(conta, ate)` calcula
+      saldo_inicial + lançamentos
+- [x] **Cálculo de retenção — o que o Nibo não faz.** `lib/financeiro-retencoes.ts`
+      sugere IRRF 1,5% ou 1%, CSRF 4,65% (com a dispensa de R$ 10,00 da
+      Lei 13.137/2015) e INSS 11% de cessão de mão de obra, tratando prestador
+      do Simples como dispensado de IRRF/CSRF. É **sugestão**, sempre editável e
+      com as notas explicando o que foi e o que não foi aplicado — alíquota de
+      ISS é municipal e não se chuta
+- [x] Parcelamento divide bruto e retenções entre as parcelas com a sobra de
+      centavos na PRIMEIRA, e soma meses preservando fim de mês (31/01 + 1 mês
+      = 28/02, não 03/03) em UTC pra a data não escorregar por fuso
+- [x] Telas `/pagar`, `/receber` (mesmo componente, muda o sinal), `/contas`
+      (saldos + transferência entre contas)
+- [x] **Validado ao vivo, ponta a ponta** (dados de teste apagados depois):
+      agendamento de R$ 1.000 em serviços profissionais → calculadora preencheu
+      IRRF 15,00 / CSLL 10,00 / PIS 6,50 / COFINS 30,00; 3 parcelas saíram
+      333,34 + 333,33 + 333,33 (soma exata) vencendo 30/09, 30/10 e 30/11;
+      total em aberto R$ 938,50 = 1.000 − 61,50 de retenção. Baixa parcial de
+      R$ 100 deixou a parcela em PARCIAL com R$ 212,84 em aberto e escondeu o
+      botão Cancelar; baixa do restante virou LIQUIDADO e saiu da lista; o
+      lançamento gravou com sinal negativo e `fin_saldo_conta` devolveu
+      exatamente R$ 687,16
+- [ ] Fora desta rodada: anexos na tela, rateio de mais de uma categoria por
+      agendamento (o schema aguenta, a UI ainda manda uma só), e "pagamento não
+      agendado" pela interface
+
+**Fase AB (parte 2) — Recorrência contínua (concluído e validado ao vivo,
+2026-09-07)**
+
+A F2 tinha entregue só PARCELAMENTO. Faltava o caso mais comum do escritório —
+aluguel, honorário, mensalidade — que o Wellington sinalizou como importante.
+Migration `20260907160000_fase_ab_recorrencia_continua.sql`, aplicada em produção.
+
+- [x] `fin_recorrencias` ganhou o MODELO do agendamento (contato, categoria,
+      centro de custo, valor, retenções, descrição) + `data_inicio`,
+      `data_fim` (opcional), `gerado_ate` e `horizonte_meses` (padrão 12)
+- [x] `fin_gerar_recorrencias(company_id)` gera as ocorrências faltantes até o
+      horizonte. Idempotente (continua de `gerado_ate`), com trava de 500 linhas
+      por chamada pra frequência semanal não virar um laço gigante
+- [x] **Cada ocorrência é `data_inicio + n passos`, nunca "a anterior + 1
+      passo".** Somando de uma em uma, um vencimento dia 31 vira 28/02 e fica
+      preso no 28 pra sempre. Ancorado na data inicial, volta pro 31 nos meses
+      que têm 31 — validado ao vivo: 31/01, 28/02, **31/03**, 30/04, 31/05,
+      30/06, 31/07, 31/08...
+- [x] Dois caminhos de geração, de propósito: gera na criação (o usuário vê o
+      efeito na hora) e o cron diário `/api/cron/financeiro-recorrencias`
+      (05:00, registrado no `vercel.json`) completa. Com horizonte de 12 meses,
+      se o cron parar ninguém fica sem conta agendada no dia seguinte — a falha
+      é visível e sem urgência, em vez de silenciosa e imediata
+- [x] Cron reaproveita a checagem de `CRON_SECRET` em tempo constante do
+      `sync-notas` (falha fechado se o segredo não estiver configurado)
+- [x] UI: seção "Recorrências" nas telas de pagar/receber — criar, listar
+      (mostrando até quando está agendado), Pausar/Reativar e "Gerar agora".
+      Reativar dispara a geração na hora, senão o usuário acharia que não funcionou
+- [x] **Validado ao vivo** (dados apagados depois): recorrência mensal de
+      R$ 2.500 começando 31/01/2026 gerou 20 ocorrências até 31/08/2027 com os
+      20 rateios de categoria, `gerado_ate` correto, rodar de novo criou 0
+      (idempotência), e Pausar gravou `ativa = false`
+
+**Fase AC — Módulo Financeiro, F3: extrato e conciliação (concluído e validado
+ao vivo, 2026-09-07)**
+
+Fecha o ciclo de caixa: até aqui o sistema sabia o que DEVIA acontecer
+(agendamentos) e o que foi baixado à mão; agora entra o que o banco diz que
+aconteceu, e o casamento entre os dois. Migration
+`20260907170000_fase_ac_extrato_conciliacao.sql`, aplicada em produção.
+
+- [x] `fin_importacoes` (um arquivo importado, com contagem de novas ×
+      duplicadas), `fin_extrato_linhas` (a linha crua, nunca editada) e
+      `fin_conciliacoes` (n:n — um débito único pode quitar várias contas)
+- [x] **Parser de OFX** (`lib/extrato-import/ofx.ts`). OFX 1.x é SGML, não XML:
+      tag sem fechamento, data com fuso (`20260908120000[-3:BRT]`), e banco que
+      manda vírgula decimal contra a especificação. Por isso é parse por regex
+      sobre blocos `<STMTTRN>`, não parser de XML — que engasga na maioria dos
+      arquivos reais
+- [x] **Parser de CSV** (`lib/extrato-import/csv.ts`) com detecção de
+      cabeçalho, separador e aspas; aceita coluna única com sinal OU par
+      crédito/débito; entende "R$ 1.234,56", "(50,00)" e marcador "D"
+- [x] Dedupe por `(conta_id, hash_dedupe)`: FITID quando o OFX traz (é o id
+      que o próprio banco dá à transação), senão hash de data+valor+descrição
+      normalizada. Reimportar o mesmo período é rotina e não duplica
+- [x] Leitura em latin1 quando o utf-8 vem com caractere inválido — extrato
+      brasileiro costuma vir em latin1, e ler errado além de estragar acento
+      mudaria o hash de dedupe entre importações
+- [x] **Sugestão de conciliação**: mesmo sentido (débito casa com conta a
+      pagar), valor em aberto exato e vencimento até 3 dias da data do extrato.
+      Nunca aplica sozinha — conciliação errada suja saldo e contabilidade ao
+      mesmo tempo, e desfazer depois custa mais que conferir agora
+- [x] Conciliar cria a baixa com a data e o valor que o BANCO informou, não os
+      do agendamento: se o banco pagou diferente do previsto, a conta fica
+      parcial, que é a verdade
+- [x] "Desfazer" apaga o lançamento, o que derruba a conciliação em cascata e
+      dispara os dois triggers (linha volta a PENDENTE, agendamento recalcula)
+- [x] **Dois bugs pegos por teste isolado dos parsers antes de ligar na UI**:
+      (1) um `` que escrevi virou byte de backspace literal no arquivo, então
+      as regexes de marcador de débito nunca casavam e a linha sumia calada;
+      (2) valor em formato internacional ("2500.00") era lido como 250.000,
+      porque o parser assumia formato brasileiro — erro de 100x que passaria
+      despercebido numa conciliação. Agora o separador decimal é detectado, e
+      linha com data válida mas valor ilegível vira aviso em vez de sumir
+- [x] **Validado ao vivo, ponta a ponta** (dados apagados depois): OFX com 3
+      transações importou 3; reimportar o mesmo arquivo trouxe "0 novos, 3 já
+      existiam"; a sugestão casou o débito de R$ 2.500 de 05/09 com a conta a
+      pagar de mesmo valor e data ("mesma data"); conciliar deixou o
+      agendamento LIQUIDADO, criou o lançamento de −2.500 e o saldo foi a
+      −2.500; Desfazer devolveu tudo (agendamento ABERTO, zero lançamentos,
+      saldo 0)
+- [ ] Fora desta rodada: **import de PDF por IA** (o Nibo lançou agora, é o
+      terceiro caminho previsto na spec), conciliação em lote, agrupamento de
+      várias linhas num lançamento só, e import de maquininha
+
+**Fase AD — Módulo Financeiro, F4: fluxo de caixa e painel de acompanhamento
+(concluído e validado ao vivo, 2026-09-07)**
+
+Os dois relatórios que o cliente realmente olha. Sem migration: é tudo leitura
+sobre o que as fases AB/AC já gravam.
+
+- [x] `lib/financeiro-relatorios.ts` com funções PURAS (recebem as linhas já
+      lidas, devolvem a matriz pronta, não tocam em Supabase) — é o que permite
+      testar a aritmética isolada, que é a parte que erra em silêncio
+- [x] **Painel de acompanhamento** (DRE gerencial): categorias em linha, meses
+      em coluna, agrupadas pelos 4 grupos da DFC, com alternador
+      **Caixa × Competência**
+- [x] Competência = mês do vencimento, pago ou não; cancelado fora. Caixa = mês
+      em que o dinheiro se moveu, com **baixa parcial rateada entre as
+      categorias na mesma proporção do rateio original** (pagar metade de uma
+      conta dividida 60/40 lança 60/40 da metade, não o total na primeira)
+- [x] **Transferência entre contas próprias fica fora do painel** — mover
+      dinheiro do Itaú pro Bradesco não é receita nem despesa, e contar isso
+      inflaria o relatório dos dois lados
+- [x] O sinal vem do TIPO do agendamento (receber soma, pagar subtrai), não da
+      natureza da categoria: uma categoria "entrada" usada num agendamento a
+      pagar (retenção retida, desconto obtido) continua sendo redução de saída
+- [x] **Fluxo de caixa projetado** 12 meses a partir do saldo atual, usando
+      `previsto_para` quando existe e o vencimento quando não — a diferença
+      entre "quando vence" e "quando eu realmente espero pagar" é o que decide
+      se o caixa aguenta. Conta **vencida entra inteira no primeiro mês**:
+      ela vai ser paga, e fingir que não existe é o jeito mais fácil de
+      projetar um caixa que não existe. Alerta no topo quando o saldo fica
+      negativo, dizendo em qual mês
+- [x] **Bug corrigido de quebra:** eu tinha usado `new Date().toISOString()`
+      em três lugares do módulo pra pegar "hoje". Isso é UTC — às 21h no Brasil
+      já devolve o dia seguinte, e contas venceriam "hoje" um dia antes do que
+      deveriam. Trocado por `hojeBrasilia()` no servidor e
+      `toLocaleDateString("en-CA")` no cliente (o próprio `lib/competencia.ts`
+      já documentava essa pegadinha)
+- [x] **Validado ao vivo** (dados apagados depois), com cenário montado pra
+      exercitar os casos difíceis: receber 10.000 baixado integral, pagar 2.500
+      rateado 1.500/1.000 com baixa PARCIAL de 1.250, transferência de 3.000
+      entre duas contas, e uma conta de 40.000 vencendo no mês seguinte.
+      Caixa mostrou 750/500 (o rateio proporcional da baixa parcial) e ignorou
+      a transferência, fechando em 8.750; Competência mostrou 1.500/1.000
+      inteiros, fechando em 7.500; o fluxo partiu do saldo real de 13.750 e
+      projetou −27.500 em 10/26, com o alerta de caixa negativo
+- [ ] Fora desta rodada: filtro por centro de custo, coluna
+      Realizado × Orçado (depende de `fin_orcamento`, previsto pra F6),
+      exportação em CSV/PDF e gráfico
+
+**Fase AE — Módulo Financeiro, F5: cobrança (concluído e validado ao vivo,
+2026-09-07)**
+
+Boleto ficou FORA por decisão do Wellington (a SOMA não emite boleto pelo Nibo
+hoje), então esta fase é régua de cobrança + vínculo com a NFS-e. Migration
+`20260907180000_fase_ae_cobranca.sql`, aplicada em produção.
+
+- [x] **Não existe `fin_faturas`.** Uma fatura É uma conta a receber; criar
+      tabela separada duplicaria o conceito e obrigaria todo relatório a somar
+      dois lugares. O que a conta a receber ganhou foi `dps_id`, com índice
+      único parcial — uma nota não pode ser vinculada a duas contas
+- [x] **A emissão da NFS-e NÃO foi duplicada.** Emitir nota tem efeito legal e
+      já existe um caminho validado ponta a ponta (`issueNfse` / tela Emitir
+      Nota). Aqui só se VINCULA uma nota já emitida — criar um segundo lugar
+      onde uma nota fiscal errada pode nascer não valeria a conveniência
+- [x] `fin_cobranca_etapas` guarda a régua com dias RELATIVOS ao vencimento
+      (−3 = três dias antes, 0 = no dia, +7 = uma semana de atraso). Relativo,
+      e não data absoluta, é o que faz a mesma régua valer pra toda conta
+- [x] Régua padrão de 6 etapas semeada sob demanda por empresa
+      (`fin_seed_cobranca_padrao`), com placeholders `{cliente}`, `{valor}`,
+      `{vencimento}`, `{descricao}`, `{dias_atraso}`, `{empresa}`
+- [x] **O sistema não envia nada sozinho** — o projeto não tem provedor de
+      e-mail configurado. Ele diz quem cobrar hoje, monta a mensagem e oferece
+      "copiar"; quem envia é o operador, e o registro do envio é o que faz a
+      régua andar. Está dito na tela, não escondido
+- [x] **Bug de comportamento pego em teste isolado da régua:** a versão
+      original caía pra etapas anteriores ainda não enviadas. Na prática,
+      depois de mandar o aviso de 7 dias o sistema mandaria o de 3 no dia
+      seguinte — a cobrança REGREDIRIA de tom, e o cliente receberia um
+      lembrete gentil depois da notificação séria. Corrigido: só entram etapas
+      mais avançadas que a última já registrada. Etapa pulada fica pulada
+- [x] Devolve NO MÁXIMO UMA etapa por conta: conta 20 dias atrasada sem
+      cobrança nenhuma recebe o aviso de 15 dias, não os quatro de uma vez
+- [x] **Validado ao vivo** (dados apagados depois) com três contas em estágios
+      diferentes: a de 19 dias de atraso pegou "Contato direto" (15 dias), a
+      que vence em 1 dia pegou o lembrete de −3, e a de 4 dias não pegou nada.
+      Registrar a cobrança da primeira tirou ela da lista sem voltar pros
+      avisos de 3 ou 7 dias. Vínculo de NFS-e testado contra uma nota real
+      (conferido depois que a `dps` não foi alterada em nada)
+- [ ] Fora desta rodada: envio automático (precisa de provedor de e-mail —
+      Resend/SES — e, pra WhatsApp, API oficial), cobrança em lote, e boleto
+      (fora do escopo por decisão do usuário)
+
+Observação: a régua padrão da SOMA Contabilidade Integrada ficou criada no
+banco (é a configuração default, editável pela própria tela). As contas e o
+contato de teste foram apagados.
+
 ## Backend (Fase C em diante)
 
 ```bash

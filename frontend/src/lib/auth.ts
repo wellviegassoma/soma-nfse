@@ -86,6 +86,30 @@ export async function requireExtratosAccess() {
   if (!ok) redirect("/");
 }
 
+// Financeiro é o único módulo que staff e cliente usam sobre o MESMO dado
+// sensível (saldo, fornecedor, folha). Espelha exatamente a função
+// pode_financeiro() da RLS — se as duas divergirem, a RLS é quem manda, e o
+// usuário vê a tela mas com a lista vazia.
+//
+// Diferente de requirePrecificacaoAccess, "qualquer vínculo" NÃO basta:
+// EMISSOR (recepção de clínica, que só emite nota) fica de fora de propósito.
+export async function requireFinanceiroAccess(companyId?: string) {
+  await requireUser();
+  const companies = await getUserCompanies();
+  const staffOuAnalista = companies.some(
+    (c) =>
+      c.role === "SUPER_ADMIN" ||
+      c.role === "ADMIN_SOMA" ||
+      c.role === "ANALISTA_FINANCEIRO",
+  );
+  if (staffOuAnalista) return;
+
+  // Cliente: só a própria empresa, e só quem administra a empresa.
+  if (!companyId) redirect("/");
+  const access = companies.find((c) => c.company_id === companyId);
+  if (access?.role !== "ADMIN_CLIENTE") redirect("/");
+}
+
 // Precificação é usada lado a lado por staff e cliente (ambos editam o
 // mesmo catálogo) — diferente de requireLegalizacaoAccess/requireExtratosAccess,
 // que restringem a papéis específicos de analista. Aqui basta ter algum
