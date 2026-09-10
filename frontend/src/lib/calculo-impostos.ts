@@ -358,8 +358,18 @@ export function calcularImpostoResumo(params: {
       apuracaoMensal: params.apuracaoMensal,
       issMensal: params.issMensal,
     });
+    // No mês de fechamento do trimestre, `r.total` inclui o adicional de
+    // 10% de IRPJ apurado sobre a base do TRIMESTRE inteiro (ver
+    // `calcularLucroPresumido`), não só a fatia do mês — dividir esse
+    // total pela receita só desse mês produz uma "alíquota" sem sentido
+    // sempre que o faturamento do mês de fechamento for baixo perto dos
+    // outros dois do trimestre (chegou a passar de 500% em casos reais).
+    // A receita do trimestre é a base compatível com esse numerador.
+    const receitaBaseAliquota = params.ehUltimoMesDoTrimestre
+      ? params.receitaTrimestre
+      : params.receitaMes;
     return {
-      aliquotaEfetiva: params.receitaMes > 0 ? r.total / params.receitaMes : 0,
+      aliquotaEfetiva: receitaBaseAliquota > 0 ? r.total / receitaBaseAliquota : 0,
       valor: r.total,
     };
   }
