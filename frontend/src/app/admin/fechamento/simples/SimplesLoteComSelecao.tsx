@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { EnviarSimplesLoteButton } from "./EnviarSimplesLoteButton";
 import { BaixarGuiasSimplesLoteButton } from "./BaixarGuiasSimplesLoteButton";
+import { FecharAntecipadoLoteButton } from "./FecharAntecipadoLoteButton";
 
 export type LinhaSimples = {
   id: string;
@@ -20,6 +21,10 @@ export type LinhaSimples = {
   dasLiquido: number;
   bloqueios: string[];
   jaEnviado: boolean;
+  // Etapa 6 da Rotina de Fechamento (Automação) — Anexo III fixo, sem
+  // Fator R, não depende do resto do mês pra fechar antes.
+  podeFecharAntes: boolean;
+  jaFechada: boolean;
 };
 
 function formatMoney(value: number) {
@@ -72,6 +77,13 @@ export function SimplesLoteComSelecao({
     () => linhas.filter((l) => selecionados.has(l.id)).map((l) => ({ id: l.id, nome: l.nome })),
     [linhas, selecionados],
   );
+  const empresasParaFechar = useMemo(
+    () =>
+      linhas
+        .filter((l) => selecionados.has(l.id) && l.podeFecharAntes && !l.jaFechada)
+        .map((l) => ({ id: l.id, nome: l.nome })),
+    [linhas, selecionados],
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -88,6 +100,7 @@ export function SimplesLoteComSelecao({
               periodoApuracao={periodoApuracao}
               empresas={empresasParaBaixar}
             />
+            <FecharAntecipadoLoteButton competencia={competencia} empresas={empresasParaFechar} />
           </div>
         </div>
         <p className="mt-3 text-xs text-foreground/50">
@@ -159,6 +172,20 @@ export function SimplesLoteComSelecao({
                       <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">
                         enviado
                       </span>
+                    )}
+                    {linha.jaFechada ? (
+                      <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">
+                        fechada
+                      </span>
+                    ) : (
+                      linha.podeFecharAntes && (
+                        <span
+                          className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-900"
+                          title="Anexo III fixo, sem Fator R — não depende do resto do mês pra fechar"
+                        >
+                          pode fechar antes
+                        </span>
+                      )
                     )}
                     {linha.bloqueios.length > 0 && (
                       <span

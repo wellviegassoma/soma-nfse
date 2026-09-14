@@ -40,6 +40,16 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
     .not("cnpj", "is", null)
     .order("legal_name");
 
+  // Etapa 6 da Rotina de Fechamento: quem já fechou essa competência
+  // antecipadamente (Anexo III fixo, sem Fator R) — ver
+  // lib/rotina-fechamento/elegiveis-fechamento.ts pro mesmo critério
+  // usado na aba Automação.
+  const { data: fechadas } = await supabase
+    .from("fechamentos_mensais")
+    .select("company_id")
+    .eq("competencia", competencia);
+  const fechadasSet = new Set((fechadas ?? []).map((f) => f.company_id));
+
   const linhas = await Promise.all(
     (companies ?? []).map(async (company) => {
       let jaEnviado = false;
@@ -121,6 +131,8 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
         dasLiquido: liquido.dasTotal,
         bloqueios: declaracao.bloqueios,
         jaEnviado,
+        podeFecharAntes: !company.sujeito_fator_r,
+        jaFechada: fechadasSet.has(company.id),
       };
     }),
   );

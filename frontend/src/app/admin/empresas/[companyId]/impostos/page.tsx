@@ -128,7 +128,11 @@ export default async function ImpostosPage(
   const guiaIssBotao = (
     <>
       {company.municipality_ibge_code === IBGE_RIO_DE_JANEIRO && (
-        <BuscarGuiaIssButton companyId={companyId} competencia={competencia} />
+        <BuscarGuiaIssButton
+          companyId={companyId}
+          competencia={competencia}
+          faturamentoSoma={receitaMes}
+        />
       )}
       {company.municipality_ibge_code === IBGE_PETROPOLIS && (
         <div className="flex flex-col gap-2">

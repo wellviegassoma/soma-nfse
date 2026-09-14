@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { buscarEmpresaPetropolis } from "../petropolis-empresa";
+import { createClient } from "@/lib/supabase/server";
+import { emitirGuiaIssPetropolis } from "@/lib/iss-petropolis";
 
 // Consolidação de período + emissão da guia são ações reais (criam a
 // declaração oficial no Petrópolis) — só chamado depois que o usuário
@@ -17,46 +18,18 @@ export async function POST(
     return NextResponse.json({ error: "Competência inválida." }, { status: 400 });
   }
 
-  const empresa = await buscarEmpresaPetropolis(companyId);
-  if (!empresa.ok) {
-    return NextResponse.json({ error: empresa.erro }, { status: empresa.status });
+  const supabase = await createClient();
+  const resposta = await emitirGuiaIssPetropolis(supabase, companyId, competencia);
+  if (!resposta.ok) {
+    return NextResponse.json({ error: resposta.erro }, { status: 502 });
   }
 
-  let response: Response;
-  try {
-    response = await fetch(`${process.env.NFSE_ENGINE_URL}/petropolis/consolidar-e-emitir-guia`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Internal-Token": process.env.NFSE_ENGINE_INTERNAL_TOKEN ?? "",
-      },
-      body: JSON.stringify({
-        cnpj: empresa.cnpj,
-        competencia,
-        login: empresa.loginProprio?.login,
-        senha_md5: empresa.loginProprio?.senhaMd5,
-      }),
-      cache: "no-store",
-    });
-  } catch {
-    return NextResponse.json({ error: "Não foi possível acessar o ISS de Petrópolis agora." }, { status: 502 });
-  }
-
-  if (!response.ok) {
-    const corpo = await response.json().catch(() => null);
-    const mensagem =
-      (corpo && typeof corpo.detail === "string" && corpo.detail) ||
-      "Não foi possível consolidar e gerar a guia agora.";
-    return NextResponse.json({ error: mensagem }, { status: 502 });
-  }
-
-  const pdfBytes = await response.arrayBuffer();
-  return new NextResponse(pdfBytes, {
+  return new NextResponse(resposta.pdfBytes, {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="guia-iss-petropolis-${competencia ?? "atual"}.pdf"`,
-      "X-Valor-Servicos": response.headers.get("X-Valor-Servicos") ?? "",
-      "X-Valor-Iss": response.headers.get("X-Valor-Iss") ?? "",
+      "X-Valor-Servicos": resposta.resumo.valorServicos.toFixed(2),
+      "X-Valor-Iss": resposta.resumo.valorIss.toFixed(2),
     },
   });
 }

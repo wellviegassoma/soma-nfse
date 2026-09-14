@@ -11,11 +11,15 @@ const PUBLIC_ROUTES = [
   "/redefinir-senha",
   "/api/financeiro/migrar-nibo",
 ];
-// /api/cron/ não usa sessão de usuário — autentica sozinha via
-// CRON_SECRET (ver route.ts), porque quem chama é o Vercel Cron, não um
-// navegador logado. Sem essa exceção, o middleware redireciona a
-// chamada pro /login antes de a rota conseguir checar o token.
-const PUBLIC_PREFIXES = ["/auth/", "/api/cron/"];
+// /api/cron/ e /api/rotina-fechamento/ não usam sessão de usuário — se
+// autenticam sozinhas via CRON_SECRET (ver route.ts de cada uma, e
+// lib/internal-auth.ts), porque quem chama pode ser o Vercel Cron ou uma
+// chamada direta (curl/chat), não um navegador logado. Sem essa exceção,
+// o middleware redireciona a chamada pro /login antes de a rota
+// conseguir checar o token — as rotas de rotina-fechamento ainda aceitam
+// staff logado normalmente (ver autorizarRotinaFechamento), essa
+// exceção só evita o redirect pra quem não tem sessão nenhuma.
+const PUBLIC_PREFIXES = ["/auth/", "/api/cron/", "/api/rotina-fechamento/"];
 
 function isPublicRoute(pathname: string) {
   return (

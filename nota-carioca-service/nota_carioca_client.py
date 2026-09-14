@@ -60,6 +60,7 @@ não é só leitura. Quem decide emitir é o usuário do SOMA clicando o botão
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from cryptography.hazmat.primitives.serialization import BestAvailableEncryption, pkcs12
 from lxml import html as lxml_html
@@ -124,6 +125,61 @@ def _extrair_link_guia(html: str, mes_alvo: int | None) -> str | None:
     return None
 
 
+def _para_decimal(texto_valor: str | None) -> float | None:
+    if not texto_valor:
+        return None
+    texto_valor = texto_valor.strip()
+    if not texto_valor or texto_valor == "*****":
+        return None
+    return float(texto_valor.replace(".", "").replace(",", "."))
+
+
+def _texto_por_id(tree: Any, id_: str) -> str | None:
+    elementos = tree.xpath(f"//*[@id='{id_}']")
+    return elementos[0].text_content().strip() if elementos else None
+
+
+def _extrair_valores_guia(html: str) -> dict:
+    """
+    A tela de confirmação (guianacional.aspx) tem duas estruturas
+    diferentes, confirmadas ao vivo contra empresas reais (13/09/2026):
+
+    - Sociedade Uniprofissional (LC 116/2003 art. 9º §§1-3 — ISS fixo por
+      profissional, não depende da receita): campos
+      `lblQtdProfissionais`/`lblValorISSGuia`, SEM base de cálculo/valor
+      de serviços. Mesmo conceito que `company.iss_tipo === "FIXO"` já
+      usa em `resolverIssMensal` (frontend/src/lib/calculo-impostos.ts).
+    - Regime percentual (receita × alíquota): campos
+      `lblVSTotal`/`lblBCTotal`/`lblISSTotal`, sob um controle aninhado
+      `ctrlGuiaDados` — usa esses pra conferir contra o faturamento do
+      SOMA. Mesmo conceito que `company.iss_tipo === "PERCENTUAL"`.
+    """
+    tree = lxml_html.fromstring(html)
+
+    qtd_profissionais = _texto_por_id(tree, "ctl00_cphCabMenu_lblQtdProfissionais")
+    if qtd_profissionais is not None:
+        return {
+            "regime": "FIXO",
+            "quantidade_profissionais": int(qtd_profissionais),
+            "valor_iss": _para_decimal(_texto_por_id(tree, "ctl00_cphCabMenu_lblValorISSGuia")),
+            "valor_total": _para_decimal(_texto_por_id(tree, "ctl00_cphCabMenu_lblValorTotal")),
+        }
+
+    valor_servicos = _texto_por_id(tree, "ctl00_cphCabMenu_lblVSTotal")
+    if valor_servicos is not None:
+        return {
+            "regime": "PERCENTUAL",
+            "valor_servicos": _para_decimal(valor_servicos),
+            "base_calculo": _para_decimal(_texto_por_id(tree, "ctl00_cphCabMenu_lblBCTotal")),
+            "valor_iss": _para_decimal(_texto_por_id(tree, "ctl00_cphCabMenu_lblISSTotal")),
+            "valor_total": _para_decimal(_texto_por_id(tree, "ctl00_cphCabMenu_lblValorTotal")),
+        }
+
+    raise ErroNotaCarioca(
+        "Não foi possível identificar o formato da guia — a estrutura do site pode ter mudado."
+    )
+
+
 class ClienteNotaCarioca:
     """
     Sessão autenticada no Nota Carioca via certificado A1, usando um
@@ -133,7 +189,7 @@ class ClienteNotaCarioca:
 
     Uso:
         with ClienteNotaCarioca(pfx_bytes, senha) as cliente:
-            pdf_bytes = cliente.buscar_guia_iss("2026-08")
+            pdf_bytes, valores = cliente.buscar_guia_iss("2026-08")
     """
 
     def __init__(self, pfx_bytes: bytes, senha: str):
@@ -208,7 +264,7 @@ class ClienteNotaCarioca:
         if "encerrar" not in self._page.inner_text("body", timeout=15_000).lower():
             raise ErroNotaCarioca("Login não completou — sessão autenticada não foi criada.")
 
-    def buscar_guia_iss(self, competencia: str | None = None) -> bytes:
+    def buscar_guia_iss(self, competencia: str | None = None) -> tuple[bytes, dict]:
         mes_alvo: int | None = None
         ano_alvo: int | None = None
         if competencia:
@@ -228,6 +284,7 @@ class ClienteNotaCarioca:
         href = href.replace("&amp;", "&")
 
         self._page.goto(f"{BASE_URL}/contribuinte/{href}", timeout=45_000, wait_until="load")
+        valores = _extrair_valores_guia(self._page.content())
 
         # Tela de confirmação em guianacional.aspx — o botão muda conforme
         # a guia já existe ou não:
@@ -266,4 +323,4 @@ class ClienteNotaCarioca:
         caminho_baixado = download_info.value.path()
         if caminho_baixado is None:
             raise ErroNotaCarioca("O download do PDF da guia falhou.")
-        return Path(caminho_baixado).read_bytes()
+        return Path(caminho_baixado).read_bytes(), valores

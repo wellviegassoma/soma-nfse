@@ -12,6 +12,7 @@ const TABS: Tab[] = [
   { href: "/admin/certificados", label: "Certificados" },
   { href: "/admin/precificacao-modelos", label: "Modelos de Precificação" },
   { href: "/admin/fechamento", label: "Fechamento" },
+  { href: "/admin/automacao", label: "Automação" },
   { href: "/admin/erros", label: "Erros" },
   { href: "/admin/logs", label: "Logs" },
   { href: "/admin/chat", label: "Chat IA" },
