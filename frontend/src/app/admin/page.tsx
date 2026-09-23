@@ -45,70 +45,91 @@ type DpsRow = {
   nfse: { status: string; access_key: string | null } | { status: string; access_key: string | null }[] | null;
 };
 
-type NotaDistribuidaRow = {
+type AgregadoDistribuidasRow = {
   company_id: string;
-  chave_acesso: string | null;
-  valor_servico: number | null;
-  competencia: string | null;
-  cancelada: boolean;
-  direcao: string;
-  equiparacao_hospitalar: boolean;
-};
-
-// Uma nota emitida pelo próprio soma-nfse, uma vez processada pelo
-// Sefin Nacional, também aparece em notas_distribuidas quando
-// sincronizada (mesma chave_acesso) — sem isso, contaria duas vezes.
-type NotaUnificada = {
-  companyId: string;
   competencia: string;
-  valor: number;
-  cancelada: boolean;
-  chaveAcesso: string | null;
-  equiparacaoHospitalar: boolean;
+  faturamento: number;
+  faturamento_hospitalar: number;
+  notas_count: number;
+  notas_canceladas_count: number;
 };
 
-function unificarNotasDeSaida(dpsRows: DpsRow[], distribuidas: NotaDistribuidaRow[]): NotaUnificada[] {
-  // equiparacao_hospitalar só existe em notas_distribuidas — ver
-  // comentário equivalente em lib/faturamento.ts.
-  const equiparacaoPorChave = new Map<string, boolean>();
-  for (const d of distribuidas) {
-    if (d.chave_acesso) equiparacaoPorChave.set(d.chave_acesso, d.equiparacao_hospitalar);
+type MesAgregado = {
+  faturamento: number;
+  faturamentoHospitalar: number;
+  notasCount: number;
+  canceladasCount: number;
+};
+
+// notas_distribuidas já passou de 34 mil linhas — trazer tudo pro Next.js
+// e somar em JS (como era antes) chegou a travar o painel (statement
+// timeout). dashboard_agregado_notas_distribuidas() faz a soma por
+// empresa/mês direto no Postgres (menos de mil linhas de volta,
+// independente de quantas notas existem). Uma nota emitida pelo próprio
+// soma-nfse, uma vez processada pelo Sefin Nacional, também aparece em
+// notas_distribuidas quando sincronizada (mesma chave_acesso) — pra não
+// contar duas vezes, a RPC recebe a lista de chaves já cobertas por dps e
+// as exclui da soma; a contribuição dessas poucas notas (dps é uma tabela
+// pequena) é somada aqui em JS.
+function extrairChavesDps(dpsRows: DpsRow[]): string[] {
+  const chaves: string[] = [];
+  for (const nota of dpsRows) {
+    if (nota.status !== "ACCEPTED") continue;
+    const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
+    const chaveAcesso = nfseArr[0]?.access_key ?? null;
+    if (chaveAcesso) chaves.push(chaveAcesso);
+  }
+  return chaves;
+}
+
+function montarAgregadoPorMes(
+  dpsRows: DpsRow[],
+  agregadoDistribuidas: AgregadoDistribuidasRow[],
+  equiparacaoPorChave: Map<string, boolean>,
+): Map<string, Map<string, MesAgregado>> {
+  const porEmpresaPorMes = new Map<string, Map<string, MesAgregado>>();
+
+  function obterOuCriar(companyId: string, mes: string): MesAgregado {
+    let porMes = porEmpresaPorMes.get(companyId);
+    if (!porMes) {
+      porMes = new Map();
+      porEmpresaPorMes.set(companyId, porMes);
+    }
+    let agr = porMes.get(mes);
+    if (!agr) {
+      agr = { faturamento: 0, faturamentoHospitalar: 0, notasCount: 0, canceladasCount: 0 };
+      porMes.set(mes, agr);
+    }
+    return agr;
   }
 
-  const vistos = new Set<string>();
-  const unificadas: NotaUnificada[] = [];
+  for (const row of agregadoDistribuidas) {
+    const agr = obterOuCriar(row.company_id, row.competencia);
+    agr.faturamento += Number(row.faturamento);
+    agr.faturamentoHospitalar += Number(row.faturamento_hospitalar);
+    agr.notasCount += Number(row.notas_count);
+    agr.canceladasCount += Number(row.notas_canceladas_count);
+  }
 
   for (const nota of dpsRows) {
     if (nota.status !== "ACCEPTED") continue; // rejeitada nunca teve chave_acesso — tratada à parte
     const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
     const chaveAcesso = nfseArr[0]?.access_key ?? null;
     const cancelada = nfseArr.some((n) => n.status === "CANCELADA");
-    if (chaveAcesso) vistos.add(chaveAcesso);
-    unificadas.push({
-      companyId: nota.company_id,
-      competencia: nota.data_competencia.slice(0, 7),
-      valor: Number(nota.valor),
-      cancelada,
-      chaveAcesso,
-      equiparacaoHospitalar: chaveAcesso ? (equiparacaoPorChave.get(chaveAcesso) ?? false) : false,
-    });
+    const equiparacaoHospitalar = chaveAcesso ? (equiparacaoPorChave.get(chaveAcesso) ?? false) : false;
+
+    const agr = obterOuCriar(nota.company_id, nota.data_competencia.slice(0, 7));
+    const valor = Number(nota.valor);
+    if (!cancelada) {
+      agr.faturamento += valor;
+      if (equiparacaoHospitalar) agr.faturamentoHospitalar += valor;
+      agr.notasCount += 1;
+    } else {
+      agr.canceladasCount += 1;
+    }
   }
 
-  for (const nota of distribuidas) {
-    if (nota.direcao !== "saida") continue;
-    if (nota.chave_acesso && vistos.has(nota.chave_acesso)) continue; // já contada via dps
-    if (nota.chave_acesso) vistos.add(nota.chave_acesso);
-    unificadas.push({
-      companyId: nota.company_id,
-      competencia: (nota.competencia ?? "").slice(0, 7),
-      valor: Number(nota.valor_servico ?? 0),
-      cancelada: nota.cancelada,
-      chaveAcesso: nota.chave_acesso,
-      equiparacaoHospitalar: nota.equiparacao_hospitalar,
-    });
-  }
-
-  return unificadas;
+  return porEmpresaPorMes;
 }
 
 const COMPETENCIA_REGEX = /^\d{4}-\d{2}$/;
@@ -126,17 +147,14 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
 
   const supabase = await createClient();
 
-  // Escala atual do produto é pequena (poucas empresas/notas) — busca
-  // tudo e agrega em JS. Se crescer muito, trocar por uma agregação SQL
-  // (RPC) em vez de trazer toda a tabela `dps` pro servidor Next.js.
-  // `dps` e `notas_distribuidas` são paginadas (`buscarTudoPaginado`)
-  // porque já cruzaram o limite padrão de 1000 linhas por requisição do
-  // PostgREST — sem isso, empresas com nota mais recente ficavam de fora
-  // silenciosamente assim que a tabela passava desse tamanho.
+  // dps é pequena — continua buscada inteira. notas_distribuidas já
+  // passou de 34 mil linhas e trazer tudo pro Next.js (como era antes)
+  // chegou a travar o painel (statement timeout) — a soma por
+  // empresa/mês agora acontece direto no Postgres (ver
+  // dashboard_agregado_notas_distribuidas na migration da fase AM).
   const [
     { data: companies },
-    todasNotas,
-    todasDistribuidas,
+    dpsRows,
     { data: folhas },
     { data: receitasManuais },
     { data: certificadosRaw },
@@ -154,13 +172,6 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
           .select("company_id, valor, status, data_competencia, nfse(status, access_key)")
           .range(from, to),
       ),
-      buscarTudoPaginado<NotaDistribuidaRow>((from, to) =>
-        supabase
-          .from("notas_distribuidas")
-          .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar")
-          .eq("direcao", "saida")
-          .range(from, to),
-      ),
       supabase.from("folha_mensal").select("company_id, competencia, valor, pro_labore, fgts"),
       supabase.from("receita_mensal_manual").select("company_id, competencia, valor"),
       supabase.from("certificates").select("company_id, expires_at"),
@@ -169,7 +180,27 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   const empresas = companies ?? [];
   const empresasPJ = empresas.filter((e) => e.person_type !== "PF").length;
   const empresasPF = empresas.filter((e) => e.person_type === "PF").length;
-  const notasUnificadas = unificarNotasDeSaida(todasNotas, todasDistribuidas);
+
+  // Uma nota emitida pelo próprio soma-nfse, uma vez processada pelo Sefin
+  // Nacional, também aparece em notas_distribuidas (mesma chave_acesso) —
+  // excluída da soma da RPC pra não contar duas vezes; sua contribuição
+  // (dps é pequena) entra em montarAgregadoPorMes.
+  const chavesDps = extrairChavesDps(dpsRows);
+  const [{ data: agregadoDistribuidas }, { data: equiparacaoRows }] = await Promise.all([
+    supabase.rpc("dashboard_agregado_notas_distribuidas", { p_chaves_excluir: chavesDps }),
+    chavesDps.length > 0
+      ? supabase.from("notas_distribuidas").select("chave_acesso, equiparacao_hospitalar").in("chave_acesso", chavesDps)
+      : Promise.resolve({ data: [] as { chave_acesso: string; equiparacao_hospitalar: boolean }[] }),
+  ]);
+  const equiparacaoPorChave = new Map<string, boolean>();
+  for (const row of equiparacaoRows ?? []) {
+    equiparacaoPorChave.set(row.chave_acesso, row.equiparacao_hospitalar);
+  }
+  const porEmpresaPorMesDetalhado = montarAgregadoPorMes(
+    dpsRows,
+    (agregadoDistribuidas ?? []) as AgregadoDistribuidasRow[],
+    equiparacaoPorChave,
+  );
 
   // Controle de certificado digital — vencidos ou vencendo nos próximos 45
   // dias, pra equipe não deixar passar a renovação (bloqueia emissão de
@@ -230,32 +261,28 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   let rejeitadasCompetenciaTotal = 0;
   let canceladasCompetenciaTotal = 0;
 
-  for (const nota of notasUnificadas) {
-    const agr = porEmpresa.get(nota.companyId) ?? vazio();
-    const naCompetencia = nota.competencia === competencia;
-
-    if (!nota.cancelada) {
-      agr.notasTotal += 1;
-      agr.faturamentoTotal += nota.valor;
-    }
-    if (naCompetencia) {
-      if (!nota.cancelada) {
-        agr.notasCompetencia += 1;
-        agr.faturamentoCompetencia += nota.valor;
-        if (nota.equiparacaoHospitalar) agr.faturamentoHospitalarCompetencia += nota.valor;
-        notasCompetenciaTotal += 1;
-        faturamentoCompetenciaTotal += nota.valor;
-      } else {
-        agr.notasCanceladasCompetencia += 1;
-        canceladasCompetenciaTotal += 1;
+  for (const [companyId, porMes] of porEmpresaPorMesDetalhado) {
+    const agr = porEmpresa.get(companyId) ?? vazio();
+    for (const [mes, dados] of porMes) {
+      // notasCount/faturamento já são só-não-cancelada (ver montarAgregadoPorMes).
+      agr.notasTotal += dados.notasCount;
+      agr.faturamentoTotal += dados.faturamento;
+      if (mes === competencia) {
+        agr.notasCompetencia += dados.notasCount;
+        agr.faturamentoCompetencia += dados.faturamento;
+        agr.faturamentoHospitalarCompetencia += dados.faturamentoHospitalar;
+        agr.notasCanceladasCompetencia += dados.canceladasCount;
+        notasCompetenciaTotal += dados.notasCount;
+        faturamentoCompetenciaTotal += dados.faturamento;
+        canceladasCompetenciaTotal += dados.canceladasCount;
       }
     }
-    porEmpresa.set(nota.companyId, agr);
+    porEmpresa.set(companyId, agr);
   }
 
   // Rejeitada é um conceito exclusivo de dps (nunca gera chave_acesso,
   // então nunca aparece em notas_distribuidas) — mantido à parte.
-  for (const nota of todasNotas) {
+  for (const nota of dpsRows) {
     if (nota.status !== "REJECTED") continue;
     if (nota.data_competencia.slice(0, 7) !== competencia) continue;
     const agr = porEmpresa.get(nota.company_id) ?? vazio();
@@ -266,22 +293,20 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
 
   // Receita por empresa/mês (não cancelada) — base pro RBT12 (Simples) e
   // pro trimestre (Lucro Presumido) de cada empresa na coluna de imposto.
+  // Derivados de porEmpresaPorMesDetalhado — só(get(mes) ?? 0) é usado
+  // adiante, então não faz diferença criar a entrada do mês mesmo quando
+  // o valor hospitalar é zero.
   const porEmpresaPorMes = new Map<string, Map<string, number>>();
-  // Só a fatia com equiparação hospitalar — o "geral" de cada mês é
-  // sempre porEmpresaPorMes(mes) - porEmpresaPorMesHospitalar(mes), não
-  // precisa de um terceiro mapa.
   const porEmpresaPorMesHospitalar = new Map<string, Map<string, number>>();
-  for (const nota of notasUnificadas) {
-    if (nota.cancelada) continue;
-    const porMes = porEmpresaPorMes.get(nota.companyId) ?? new Map<string, number>();
-    porMes.set(nota.competencia, (porMes.get(nota.competencia) ?? 0) + nota.valor);
-    porEmpresaPorMes.set(nota.companyId, porMes);
-
-    if (nota.equiparacaoHospitalar) {
-      const porMesHosp = porEmpresaPorMesHospitalar.get(nota.companyId) ?? new Map<string, number>();
-      porMesHosp.set(nota.competencia, (porMesHosp.get(nota.competencia) ?? 0) + nota.valor);
-      porEmpresaPorMesHospitalar.set(nota.companyId, porMesHosp);
+  for (const [companyId, porMes] of porEmpresaPorMesDetalhado) {
+    const faturamentoMap = new Map<string, number>();
+    const hospitalarMap = new Map<string, number>();
+    for (const [mes, dados] of porMes) {
+      faturamentoMap.set(mes, dados.faturamento);
+      hospitalarMap.set(mes, dados.faturamentoHospitalar);
     }
+    porEmpresaPorMes.set(companyId, faturamentoMap);
+    porEmpresaPorMesHospitalar.set(companyId, hospitalarMap);
   }
   const porEmpresaPorMesManual = new Map<string, Map<string, number>>();
   for (const r of receitasManuais ?? []) {
