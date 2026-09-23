@@ -12,13 +12,13 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 // Chamado por frontend/src/app/api/atendimento/mensagens/route.ts quando
 // um atendente manda mensagem pelo inbox.
 app.post("/enviar", exigirTokenInterno, async (req, res) => {
-  const { telefone, corpo } = req.body || {};
-  if (!telefone || !corpo) {
-    return res.status(400).json({ error: "Informe telefone e corpo." });
+  const { jid, telefone, corpo } = req.body || {};
+  if (!(jid || telefone) || !corpo) {
+    return res.status(400).json({ error: "Informe jid ou telefone, e corpo." });
   }
 
   try {
-    const whatsappMessageId = await enviarMensagem(telefone, corpo);
+    const whatsappMessageId = await enviarMensagem({ jid, telefone, corpo });
     res.json({ whatsapp_message_id: whatsappMessageId });
   } catch (err) {
     console.error("Falha ao enviar mensagem:", err.message);

@@ -61,22 +61,30 @@ async function buscarCompanyIdPorTelefone(supabase, telefone) {
   }
 }
 
-async function encontrarOuCriarContato(supabase, telefone, nomePush) {
+async function encontrarOuCriarContato(supabase, { telefone, jid, nomePush }) {
   const { data: existente, error: erroConsulta } = await supabase
     .from("atendimento_contatos")
-    .select("id, company_id")
+    .select("id, company_id, jid")
     .eq("conexao_id", CONEXAO_ID)
     .eq("telefone", telefone)
     .maybeSingle();
   if (erroConsulta) throw erroConsulta;
-  if (existente) return existente;
+  if (existente) {
+    // Auto-cura pra contato criado antes desta correção (sem jid
+    // guardado, então enviarMensagem não tinha pra onde responder) —
+    // preenche na próxima mensagem recebida em vez de exigir limpeza manual.
+    if (!existente.jid && jid) {
+      await supabase.from("atendimento_contatos").update({ jid }).eq("id", existente.id);
+    }
+    return existente;
+  }
 
   const companyId = await buscarCompanyIdPorTelefone(supabase, telefone);
 
   const { data: novo, error } = await supabase
     .from("atendimento_contatos")
-    .insert({ conexao_id: CONEXAO_ID, telefone, nome: nomePush || null, company_id: companyId })
-    .select("id, company_id")
+    .insert({ conexao_id: CONEXAO_ID, telefone, jid, nome: nomePush || null, company_id: companyId })
+    .select("id, company_id, jid")
     .single();
 
   if (error) {
@@ -86,7 +94,7 @@ async function encontrarOuCriarContato(supabase, telefone, nomePush) {
     if (error.code === CODIGO_VIOLACAO_UNICA) {
       const { data: jaExistente, error: erroRefetch } = await supabase
         .from("atendimento_contatos")
-        .select("id, company_id")
+        .select("id, company_id, jid")
         .eq("conexao_id", CONEXAO_ID)
         .eq("telefone", telefone)
         .single();
@@ -189,13 +197,19 @@ async function registrarMensagemRecebida(msg) {
   // propósito — vira ticket depois, se a SOMA decidir atender grupo.
   if (jid.endsWith("@g.us") || jid.endsWith("@broadcast")) return;
 
+  // O WhatsApp manda parte das conversas com remoteJid em @lid (Linked ID,
+  // identificador interno opaco) em vez de @s.whatsapp.net (telefone de
+  // verdade) — nos dois casos guardamos o jid completo, porque é ele que
+  // enviarMensagem usa pra responder. `telefone` (dígitos do que vier antes
+  // do @) continua só pra exibição/auto-match: pra @lid não é um telefone
+  // de verdade, mas é estável (mesmo contato sempre cai no mesmo valor).
   const telefone = digitosTelefone(jid.split("@")[0]);
   if (!telefone) return;
 
   const { corpo, midiaTipo } = extrairConteudo(msg);
   const supabase = obterCliente();
 
-  const contato = await encontrarOuCriarContato(supabase, telefone, msg.pushName);
+  const contato = await encontrarOuCriarContato(supabase, { telefone, jid, nomePush: msg.pushName });
   const ticketId = await encontrarOuCriarTicketAberto(supabase, contato.id);
 
   await inserirMensagemRecebida(supabase, {
@@ -277,12 +291,15 @@ async function iniciarConexao() {
   return socket;
 }
 
-async function enviarMensagem(telefoneDestino, corpo) {
+async function enviarMensagem({ jid, telefone, corpo }) {
   if (!socketAtual) {
     throw new Error("Conexão do WhatsApp ainda não está pronta.");
   }
-  const jid = `${digitosTelefone(telefoneDestino)}@s.whatsapp.net`;
-  const resultado = await socketAtual.sendMessage(jid, { text: corpo });
+  // Prefere o jid guardado (correto pra @lid e @s.whatsapp.net); só
+  // reconstrói a partir do telefone pra contato antigo, de antes desta
+  // correção, que ainda não teve o jid preenchido pela auto-cura.
+  const destino = jid || `${digitosTelefone(telefone)}@s.whatsapp.net`;
+  const resultado = await socketAtual.sendMessage(destino, { text: corpo });
   return resultado?.key?.id ?? null;
 }
 

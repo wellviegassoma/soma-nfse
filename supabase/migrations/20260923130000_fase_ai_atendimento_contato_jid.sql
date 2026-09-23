@@ -1,0 +1,14 @@
+-- Achado testando em produção: parte das conversas do WhatsApp chega com
+-- remoteJid em @lid (Linked ID, identificador interno opaco) em vez de
+-- @s.whatsapp.net (telefone de verdade) — o whatsapp-connector guardava só
+-- os dígitos extraídos do jid como se fosse sempre telefone, e reconstruía
+-- "digitos@s.whatsapp.net" pra responder. Pra contato @lid isso manda a
+-- resposta pra um endereço que não existe: a mensagem ficava marcada como
+-- ENVIADA (o Baileys aceita o envio) mas nunca chegava no destinatário.
+--
+-- Guarda o jid completo (com o sufixo, seja @lid ou @s.whatsapp.net) pra
+-- sempre responder pro endereço exato de onde a mensagem veio. `telefone`
+-- continua só pra exibição/auto-match — nullable de propósito, contato
+-- criado antes desta migration se autocura na próxima mensagem recebida
+-- (ver encontrarOuCriarContato em whatsapp-connector/src/baileys.js).
+alter table public.atendimento_contatos add column jid text;

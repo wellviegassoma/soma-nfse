@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: ticket, error: erroTicket } = await supabase
     .from("atendimento_tickets")
-    .select("id, status, contato:atendimento_contatos(telefone)")
+    .select("id, status, contato:atendimento_contatos(telefone, jid)")
     .eq("id", ticketId)
     .single();
   if (erroTicket || !ticket) {
@@ -53,9 +53,9 @@ export async function POST(request: Request) {
 
   const connectorUrl = process.env.WHATSAPP_CONNECTOR_URL;
   const connectorToken = process.env.WHATSAPP_CONNECTOR_INTERNAL_TOKEN;
-  const telefone = (ticket as unknown as { contato: { telefone: string } | null }).contato?.telefone;
+  const contato = (ticket as unknown as { contato: { telefone: string; jid: string | null } | null }).contato;
 
-  if (!connectorUrl || !connectorToken || !telefone) {
+  if (!connectorUrl || !connectorToken || !contato) {
     await supabase.from("atendimento_mensagens").update({ status: "FALHOU" }).eq("id", mensagem.id);
     return NextResponse.json(
       { error: "Conector do WhatsApp não configurado (WHATSAPP_CONNECTOR_URL)." },
@@ -64,10 +64,14 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Prefere o jid guardado (correto pra @lid e @s.whatsapp.net); o
+    // connector só reconstrói a partir do telefone pra contato antigo que
+    // ainda não teve o jid preenchido pela auto-cura — ver
+    // whatsapp-connector/src/baileys.js.
     const resposta = await fetch(`${connectorUrl}/enviar`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Internal-Token": connectorToken },
-      body: JSON.stringify({ telefone, corpo: corpo.trim() }),
+      body: JSON.stringify({ jid: contato.jid, telefone: contato.telefone, corpo: corpo.trim() }),
     });
     const dados = await resposta.json();
     if (!resposta.ok) throw new Error(dados.error || "Falha ao enviar mensagem.");
