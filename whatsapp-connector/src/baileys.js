@@ -2,7 +2,6 @@ const {
   default: makeWASocket,
   DisconnectReason,
   useMultiFileAuthState,
-  fetchLatestBaileysVersion,
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const QRCode = require("qrcode");
@@ -209,10 +208,15 @@ async function registrarMensagemRecebida(msg) {
 
 async function iniciarConexao() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-  const { version } = await fetchLatestBaileysVersion();
 
+  // Sem fetchLatestBaileysVersion() de propósito: essa chamada busca a
+  // versão mais recente do WhatsApp Web numa API externa, sem timeout —
+  // se a rede da hospedagem bloquear ou demorar, o processo fica
+  // pendurado pra sempre bem antes de qualquer log de erro aparecer. A
+  // versão embutida no pacote (usada quando `version` não é passado) é
+  // atualizada a cada release do @whiskeysockets/baileys, o que já bastou
+  // pro pareamento funcionar.
   const socket = makeWASocket({
-    version,
     auth: state,
     logger: pino({ level: "warn" }),
     browser: ["SOMA Atendimento", "Chrome", "1.0"],
