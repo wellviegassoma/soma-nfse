@@ -3,7 +3,6 @@ import { getCompanyAccess, getCurrentProfileName } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { ROLE_LABELS } from "@/lib/types";
 import { formatarDocumentoEmpresa } from "@/lib/formatters";
 import type { DpsListItem } from "@/lib/types";
 
@@ -24,7 +23,7 @@ export default async function CompanyDashboardPage(
 
   if (!access) return null; // o layout já redireciona antes de chegar aqui
 
-  const { company, role } = access;
+  const { company } = access;
 
   const supabase = await createClient();
   const { data: ultimasNotas } = await supabase
@@ -46,7 +45,7 @@ export default async function CompanyDashboardPage(
             Olá{userName ? `, ${userName.split(" ")[0]}` : ""}
           </h1>
           <p className="text-sm text-foreground/60">
-            {company.trade_name || company.legal_name} · {ROLE_LABELS[role]}
+            {company.trade_name || company.legal_name}
           </p>
         </div>
         <Link href={`/empresas/${companyId}/emitir`}>

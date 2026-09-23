@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requirePermissao } from "@/lib/auth";
 import { Card } from "@/components/ui/Card";
 
 export const metadata = { title: "Automação — Painel SOMA" };
@@ -6,7 +7,8 @@ export const metadata = { title: "Automação — Painel SOMA" };
 // Aba própria, separada de Fechamento — orquestra várias centrais em
 // sequência (ao contrário de Fechamento, que é uma central por vez).
 // Espaço já pensado pra outras rotinas entrarem aqui no futuro.
-export default function AutomacaoIndexPage() {
+export default async function AutomacaoIndexPage() {
+  await requirePermissao("fechamento.ver");
   return (
     <div className="flex flex-col gap-6">
       <div>

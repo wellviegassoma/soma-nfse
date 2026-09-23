@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { requireSomaStaff } from "@/lib/auth";
+import { requirePermissao } from "@/lib/auth";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { buscarTodosModelos } from "@/lib/precificacao/modelos-queries";
@@ -8,7 +8,7 @@ import { buscarTodosModelos } from "@/lib/precificacao/modelos-queries";
 export const metadata = { title: "Modelos de Precificação — Painel SOMA" };
 
 export default async function PrecificacaoModelosPage() {
-  await requireSomaStaff();
+  await requirePermissao("precificacao.modelos");
   const supabase = await createClient();
   const modelos = await buscarTodosModelos(supabase);
 

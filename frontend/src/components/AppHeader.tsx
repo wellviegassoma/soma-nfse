@@ -1,17 +1,17 @@
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { LogoutButton } from "@/components/LogoutButton";
-import { ROLE_LABELS, type Company, type UserRole } from "@/lib/types";
+import type { Company } from "@/lib/types";
 
 export function AppHeader({
   company,
-  role,
+  roleLabel,
   hasMultipleCompanies,
   isSomaStaff,
   userName,
 }: {
   company: Company;
-  role: UserRole;
+  roleLabel: string;
   hasMultipleCompanies: boolean;
   isSomaStaff: boolean;
   userName: string | null;
@@ -26,7 +26,7 @@ export function AppHeader({
             <div className="truncate text-sm font-semibold text-foreground">
               {company.trade_name || company.legal_name}
             </div>
-            <div className="text-xs text-foreground/50">{ROLE_LABELS[role]}</div>
+            <div className="text-xs text-foreground/50">{roleLabel}</div>
           </div>
         </div>
 

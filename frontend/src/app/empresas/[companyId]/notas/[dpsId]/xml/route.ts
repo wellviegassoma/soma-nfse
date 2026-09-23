@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { autorizarApi } from "@/lib/auth";
 
 export async function GET(
   _request: Request,
   props: { params: Promise<{ companyId: string; dpsId: string }> },
 ) {
-  const { dpsId } = await props.params;
+  const { companyId, dpsId } = await props.params;
+  const naoAutorizado = await autorizarApi("portal.ver", companyId);
+  if (naoAutorizado) return naoAutorizado;
+
   const supabase = await createClient();
 
   const { data: nfse } = await supabase

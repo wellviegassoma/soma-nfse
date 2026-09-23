@@ -99,7 +99,7 @@ export type Organization = {
 
 export type CompanyAccess = {
   company_id: string;
-  role: UserRole;
+  permissoes: import("@/lib/permissoes/catalogo").Permissao[];
   company: Company;
 };
 

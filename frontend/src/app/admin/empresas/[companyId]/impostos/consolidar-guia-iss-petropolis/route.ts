@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { autorizarApi } from "@/lib/auth";
 import { emitirGuiaIssPetropolis } from "@/lib/iss-petropolis";
 
 // Consolidação de período + emissão da guia são ações reais (criam a
@@ -11,6 +12,9 @@ export async function POST(
   request: Request,
   props: { params: Promise<{ companyId: string }> },
 ) {
+  const naoAutorizado = await autorizarApi("impostos.emitir_iss");
+  if (naoAutorizado) return naoAutorizado;
+
   const { companyId } = await props.params;
   const body = await request.json().catch(() => ({}));
   const competencia = typeof body.competencia === "string" ? body.competencia : null;

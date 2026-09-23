@@ -4,9 +4,14 @@ import { getUserCompanies } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
 import { Card } from "@/components/ui/Card";
 import { LogoutButton } from "@/components/LogoutButton";
-import { ROLE_LABELS } from "@/lib/types";
 
 export const metadata = { title: "Escolha a empresa — SOMA Gestão" };
+
+function rotuloAcesso(permissoes: string[]): string {
+  if (permissoes.includes("usuarios_empresa.gerenciar")) return "Administrador";
+  if (permissoes.includes("notas.emitir")) return "Emissor";
+  return "Usuário";
+}
 
 export default async function EmpresasPage() {
   const companies = await getUserCompanies();
@@ -29,7 +34,7 @@ export default async function EmpresasPage() {
         </p>
 
         <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-          {companies.map(({ company, role }) => (
+          {companies.map(({ company, permissoes }) => (
             <Link key={company.id} href={`/empresas/${company.id}`}>
               <Card className="flex h-full flex-col gap-1 p-5 transition-shadow hover:shadow-md">
                 <span className="text-[15px] font-semibold text-foreground">
@@ -41,7 +46,7 @@ export default async function EmpresasPage() {
                   </span>
                 )}
                 <span className="mt-2 inline-flex w-fit rounded-full bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand">
-                  {ROLE_LABELS[role]}
+                  {rotuloAcesso(permissoes)}
                 </span>
               </Card>
             </Link>

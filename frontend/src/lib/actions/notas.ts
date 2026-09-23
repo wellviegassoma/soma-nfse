@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCompanyAccess } from "@/lib/auth";
+import { temPermissao } from "@/lib/auth";
 import { decryptSecret, fromBytea } from "@/lib/certificate";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { logAudit } from "@/lib/audit";
@@ -61,8 +61,9 @@ export async function issueNfse(
   const companyIdRaw = formData.get("companyId");
   if (typeof companyIdRaw !== "string") return { error: "Empresa inválida." };
 
-  const access = await getCompanyAccess(companyIdRaw);
-  if (!access) return { error: "Sem acesso a essa empresa." };
+  if (!(await temPermissao("notas.emitir", companyIdRaw))) {
+    return { error: "Sem permissão para emitir notas dessa empresa." };
+  }
 
   const parsed = issueSchema.safeParse({
     companyId: companyIdRaw,
@@ -358,8 +359,9 @@ export async function cancelarNfse(
   const companyIdRaw = formData.get("companyId");
   if (typeof companyIdRaw !== "string") return { error: "Empresa inválida." };
 
-  const access = await getCompanyAccess(companyIdRaw);
-  if (!access) return { error: "Sem acesso a essa empresa." };
+  if (!(await temPermissao("notas.cancelar", companyIdRaw))) {
+    return { error: "Sem permissão para cancelar notas dessa empresa." };
+  }
 
   const parsed = cancelSchema.safeParse({
     companyId: companyIdRaw,

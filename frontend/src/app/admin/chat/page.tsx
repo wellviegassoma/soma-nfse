@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requirePermissao } from "@/lib/auth";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
 import { listarConversas, buscarMensagens } from "@/lib/actions/chat-ia";
@@ -9,6 +10,7 @@ import { ChatIA } from "./ChatIA";
 export const metadata = { title: "Chat IA — Painel SOMA" };
 
 export default async function ChatIAPage(props: PageProps<"/admin/chat">) {
+  await requirePermissao("chat_ia.usar");
   const searchParams = await props.searchParams;
   const conversaIdParam = typeof searchParams.conversa === "string" ? searchParams.conversa : undefined;
 

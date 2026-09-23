@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -22,6 +23,7 @@ function diasAteVencer(expiresAt: string): number {
 }
 
 export default async function AdminCertificadosPage(props: PageProps<"/admin/certificados">) {
+  await requirePermissao("certificados.ver");
   const searchParams = await props.searchParams;
   const q = typeof searchParams.q === "string" ? searchParams.q.trim() : "";
 

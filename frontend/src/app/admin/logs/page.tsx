@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth";
 import { Card } from "@/components/ui/Card";
 import { formatarDataHora } from "@/lib/formatters";
 
@@ -25,6 +26,7 @@ const ACTION_LABEL: Record<string, string> = {
 };
 
 export default async function AdminLogsPage() {
+  await requirePermissao("auditoria.ver");
   const supabase = await createClient();
 
   const { data } = await supabase

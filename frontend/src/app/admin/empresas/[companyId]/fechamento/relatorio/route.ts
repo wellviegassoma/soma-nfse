@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { autorizarApi } from "@/lib/auth";
 
 export async function GET(
   request: Request,
   props: { params: Promise<{ companyId: string }> },
 ) {
+  const naoAutorizado = await autorizarApi("fechamento.ver");
+  if (naoAutorizado) return naoAutorizado;
+
   const { companyId } = await props.params;
   const competencia = new URL(request.url).searchParams.get("competencia");
   if (!competencia || !/^\d{4}-\d{2}$/.test(competencia)) {

@@ -7,11 +7,14 @@ import { cn } from "@/lib/cn";
 export function CompanyTabs({
   companyId,
   mostrarFinanceiro = false,
+  mostrarUsuarios = false,
 }: {
   companyId: string;
   // Financeiro fica fora pra EMISSOR (recepção de clínica) — quem decide é o
   // layout, que conhece o papel. Mesmo critério de pode_financeiro() na RLS.
   mostrarFinanceiro?: boolean;
+  // Só quem tem usuarios_empresa.gerenciar nessa empresa vê essa aba.
+  mostrarUsuarios?: boolean;
 }) {
   const pathname = usePathname();
   const base = `/empresas/${companyId}`;
@@ -23,6 +26,7 @@ export function CompanyTabs({
     ...(mostrarFinanceiro
       ? [{ href: `/financeiro/empresas/${companyId}`, label: "Financeiro" }]
       : []),
+    ...(mostrarUsuarios ? [{ href: `${base}/usuarios`, label: "Usuários" }] : []),
   ];
 
   return (

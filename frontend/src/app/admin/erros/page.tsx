@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth";
 import { Card } from "@/components/ui/Card";
 import { formatarDataHora } from "@/lib/formatters";
 
@@ -15,6 +16,7 @@ type ErrorRow = {
 };
 
 export default async function AdminErrorsPage() {
+  await requirePermissao("auditoria.ver");
   const supabase = await createClient();
 
   const { data } = await supabase

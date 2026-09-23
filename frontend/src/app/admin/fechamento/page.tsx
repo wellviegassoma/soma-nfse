@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requirePermissao } from "@/lib/auth";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
@@ -21,6 +22,7 @@ const STATUS_LABEL: Record<string, { label: string; className: string }> = {
 };
 
 export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/fechamento">) {
+  await requirePermissao("fechamento.ver");
   const searchParams = await props.searchParams;
   const competenciaParam =
     typeof searchParams.competencia === "string" ? searchParams.competencia : undefined;
