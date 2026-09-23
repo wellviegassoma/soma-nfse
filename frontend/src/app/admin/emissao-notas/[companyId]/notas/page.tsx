@@ -1,0 +1,104 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { requirePermissao } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import type { DpsListItem } from "@/lib/types";
+
+export const metadata = { title: "Notas fiscais — Painel SOMA" };
+
+function formatMoney(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+// new Date("2026-08-18") vira meia-noite UTC — evita passar por Date/fuso.
+function formatDateOnly(iso: string) {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+const STATUS_LABEL: Record<string, { label: string; className: string }> = {
+  ACCEPTED: { label: "Emitida", className: "bg-success-soft text-success" },
+  REJECTED: { label: "Rejeitada", className: "bg-danger-soft text-danger" },
+  CANCELADA: { label: "Cancelada", className: "bg-foreground/10 text-foreground/60" },
+};
+
+export default async function AdminNotasPage(
+  props: PageProps<"/admin/emissao-notas/[companyId]/notas">,
+) {
+  const { companyId } = await props.params;
+  await requirePermissao("notas.emitir", companyId);
+
+  const supabase = await createClient();
+  const [{ data: company }, { data: notas }] = await Promise.all([
+    supabase.from("companies").select("legal_name, trade_name").eq("id", companyId).maybeSingle(),
+    supabase
+      .from("dps")
+      .select(
+        "id, numero_dps, serie, valor, data_competencia, status, created_at, customer:customers(name), service:services(name), nfse(access_key, status)",
+      )
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false }),
+  ]);
+  if (!company) notFound();
+
+  const lista = (notas ?? []) as unknown as DpsListItem[];
+  const basePath = `/admin/emissao-notas/${companyId}`;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">
+            Notas — {company.trade_name || company.legal_name}
+          </h1>
+          <p className="text-sm text-foreground/60">{lista.length} nota(s)</p>
+        </div>
+        <Link href={basePath}>
+          <Button>+ Emitir nota</Button>
+        </Link>
+      </div>
+
+      {lista.length === 0 ? (
+        <Card className="p-10 text-center text-sm text-foreground/50">
+          Nenhuma nota emitida ainda.
+        </Card>
+      ) : (
+        <Card className="divide-y divide-border overflow-hidden">
+          {lista.map((nota) => {
+            const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
+            const nfseCancelada = nfseArr.some((n) => n.status === "CANCELADA");
+            const statusKey = nfseCancelada ? "CANCELADA" : nota.status;
+            const status = STATUS_LABEL[statusKey] ?? STATUS_LABEL.REJECTED;
+            return (
+              <Link
+                key={nota.id}
+                href={`${basePath}/notas/${nota.id}`}
+                className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-surface-muted"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-foreground">
+                    {nota.customer?.name ?? "—"}
+                  </div>
+                  <div className="truncate text-xs text-foreground/50">
+                    {nota.serie}/{nota.numero_dps} · {nota.service?.name ?? "—"} ·{" "}
+                    {formatDateOnly(nota.data_competencia)}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-sm font-medium text-foreground">
+                    {formatMoney(nota.valor)}
+                  </span>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${status.className}`}>
+                    {status.label}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </Card>
+      )}
+    </div>
+  );
+}

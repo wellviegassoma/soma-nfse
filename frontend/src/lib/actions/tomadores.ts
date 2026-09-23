@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { requireUser, getCompanyAccess } from "@/lib/auth";
+import { requireUser, getCompanyAccess, isSomaStaff } from "@/lib/auth";
 import { uuidLike } from "@/lib/zod-helpers";
 import { extrairTomadorDeXml } from "@/lib/xml-tomador";
 import { logAudit } from "@/lib/audit";
@@ -12,6 +12,7 @@ import type { ActionState } from "@/lib/actions/auth";
 
 async function requireCompanyMember(companyId: string) {
   await requireUser();
+  if (await isSomaStaff()) return;
   const access = await getCompanyAccess(companyId);
   if (!access) throw new Error("Sem acesso a essa empresa.");
 }

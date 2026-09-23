@@ -24,13 +24,19 @@ export function EmitirNotaForm({
   services,
   allowRetroactiveEmission,
   mesCorrente,
+  basePath,
 }: {
   companyId: string;
   customers: Customer[];
   services: Service[];
   allowRetroactiveEmission: boolean;
   mesCorrente: string;
+  /** Usado pra montar os links internos ("ver nota", "novo tomador") — o
+   * mesmo form é reaproveitado no portal do cliente (/empresas/[companyId])
+   * e no módulo de emissão da equipe (/admin/emissao-notas/[companyId]). */
+  basePath?: string;
 }) {
+  const base = basePath ?? `/empresas/${companyId}`;
   const [step, setStep] = useState<"form" | "review">("form");
   const [customerId, setCustomerId] = useState("");
   const [serviceId, setServiceId] = useState("");
@@ -71,7 +77,7 @@ export function EmitirNotaForm({
           {selectedCustomer?.name} · {formatMoney(Number(amount.replace(",", ".")))}
         </p>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:justify-center">
-          <Link href={`/empresas/${companyId}/notas/${state.dpsId}`}>
+          <Link href={`${base}/notas/${state.dpsId}`}>
             <Button variant="secondary" className="w-full sm:w-auto">
               Ver nota
             </Button>
@@ -150,18 +156,21 @@ export function EmitirNotaForm({
         </Select>
       </Field>
 
-      {customers.length === 0 && (
-        <p className="-mt-2 text-xs text-foreground/50">
-          Nenhum tomador cadastrado ainda —{" "}
-          <Link
-            href={`/empresas/${companyId}/tomadores/novo`}
-            className="font-medium text-brand hover:underline"
-          >
-            cadastre um
-          </Link>
-          .
-        </p>
-      )}
+      {customers.length === 0 &&
+        (basePath ? (
+          <p className="-mt-2 text-xs text-foreground/50">
+            Nenhum tomador cadastrado ainda pra essa empresa — peça pro cliente cadastrar no
+            portal dele, ou entre em contato com o suporte.
+          </p>
+        ) : (
+          <p className="-mt-2 text-xs text-foreground/50">
+            Nenhum tomador cadastrado ainda —{" "}
+            <Link href={`${base}/tomadores/novo`} className="font-medium text-brand hover:underline">
+              cadastre um
+            </Link>
+            .
+          </p>
+        ))}
 
       <Field label="Serviço" htmlFor="serviceId">
         <Select

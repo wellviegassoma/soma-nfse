@@ -70,6 +70,7 @@ export const MODULOS_EQUIPE = [
   "extratos",
   "atendimento",
   "financeiro",
+  "portal",
 ] as const;
 
 export const MODULO_LABELS: Record<string, string> = {
@@ -390,7 +391,7 @@ export const PERMISSOES: Record<Permissao, PermissaoInfo> = {
     moduloLabel: "Portal do cliente",
     label: "Acessar o portal",
     descricao: "Entrar no portal da empresa (obrigatório pra qualquer outro acesso do lado do cliente).",
-    escopo: "EMPRESA",
+    escopo: "AMBOS",
     irreversivel: false,
   },
   "notas.emitir": {
@@ -398,8 +399,9 @@ export const PERMISSOES: Record<Permissao, PermissaoInfo> = {
     modulo: "portal",
     moduloLabel: "Portal do cliente",
     label: "Emitir notas fiscais",
-    descricao: "Emitir NFS-e para tomadores dessa empresa.",
-    escopo: "EMPRESA",
+    descricao:
+      "Emitir NFS-e para tomadores dessa empresa. Concedida globalmente (equipe SOMA), vale pra qualquer empresa — sem precisar vincular uma por uma.",
+    escopo: "AMBOS",
     irreversivel: false,
     implica: ["portal.ver"],
   },
@@ -408,8 +410,9 @@ export const PERMISSOES: Record<Permissao, PermissaoInfo> = {
     modulo: "portal",
     moduloLabel: "Portal do cliente",
     label: "Cancelar notas fiscais",
-    descricao: "Cancelar uma NFS-e já emitida — ação irreversível junto à prefeitura.",
-    escopo: "EMPRESA",
+    descricao:
+      "Cancelar uma NFS-e já emitida — ação irreversível junto à prefeitura. Concedida globalmente, vale pra qualquer empresa.",
+    escopo: "AMBOS",
     irreversivel: true,
     implica: ["portal.ver"],
   },
