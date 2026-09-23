@@ -14,10 +14,12 @@ export function TicketChat({
   ticket,
   mensagensIniciais,
   departamentos,
+  nomesAtendentes,
 }: {
   ticket: TicketDetalhe;
   mensagensIniciais: Mensagem[];
   departamentos: { id: string; nome: string }[];
+  nomesAtendentes: Record<string, string>;
 }) {
   const router = useRouter();
   const [mensagens, setMensagens] = useState(mensagensIniciais);
@@ -122,7 +124,7 @@ export function TicketChat({
 
       <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
         {mensagens.map((mensagem) => (
-          <MensagemBolha key={mensagem.id} mensagem={mensagem} />
+          <MensagemBolha key={mensagem.id} mensagem={mensagem} nomesAtendentes={nomesAtendentes} />
         ))}
         <div ref={fimRef} />
       </div>
@@ -176,14 +178,30 @@ export function TicketChat({
   );
 }
 
-function MensagemBolha({ mensagem }: { mensagem: Mensagem }) {
+function MensagemBolha({
+  mensagem,
+  nomesAtendentes,
+}: {
+  mensagem: Mensagem;
+  nomesAtendentes: Record<string, string>;
+}) {
   if (mensagem.remetente_tipo === "SISTEMA") {
     return <div className="py-1 text-center text-xs text-foreground/45">{mensagem.corpo}</div>;
   }
 
+  // O join só vem na carga inicial (Server Component); mensagem chegada
+  // via Realtime cai no mapa de nomes buscado à parte — ver
+  // app/atendimento/[ticketId]/page.tsx.
+  const nomeAtendente = mensagem.atendente_id
+    ? mensagem.atendente?.full_name || nomesAtendentes[mensagem.atendente_id] || "Atendente"
+    : null;
+
   if (mensagem.interno) {
     return (
       <div className="mx-auto max-w-[85%] rounded-lg border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-foreground">
+        {nomeAtendente && (
+          <div className="mb-0.5 text-xs font-medium text-warning">{nomeAtendente} · nota interna</div>
+        )}
         {mensagem.corpo}
       </div>
     );
@@ -199,6 +217,9 @@ function MensagemBolha({ mensagem }: { mensagem: Mensagem }) {
           doAtendente ? "bg-brand text-brand-foreground" : "border border-border bg-surface text-foreground",
         )}
       >
+        {doAtendente && nomeAtendente && (
+          <div className="mb-0.5 text-xs font-medium text-brand-foreground/70">{nomeAtendente}</div>
+        )}
         {mensagem.corpo}
       </div>
     </div>

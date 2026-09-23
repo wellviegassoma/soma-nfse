@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: ticket, error: erroTicket } = await supabase
     .from("atendimento_tickets")
-    .select("id, status, contato:atendimento_contatos(telefone, jid)")
+    .select("id, status, atendente_id, contato:atendimento_contatos(telefone, jid)")
     .eq("id", ticketId)
     .single();
   if (erroTicket || !ticket) {
@@ -30,6 +30,17 @@ export async function POST(request: Request) {
   }
 
   const ehInterno = interno === true;
+
+  // Responder assume o chamado — achado direto de uso real: sem isso, um
+  // chamado ficava "ABERTO" mas sem atendente_id, ou preso com quem tinha
+  // assumido antes mesmo depois de outra pessoa já estar respondendo.
+  // Quem quiser passar pra outro atendente usa Transferir normalmente.
+  if (!ehInterno && ticket.atendente_id !== user.id) {
+    await supabase
+      .from("atendimento_tickets")
+      .update({ atendente_id: user.id, status: "ABERTO" })
+      .eq("id", ticketId);
+  }
 
   const { data: mensagem, error: erroInsert } = await supabase
     .from("atendimento_mensagens")
@@ -64,6 +75,12 @@ export async function POST(request: Request) {
   }
 
   try {
+    const { data: perfil } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
+    // Assina pro cliente saber com quem está falando — só no texto
+    // mandado pro WhatsApp, o `corpo` gravado fica limpo porque a bolha
+    // no inbox já mostra o nome (ver TicketChat.tsx).
+    const corpoAssinado = perfil?.full_name ? `*${perfil.full_name}:*\n${corpo.trim()}` : corpo.trim();
+
     // Prefere o jid guardado (correto pra @lid e @s.whatsapp.net); o
     // connector só reconstrói a partir do telefone pra contato antigo que
     // ainda não teve o jid preenchido pela auto-cura — ver
@@ -71,7 +88,7 @@ export async function POST(request: Request) {
     const resposta = await fetch(`${connectorUrl}/enviar`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Internal-Token": connectorToken },
-      body: JSON.stringify({ jid: contato.jid, telefone: contato.telefone, corpo: corpo.trim() }),
+      body: JSON.stringify({ jid: contato.jid, telefone: contato.telefone, corpo: corpoAssinado }),
     });
     const dados = await resposta.json();
     if (!resposta.ok) throw new Error(dados.error || "Falha ao enviar mensagem.");

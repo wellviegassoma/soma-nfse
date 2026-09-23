@@ -143,31 +143,76 @@ async function encontrarOuCriarTicketAberto(supabase, contatoId) {
   return novo.id;
 }
 
+// Tipos que embrulham o conteúdo real um nível abaixo (mensagem efêmera,
+// "ver uma vez", reencaminhada por outro aparelho) — sem desembrulhar,
+// uma mensagem de texto normal escondida atrás de um desses virava
+// corpo=null e o atendente não via nada, mesmo a mensagem tendo chegado.
+const TIPOS_EMBRULHO = [
+  "ephemeralMessage",
+  "viewOnceMessage",
+  "viewOnceMessageV2",
+  "viewOnceMessageV2Extension",
+  "documentWithCaptionMessage",
+  "deviceSentMessage",
+];
+
+function desembrulhar(mensagem) {
+  let m = mensagem;
+  for (let i = 0; i < TIPOS_EMBRULHO.length && m; i++) {
+    const chave = TIPOS_EMBRULHO[i];
+    if (m[chave]?.message) {
+      m = m[chave].message;
+      i = -1; // reinicia a checagem — pode vir embrulhado em mais de uma camada
+    }
+  }
+  return m;
+}
+
+function ehEncaminhada(m) {
+  return Boolean(
+    m.extendedTextMessage?.contextInfo?.isForwarded ||
+      m.imageMessage?.contextInfo?.isForwarded ||
+      m.videoMessage?.contextInfo?.isForwarded ||
+      m.documentMessage?.contextInfo?.isForwarded ||
+      m.audioMessage?.contextInfo?.isForwarded ||
+      m.stickerMessage?.contextInfo?.isForwarded,
+  );
+}
+
 // Sempre devolve algo pro atendente ver — mensagem sem texto (áudio,
 // figurinha, foto sem legenda, documento, localização) não pode virar
-// bolha vazia. O download/armazenamento do arquivo de mídia em si fica
-// pra uma fase seguinte (ver docs/atendimento.md); por enquanto o rótulo
-// já é melhor do que nada.
+// bolha vazia, e um tipo que a gente ainda não trata explicitamente vira
+// um rótulo com o nome do campo (não corpo=null) pra dar pra investigar
+// depois e pro atendente pelo menos saber que chegou algo. O
+// download/armazenamento do arquivo de mídia em si fica pra uma fase
+// seguinte (ver docs/atendimento.md); por enquanto o rótulo já é melhor
+// do que nada.
 function extrairConteudo(msg) {
-  const m = msg.message || {};
+  const m = desembrulhar(msg.message || {});
+  const prefixo = ehEncaminhada(m) ? "↪ Encaminhada:\n" : "";
 
-  if (m.conversation) return { corpo: m.conversation, midiaTipo: null };
-  if (m.extendedTextMessage?.text) return { corpo: m.extendedTextMessage.text, midiaTipo: null };
-  if (m.imageMessage) return { corpo: m.imageMessage.caption || "[Imagem]", midiaTipo: "image" };
-  if (m.videoMessage) return { corpo: m.videoMessage.caption || "[Vídeo]", midiaTipo: "video" };
+  if (m.conversation) return { corpo: prefixo + m.conversation, midiaTipo: null };
+  if (m.extendedTextMessage?.text) return { corpo: prefixo + m.extendedTextMessage.text, midiaTipo: null };
+  if (m.imageMessage) return { corpo: prefixo + (m.imageMessage.caption || "[Imagem]"), midiaTipo: "image" };
+  if (m.videoMessage) return { corpo: prefixo + (m.videoMessage.caption || "[Vídeo]"), midiaTipo: "video" };
   if (m.audioMessage) {
-    return { corpo: m.audioMessage.ptt ? "[Áudio]" : "[Arquivo de áudio]", midiaTipo: "audio" };
+    return { corpo: prefixo + (m.audioMessage.ptt ? "[Áudio]" : "[Arquivo de áudio]"), midiaTipo: "audio" };
   }
-  if (m.stickerMessage) return { corpo: "[Figurinha]", midiaTipo: "sticker" };
+  if (m.stickerMessage) return { corpo: prefixo + "[Figurinha]", midiaTipo: "sticker" };
   if (m.documentMessage) {
-    return { corpo: `[Documento: ${m.documentMessage.fileName || "arquivo"}]`, midiaTipo: "document" };
+    return {
+      corpo: prefixo + `[Documento: ${m.documentMessage.fileName || "arquivo"}]`,
+      midiaTipo: "document",
+    };
   }
-  if (m.locationMessage) return { corpo: "[Localização compartilhada]", midiaTipo: "location" };
+  if (m.locationMessage) return { corpo: prefixo + "[Localização compartilhada]", midiaTipo: "location" };
   if (m.contactMessage) {
-    return { corpo: `[Contato: ${m.contactMessage.displayName || "sem nome"}]`, midiaTipo: "contact" };
+    return { corpo: prefixo + `[Contato: ${m.contactMessage.displayName || "sem nome"}]`, midiaTipo: "contact" };
   }
 
-  return { corpo: null, midiaTipo: null };
+  const tipos = Object.keys(m);
+  if (tipos.length === 0) return { corpo: null, midiaTipo: null };
+  return { corpo: `[Mensagem não suportada: ${tipos.join(", ")}]`, midiaTipo: "unsupported" };
 }
 
 async function inserirMensagemRecebida(supabase, { ticketId, corpo, midiaTipo, whatsappMessageId }) {
@@ -278,7 +323,12 @@ async function iniciarConexao() {
   });
 
   socket.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (type !== "notify") return;
+    // "notify" é a mensagem chegando ao vivo; "append" também precisa ser
+    // processado — mensagem recebida durante uma reconexão pode chegar
+    // marcada assim (achado real: mensagem encaminhada que sumiu),
+    // diferente de "replace" (edição de mensagem já registrada, sem
+    // conteúdo novo de verdade).
+    if (type !== "notify" && type !== "append") return;
     for (const msg of messages) {
       try {
         await comRetentativas(() => registrarMensagemRecebida(msg));

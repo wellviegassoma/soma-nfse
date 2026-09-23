@@ -44,4 +44,9 @@ export type Mensagem = {
   interno: boolean;
   status: string;
   created_at: string;
+  // Vem do join na carga inicial (Server Component); mensagem nova via
+  // Realtime não traz join nenhum (postgres_changes só dá as colunas cruas),
+  // por isso TicketChat resolve o nome por um mapa de atendentes à parte
+  // quando este campo não vier preenchido.
+  atendente?: { full_name: string | null } | null;
 };
