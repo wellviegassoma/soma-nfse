@@ -134,6 +134,39 @@ function CardEmpresa({
   );
 }
 
+// Barra "aplicar a todas" — marca/desmarca uma permissão em TODAS as
+// empresas já vinculadas de uma vez. Sem isso, dar a mesma permissão pra
+// 200+ empresas exigiria clicar empresa por empresa.
+function BarraAplicarATodas({
+  empresas,
+  onAplicarATodas,
+}: {
+  empresas: EmpresaGrid[];
+  onAplicarATodas: (chave: Permissao, marcar: boolean) => void;
+}) {
+  if (empresas.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-surface-muted/50 p-4">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/50">
+        Aplicar a todas as {empresas.length} empresa(s) abaixo
+      </h3>
+      <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+        {PERMISSOES_EMPRESA.map((info) => {
+          const todasTem = empresas.every((e) => e.permissoes.has(info.chave));
+          return (
+            <CheckboxPermissao
+              key={info.chave}
+              info={info}
+              checked={todasTem}
+              onToggle={() => onAplicarATodas(info.chave, !todasTem)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function PermissoesGrid({
   permissoesGlobaisIniciais,
   empresasIniciais,
@@ -155,6 +188,7 @@ export function PermissoesGrid({
   const [globais, setGlobais] = useState<Set<Permissao>>(new Set(permissoesGlobaisIniciais));
   const [empresas, setEmpresas] = useState<EmpresaGrid[]>(empresasIniciais);
   const [buscaEmpresa, setBuscaEmpresa] = useState("");
+  const [filtroVinculadas, setFiltroVinculadas] = useState("");
   const [pending, startTransition] = useTransition();
   const [resultado, setResultado] = useState<{ error?: string; success?: boolean } | null>(null);
 
@@ -166,6 +200,12 @@ export function PermissoesGrid({
       .filter((e) => !idsJaAdicionados.has(e.id) && e.nome.toLowerCase().includes(termo))
       .slice(0, 8);
   }, [buscaEmpresa, empresasDisponiveis, idsJaAdicionados]);
+
+  const empresasFiltradas = useMemo(() => {
+    const termo = filtroVinculadas.trim().toLowerCase();
+    if (!termo) return empresas;
+    return empresas.filter((e) => e.nome.toLowerCase().includes(termo));
+  }, [empresas, filtroVinculadas]);
 
   function toggleGlobal(chave: Permissao) {
     setResultado(null);
@@ -201,6 +241,35 @@ export function PermissoesGrid({
     setEmpresas((atual) => atual.filter((e) => e.companyId !== companyId));
   }
 
+  function vincularTodas() {
+    setResultado(null);
+    setBuscaEmpresa("");
+    setEmpresas((atual) => {
+      const jaTem = new Set(atual.map((e) => e.companyId));
+      const novas = empresasDisponiveis
+        .filter((e) => !jaTem.has(e.id))
+        .map((e) => ({ companyId: e.id, nome: e.nome, permissoes: new Set<Permissao>() }));
+      return [...atual, ...novas];
+    });
+  }
+
+  function desvincularTodas() {
+    if (empresas.length === 0) return;
+    if (!confirm(`Remover a vinculação com todas as ${empresas.length} empresas?`)) return;
+    setResultado(null);
+    setEmpresas([]);
+  }
+
+  function aplicarATodas(chave: Permissao, marcar: boolean) {
+    setResultado(null);
+    setEmpresas((atual) =>
+      atual.map((e) => ({
+        ...e,
+        permissoes: marcar ? marcarComCascata(e.permissoes, chave) : desmarcarComCascata(e.permissoes, chave),
+      })),
+    );
+  }
+
   function salvar() {
     setResultado(null);
     startTransition(async () => {
@@ -225,7 +294,28 @@ export function PermissoesGrid({
       )}
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold text-foreground/70">Empresas clientes</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-foreground/70">Empresas clientes</h2>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={vincularTodas}
+              className="text-xs font-medium text-brand hover:underline"
+            >
+              Vincular todas as {empresasDisponiveis.length} empresas
+            </button>
+            {empresas.length > 0 && (
+              <button
+                type="button"
+                onClick={desvincularTodas}
+                className="text-xs font-medium text-danger hover:underline"
+              >
+                Desvincular todas
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="mb-3">
           <Input
             value={buscaEmpresa}
@@ -249,11 +339,26 @@ export function PermissoesGrid({
           )}
         </div>
 
-        <div className="flex flex-col gap-3">
+        <BarraAplicarATodas empresas={empresas} onAplicarATodas={aplicarATodas} />
+
+        {empresas.length > 5 && (
+          <div className="mt-3">
+            <Input
+              value={filtroVinculadas}
+              onChange={(e) => setFiltroVinculadas(e.target.value)}
+              placeholder={`Filtrar entre as ${empresas.length} empresas vinculadas...`}
+              autoComplete="off"
+            />
+          </div>
+        )}
+
+        <div className="mt-3 flex flex-col gap-3">
           {empresas.length === 0 ? (
             <p className="text-sm text-foreground/50">Nenhuma empresa vinculada.</p>
+          ) : empresasFiltradas.length === 0 ? (
+            <p className="text-sm text-foreground/50">Nenhuma empresa vinculada bate com o filtro.</p>
           ) : (
-            empresas.map((empresa) => (
+            empresasFiltradas.map((empresa) => (
               <CardEmpresa
                 key={empresa.companyId}
                 empresa={empresa}
