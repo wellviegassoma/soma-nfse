@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireSomaStaff, getCurrentProfileName, isSuperAdmin } from "@/lib/auth";
+import { requireSomaStaff, getCurrentProfileName, isSuperAdmin, temPermissao } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
 import { LogoutButton } from "@/components/LogoutButton";
 import { AdminNav } from "@/components/AdminNav";
@@ -10,6 +10,9 @@ export default async function AdminLayout({
   await requireSomaStaff();
   const userName = await getCurrentProfileName();
   const superAdmin = await isSuperAdmin();
+  const podeGerenciarUsuarios =
+    (await temPermissao("usuarios.gerenciar_equipe")) ||
+    (await temPermissao("usuarios.gerenciar_clientes"));
 
   return (
     <div className="min-h-dvh bg-background">
@@ -64,7 +67,7 @@ export default async function AdminLayout({
         </div>
       </header>
       <div className="mx-auto max-w-5xl px-4 py-8">
-        <AdminNav isSuperAdmin={superAdmin} />
+        <AdminNav isSuperAdmin={superAdmin} podeGerenciarUsuarios={podeGerenciarUsuarios} />
         <div className="pt-6">{children}</div>
       </div>
     </div>

@@ -18,15 +18,27 @@ const TABS: Tab[] = [
   { href: "/admin/chat", label: "Chat IA" },
 ];
 
+const TAB_USUARIOS: Tab = { href: "/admin/usuarios", label: "Usuários" };
 const TAB_SUPER_ADMIN: Tab = { href: "/admin/configuracoes/contador-responsavel", label: "Configurações" };
 
-// `isSuperAdmin` vem do layout (server component) — a aba só some da UI
-// pra quem não é Super Admin; a página em si também é protegida por
-// requireSuperAdmin(), então isso aqui é só uma questão de não poluir a
-// navegação de quem não pode usar, não a proteção de verdade.
-export function AdminNav({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+// `isSuperAdmin`/`podeGerenciarUsuarios` vêm do layout (server component) —
+// a aba só some da UI pra quem não pode usar; a página em si também é
+// protegida (requireSuperAdmin / usuarios.gerenciar_equipe|clientes), então
+// isso aqui é só uma questão de não poluir a navegação, não a proteção de
+// verdade.
+export function AdminNav({
+  isSuperAdmin,
+  podeGerenciarUsuarios,
+}: {
+  isSuperAdmin: boolean;
+  podeGerenciarUsuarios: boolean;
+}) {
   const pathname = usePathname();
-  const tabs = isSuperAdmin ? [...TABS, TAB_SUPER_ADMIN] : TABS;
+  const tabs = [
+    ...TABS,
+    ...(podeGerenciarUsuarios ? [TAB_USUARIOS] : []),
+    ...(isSuperAdmin ? [TAB_SUPER_ADMIN] : []),
+  ];
 
   return (
     <nav className="flex gap-1 border-b border-border">
