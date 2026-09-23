@@ -17,6 +17,7 @@ export function NovaConversaModal({
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
+  const digitosBusca = busca.replace(/\D/g, "");
   const [resultados, setResultados] = useState<ContatoWhatsapp[]>([]);
   const [buscando, setBuscando] = useState(false);
   const [selecionado, setSelecionado] = useState<ContatoWhatsapp | null>(null);
@@ -123,6 +124,17 @@ export function NovaConversaModal({
                 </button>
               ))}
             </div>
+            {digitosBusca.length >= 8 && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSelecionado({ jid: `${digitosBusca}@s.whatsapp.net`, nome: null, telefone: digitosBusca })
+                }
+                className="w-full rounded-lg border border-dashed border-border px-3 py-2 text-left text-sm text-brand hover:bg-surface-muted"
+              >
+                Iniciar com o número {digitosBusca} (fora da agenda sincronizada)
+              </button>
+            )}
           </div>
         ) : (
           <div className="mt-4 space-y-3">

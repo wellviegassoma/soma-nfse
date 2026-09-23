@@ -204,6 +204,12 @@ confirmação com assunto + resumo, gravados em `atendimento_tickets.assunto_id`
   — pode errar com número compartilhado por duas empresas ou portado. Nunca é usado pra
   autorização, só contexto visual pro atendente.
 - **Sem chatbot nem relatório na F1** — quem depender disso continua no Digisac até a F3/F4.
+- **Grupo do WhatsApp vira um "contato"** — o ticket representa o grupo inteiro (nome = assunto
+  do grupo), mensagem de dentro do grupo ganha o remetente prefixado no corpo (`*Fulano:*`),
+  porque `atendimento_mensagens` não tem uma coluna própria pra "quem dentro do grupo mandou".
+- **Mensagem enviada direto do celular vinculado** (fora do app) é capturada e registrada como
+  `ATENDENTE` sem `atendente_id` (mostrado como "Enviado pelo celular" no inbox) — não dá pra
+  saber qual pessoa mexeu no celular, só que a resposta já foi dada por ali.
 - **Localização e cartão de contato viram só texto** (`[Localização compartilhada]`,
   `[Contato: nome]`) — não têm um arquivo de verdade pra baixar, ficou fora de propósito.
 - **Mídia sem legenda/nome de arquivo não tem um jeito melhor de nomear** o link "Abrir

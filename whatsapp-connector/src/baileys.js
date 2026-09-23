@@ -20,6 +20,15 @@ let socketAtual = null;
 // Some ao processo receber SIGTERM pra reconnect automático não disparar
 // depois de um encerramentoDeliberado (ver encerrarConexao).
 let encerramentoDeliberado = false;
+// IDs de mensagem que a própria enviarMensagem() acabou de mandar — o
+// Baileys ecoa de volta toda mensagem enviada (fromMe:true) pelo
+// messages.upsert, mesma mensagem que o /api/atendimento/mensagens do
+// Next.js já gravou. Sem checar aqui, duplicava a mensagem no inbox toda
+// vez que um atendente respondia pelo app.
+const idsEnviadosPorNos = new Set();
+// Nome do grupo não muda a cada mensagem — evita bater no Baileys
+// (groupMetadata) toda hora, só na primeira mensagem de um grupo novo.
+const cacheNomesGrupo = new Map();
 
 // Envolve uma operação que só faz leitura + escrita idempotente (achar-ou-
 // criar, ou um insert já protegido contra 23505) — retentar a função
@@ -44,6 +53,23 @@ async function comRetentativas(fn, tentativas = 3, esperaMs = 500) {
 
 function ehJidIndividual(jid) {
   return Boolean(jid) && !jid.endsWith("@g.us") && !jid.endsWith("@broadcast") && !jid.endsWith("@newsletter");
+}
+
+function ehGrupo(jid) {
+  return Boolean(jid) && jid.endsWith("@g.us");
+}
+
+async function obterNomeGrupo(socket, jid) {
+  if (cacheNomesGrupo.has(jid)) return cacheNomesGrupo.get(jid);
+  try {
+    const metadata = await socket.groupMetadata(jid);
+    const nome = metadata?.subject || null;
+    cacheNomesGrupo.set(jid, nome);
+    return nome;
+  } catch (err) {
+    console.error("Falha ao buscar nome do grupo:", err.message);
+    return null;
+  }
 }
 
 // Agenda de contatos do WhatsApp (não confundir com atendimento_contatos,
@@ -141,7 +167,7 @@ async function encontrarOuCriarContato(supabase, { telefone, jid, nomePush }) {
   return novo;
 }
 
-async function encontrarOuCriarTicketAberto(supabase, contatoId) {
+async function encontrarOuCriarTicketAberto(supabase, contatoId, statusInicial = "FILA") {
   const { data: existente, error: erroConsulta } = await supabase
     .from("atendimento_tickets")
     .select("id")
@@ -170,7 +196,7 @@ async function encontrarOuCriarTicketAberto(supabase, contatoId) {
     .insert({
       contato_id: contatoId,
       departamento_id: conexao.departamento_padrao_id,
-      status: "FILA",
+      status: statusInicial,
     })
     .select("id")
     .single();
@@ -321,27 +347,83 @@ async function inserirMensagemRecebida(supabase, { ticketId, corpo, midiaTipo, m
   }
 }
 
-async function registrarMensagemRecebida(msg, socket) {
-  if (!CONEXAO_ID || msg.key.fromMe) return;
-
-  const jid = msg.key.remoteJid || "";
-  // MVP: só conversa 1:1. Mensagem de grupo/broadcast fica de fora de
-  // propósito — vira ticket depois, se a SOMA decidir atender grupo.
-  if (jid.endsWith("@g.us") || jid.endsWith("@broadcast")) return;
-
-  // O WhatsApp manda parte das conversas com remoteJid em @lid (Linked ID,
-  // identificador interno opaco) em vez de @s.whatsapp.net (telefone de
-  // verdade) — nos dois casos guardamos o jid completo, porque é ele que
-  // enviarMensagem usa pra responder. `telefone` (dígitos do que vier antes
-  // do @) continua só pra exibição/auto-match: pra @lid não é um telefone
-  // de verdade, mas é estável (mesmo contato sempre cai no mesmo valor).
+// Mensagem mandada direto do celular vinculado (fora do app) — achado
+// real testando: enquanto o whatsapp-connector ficava fora do ar, quem
+// respondia pelo celular via WhatsApp normal não aparecia em lugar
+// nenhum do inbox, deixando outro atendente sem saber que já tinha
+// resposta dada. Registra como ATENDENTE sem atendente_id (não dá pra
+// saber quem mexeu no celular) — o inbox mostra "Enviado pelo celular"
+// nesse caso (ver MensagemBolha em TicketChat.tsx).
+async function registrarMensagemEnviadaPeloCelular(msg, socket, jid) {
   const telefone = digitosTelefone(jid.split("@")[0]);
   if (!telefone) return;
 
   const { corpo, midiaTipo, m } = extrairConteudo(msg);
   const supabase = obterCliente();
 
-  const contato = await encontrarOuCriarContato(supabase, { telefone, jid, nomePush: msg.pushName });
+  const nomePush = ehGrupo(jid) ? await obterNomeGrupo(socket, jid) : null;
+  const contato = await encontrarOuCriarContato(supabase, { telefone, jid, nomePush });
+  const ticketId = await encontrarOuCriarTicketAberto(supabase, contato.id, "ABERTO");
+
+  const midia = midiaTipo ? await baixarEArmazenarMidia(msg, socket, midiaTipo, m) : null;
+
+  const { error } = await supabase.from("atendimento_mensagens").insert({
+    ticket_id: ticketId,
+    remetente_tipo: "ATENDENTE",
+    corpo,
+    midia_tipo: midiaTipo,
+    midia_url: midia?.url ?? null,
+    midia_pathname: midia?.pathname ?? null,
+    whatsapp_message_id: msg.key.id,
+    status: "ENVIADA",
+  });
+  if (error && error.code !== CODIGO_VIOLACAO_UNICA) throw error;
+}
+
+async function registrarMensagemRecebida(msg, socket) {
+  if (!CONEXAO_ID) return;
+
+  const jid = msg.key.remoteJid || "";
+  // @broadcast (status) e @newsletter (canal) não são conversa de
+  // verdade — grupo (@g.us) agora é tratado como um "contato" à parte
+  // (mesmo telefone/jid do grupo), pedido direto de uso real.
+  if (jid.endsWith("@broadcast") || jid.endsWith("@newsletter")) return;
+
+  if (msg.key.fromMe) {
+    // Eco da nossa própria enviarMensagem() — já registrada pelo
+    // /api/atendimento/mensagens do Next.js, não duplica.
+    if (idsEnviadosPorNos.has(msg.key.id)) return;
+    await registrarMensagemEnviadaPeloCelular(msg, socket, jid);
+    return;
+  }
+
+  // O WhatsApp manda parte das conversas com remoteJid em @lid (Linked ID,
+  // identificador interno opaco) em vez de @s.whatsapp.net (telefone de
+  // verdade) — nos dois casos guardamos o jid completo, porque é ele que
+  // enviarMensagem usa pra responder. `telefone` (dígitos do que vier antes
+  // do @) continua só pra exibição/auto-match: pra @lid/grupo não é um
+  // telefone de verdade, mas é estável (mesmo contato sempre cai no
+  // mesmo valor).
+  const telefone = digitosTelefone(jid.split("@")[0]);
+  if (!telefone) return;
+
+  const { corpo: corpoBase, midiaTipo, m } = extrairConteudo(msg);
+  const supabase = obterCliente();
+
+  // Em grupo, pushName é de quem mandou a mensagem dentro do grupo, não
+  // do grupo em si — o "contato" (nome do ticket) usa o assunto do
+  // grupo, e o corpo ganha o remetente na frente pra não perder quem
+  // disse o quê.
+  let nomeContato = msg.pushName;
+  let corpo = corpoBase;
+  if (ehGrupo(jid)) {
+    nomeContato = await obterNomeGrupo(socket, jid);
+    const remetente =
+      msg.pushName || digitosTelefone((msg.key.participant || "").split("@")[0]) || "Alguém";
+    corpo = corpoBase ? `*${remetente}:*\n${corpoBase}` : corpoBase;
+  }
+
+  const contato = await encontrarOuCriarContato(supabase, { telefone, jid, nomePush: nomeContato });
   const ticketId = await encontrarOuCriarTicketAberto(supabase, contato.id);
 
   const midia = midiaTipo ? await baixarEArmazenarMidia(msg, socket, midiaTipo, m) : null;
@@ -455,7 +537,7 @@ async function iniciarConexao() {
   // não queremos criar chamado novo pra cada uma. whatsapp_message_id
   // único (ver migration) evita duplicar o que messages.upsert já pegou.
   const JANELA_HISTORICO_SEGUNDOS = 5 * 60;
-  socket.ev.on("messaging-history.set", async ({ messages }) => {
+  socket.ev.on("messaging-history.set", async ({ messages, contacts }) => {
     const agora = Math.floor(Date.now() / 1000);
     const recentes = (messages || []).filter((msg) => {
       const timestamp = Number(msg.messageTimestamp) || 0;
@@ -467,6 +549,15 @@ async function iniciarConexao() {
       } catch (err) {
         console.error("Falha ao sincronizar mensagem do histórico:", err.message);
       }
+    }
+
+    // Esse pacote inicial de histórico costuma vir com a agenda de
+    // contatos junto — sincroniza também daqui, além de contacts.set,
+    // porque em algumas contas contacts.set não chega sozinho.
+    if (contacts?.length) {
+      await sincronizarContatosWhatsapp(contacts).catch((err) =>
+        console.error("Falha ao sincronizar contatos do histórico:", err.message),
+      );
     }
   });
 
@@ -498,7 +589,14 @@ async function enviarMensagem({ jid, telefone, corpo }) {
 
   try {
     const resultado = await socketAtual.sendMessage(destino, { text: corpo });
-    return resultado?.key?.id ?? null;
+    const id = resultado?.key?.id ?? null;
+    if (id) {
+      idsEnviadosPorNos.add(id);
+      // Limpa depois de um tempo — só precisa sobreviver até o eco do
+      // messages.upsert chegar (normalmente segundos), não pra sempre.
+      setTimeout(() => idsEnviadosPorNos.delete(id), 5 * 60 * 1000);
+    }
+    return id;
   } catch (err) {
     // Contato criado antes do jid existir, com telefone que na verdade é
     // um @lid (não um número de verdade) — a reconstrução acima manda

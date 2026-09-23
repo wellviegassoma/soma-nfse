@@ -207,10 +207,14 @@ function MensagemBolha({
 
   // O join só vem na carga inicial (Server Component); mensagem chegada
   // via Realtime cai no mapa de nomes buscado à parte — ver
-  // app/atendimento/[ticketId]/page.tsx.
+  // app/atendimento/[ticketId]/page.tsx. ATENDENTE sem atendente_id é
+  // mensagem mandada direto do celular vinculado, fora do app (ver
+  // whatsapp-connector/src/baileys.js) — não dá pra saber quem foi.
   const nomeAtendente = mensagem.atendente_id
     ? mensagem.atendente?.full_name || nomesAtendentes[mensagem.atendente_id] || "Atendente"
-    : null;
+    : mensagem.remetente_tipo === "ATENDENTE"
+      ? "Enviado pelo celular"
+      : null;
 
   if (mensagem.interno) {
     return (
