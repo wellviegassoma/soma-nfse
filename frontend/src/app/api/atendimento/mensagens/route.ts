@@ -35,11 +35,20 @@ export async function POST(request: Request) {
   // chamado ficava "ABERTO" mas sem atendente_id, ou preso com quem tinha
   // assumido antes mesmo depois de outra pessoa já estar respondendo.
   // Quem quiser passar pra outro atendente usa Transferir normalmente.
-  if (!ehInterno && ticket.atendente_id !== user.id) {
-    await supabase
-      .from("atendimento_tickets")
-      .update({ atendente_id: user.id, status: "ABERTO" })
-      .eq("id", ticketId);
+  // nao_lida sempre volta a false aqui (não só quando muda o atendente) —
+  // achado direto de uso real: mensagem nova podia chegar via Realtime
+  // enquanto o atendente já estava com o chamado aberto respondendo, e a
+  // marca de não lida (que só se limpava ao ABRIR a tela, não a cada
+  // resposta) ficava presa mesmo depois de já ter respondido.
+  if (!ehInterno) {
+    const camposUpdate: { nao_lida: boolean; atendente_id?: string; status?: "ABERTO" } = {
+      nao_lida: false,
+    };
+    if (ticket.atendente_id !== user.id) {
+      camposUpdate.atendente_id = user.id;
+      camposUpdate.status = "ABERTO";
+    }
+    await supabase.from("atendimento_tickets").update(camposUpdate).eq("id", ticketId);
   }
 
   const { data: mensagem, error: erroInsert } = await supabase

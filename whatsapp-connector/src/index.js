@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const { exigirTokenInterno } = require("./auth");
-const { iniciarConexao, enviarMensagem } = require("./baileys");
+const { iniciarConexao, enviarMensagem, encerrarConexao } = require("./baileys");
 
 const app = express();
 app.use(express.json());
@@ -33,3 +33,17 @@ app.listen(port, () => {
     console.error("Falha ao iniciar conexão com o WhatsApp:", err);
   });
 });
+
+// Railway manda SIGTERM antes de matar o container num deploy — sem
+// tratar isso, o processo antigo podia morrer no meio da troca de sessão
+// do WhatsApp (ou de uma escrita de credencial no Volume) e a conexão
+// pedia QR Code de novo a cada deploy. encerrarConexao() fecha o socket
+// de forma limpa antes do processo sair.
+async function encerrarComCalma(sinal) {
+  console.log(`${sinal} recebido — encerrando conexão do WhatsApp antes de sair.`);
+  await encerrarConexao();
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => encerrarComCalma("SIGTERM"));
+process.on("SIGINT", () => encerrarComCalma("SIGINT"));

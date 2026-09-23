@@ -166,7 +166,16 @@ projeto (o resto do sistema é tudo request/response com revalidação de págin
 ```
 
 Fora do MVP, ainda sem tela própria (gerenciável via Supabase Studio por enquanto):
-departamentos (já vem semeado com os 11 setores da SOMA), tags, respostas rápidas.
+departamentos (já vem semeado com os 11 setores da SOMA), tags, respostas rápidas, assuntos do
+chamado (`atendimento_assuntos`, semeado com 5 genéricos), e quem pertence a qual departamento
+(`atendimento_usuario_departamentos` — só organiza o seletor de "transferir para atendente" no
+modal de transferência; sem membro cadastrado, o seletor cai pra mostrar todo mundo).
+
+Inbox lista com prévia/hora da última mensagem, destaque de não lida (contador nas abas
+Fila/Minhas, bolinha + negrito na lista, beep ao chegar mensagem) e botão **+ Nova conversa**
+(busca na agenda de contatos do WhatsApp sincronizada pelo connector, `atendimento_contatos_whatsapp`
+— separada de `atendimento_contatos`, que só tem quem já teve chamado). Fechar chamado abre
+confirmação com assunto + resumo, gravados em `atendimento_tickets.assunto_id`/`resumo`.
 
 ## Fases
 
@@ -185,9 +194,12 @@ departamentos (já vem semeado com os 11 setores da SOMA), tags, respostas rápi
   instantânea demais, múltiplos dispositivos simultâneos). Mitigação: uso normal (1 sessão, 1
   número, ritmo humano); migração pra Cloud API é o plano B já desenhado (troca só o
   `whatsapp-connector`).
-- **Sessão do Baileys perdida em redeploy** sem Volume configurado na Railway — pede novo QR
-  Code e perde o histórico de "aparelho conectado" (não perde mensagens já gravadas no Supabase,
-  só a sessão ativa). Ver `whatsapp-connector/README.md`.
+- **Sessão do Baileys perdida em redeploy** — achado real testando: mesmo com Volume
+  configurado, o processo antigo sendo morto no meio de uma troca de sessão (ou de uma escrita
+  de credencial) derrubava a conexão, pedindo QR Code de novo a cada deploy. Mitigado com
+  encerramento gracioso no SIGTERM (`encerrarConexao()` em `baileys.js`, fecha o socket antes do
+  processo sair) — reduz bastante, mas não é garantia absoluta se a Railway matar o container
+  sem tempo de grace period nenhum.
 - **Auto-match de empresa por telefone é heurística** (últimos 8 dígitos, ignora DDI/9º dígito)
   — pode errar com número compartilhado por duas empresas ou portado. Nunca é usado pra
   autorização, só contexto visual pro atendente.

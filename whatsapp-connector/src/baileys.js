@@ -16,6 +16,9 @@ const CONEXAO_ID = process.env.ATENDIMENTO_CONEXAO_ID;
 const CODIGO_VIOLACAO_UNICA = "23505";
 
 let socketAtual = null;
+// Some ao processo receber SIGTERM pra reconnect automático não disparar
+// depois de um encerramentoDeliberado (ver encerrarConexao).
+let encerramentoDeliberado = false;
 
 // Envolve uma operação que só faz leitura + escrita idempotente (achar-ou-
 // criar, ou um insert já protegido contra 23505) — retentar a função
@@ -36,6 +39,35 @@ async function comRetentativas(fn, tentativas = 3, esperaMs = 500) {
     }
   }
   throw ultimoErro;
+}
+
+function ehJidIndividual(jid) {
+  return Boolean(jid) && !jid.endsWith("@g.us") && !jid.endsWith("@broadcast") && !jid.endsWith("@newsletter");
+}
+
+// Agenda de contatos do WhatsApp (não confundir com atendimento_contatos,
+// que só tem quem já virou chamado) — usada pro seletor de "Nova
+// conversa" no inbox. Só guarda contato com nome (salvo no aparelho ou
+// pushName) pra não encher a lista de número solto sem identificação.
+async function sincronizarContatosWhatsapp(contatos) {
+  if (!CONEXAO_ID || !contatos?.length) return;
+
+  const linhas = contatos
+    .filter((c) => ehJidIndividual(c.id) && (c.name || c.notify))
+    .map((c) => ({
+      conexao_id: CONEXAO_ID,
+      jid: c.id,
+      nome: c.name || c.notify || null,
+      telefone: digitosTelefone(c.id.split("@")[0]),
+      atualizado_em: new Date().toISOString(),
+    }));
+  if (linhas.length === 0) return;
+
+  const supabase = obterCliente();
+  const { error } = await supabase
+    .from("atendimento_contatos_whatsapp")
+    .upsert(linhas, { onConflict: "conexao_id,jid" });
+  if (error) console.error("Falha ao sincronizar agenda de contatos:", error.message);
 }
 
 async function atualizarConexao(campos) {
@@ -370,9 +402,12 @@ async function iniciarConexao() {
       // error.output.statusCode vem de @hapi/boom (dependência do próprio
       // Baileys) — DisconnectReason.loggedOut é o único caso em que NÃO
       // devemos tentar reconectar sozinho (sessão foi de fato encerrada
-      // pelo celular, precisa de novo QR Code).
+      // pelo celular, precisa de novo QR Code). encerramentoDeliberado
+      // cobre o outro caso de não reconectar: processo sendo desligado de
+      // propósito (deploy) — reconectar aqui só pra ser matado de novo
+      // alguns milissegundos depois é trabalho e log inúteis.
       const codigo = lastDisconnect?.error?.output?.statusCode;
-      if (codigo !== DisconnectReason.loggedOut) {
+      if (codigo !== DisconnectReason.loggedOut && !encerramentoDeliberado) {
         setTimeout(() => {
           iniciarConexao().catch((err) => console.error("Falha ao reconectar:", err));
         }, 5_000);
@@ -419,6 +454,20 @@ async function iniciarConexao() {
     }
   });
 
+  // Agenda de contatos pro seletor de "Nova conversa" — contacts.set é o
+  // pacote inicial ao parear, contacts.upsert é a atualização contínua
+  // (contato novo salvo, nome mudado).
+  socket.ev.on("contacts.set", ({ contacts }) => {
+    sincronizarContatosWhatsapp(contacts).catch((err) =>
+      console.error("Falha ao sincronizar contacts.set:", err.message),
+    );
+  });
+  socket.ev.on("contacts.upsert", (contacts) => {
+    sincronizarContatosWhatsapp(contacts).catch((err) =>
+      console.error("Falha ao sincronizar contacts.upsert:", err.message),
+    );
+  });
+
   return socket;
 }
 
@@ -449,4 +498,24 @@ async function enviarMensagem({ jid, telefone, corpo }) {
   }
 }
 
-module.exports = { iniciarConexao, enviarMensagem };
+// Chamado no SIGTERM (Railway manda isso antes de matar o container num
+// deploy) — fecha o socket de forma limpa (não é logout, a sessão salva
+// continua válida) antes do processo morrer. Achado real: sem isso, o
+// container antigo podia ser morto no meio de uma escrita do arquivo de
+// credencial no Volume (ou os dois processos — antigo e novo do deploy
+// seguinte — disputando a mesma sessão do WhatsApp ao mesmo tempo),
+// derrubando a sessão e pedindo QR Code de novo a cada deploy.
+async function encerrarConexao() {
+  encerramentoDeliberado = true;
+  if (!socketAtual) return;
+  try {
+    socketAtual.end(undefined);
+  } catch (err) {
+    console.error("Falha ao encerrar conexão de forma limpa:", err.message);
+  }
+  // Dá um tempo pro creds.update pendente (se houver) terminar de
+  // escrever no Volume antes do processo ser encerrado de vez.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+}
+
+module.exports = { iniciarConexao, enviarMensagem, encerrarConexao };

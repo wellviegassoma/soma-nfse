@@ -15,11 +15,17 @@ export function TicketChat({
   mensagensIniciais,
   departamentos,
   nomesAtendentes,
+  assuntos,
+  atendentesPorDepartamento,
+  todosAtendentes,
 }: {
   ticket: TicketDetalhe;
   mensagensIniciais: Mensagem[];
   departamentos: { id: string; nome: string }[];
   nomesAtendentes: Record<string, string>;
+  assuntos: { id: string; nome: string }[];
+  atendentesPorDepartamento: Record<string, { id: string; nome: string }[]>;
+  todosAtendentes: { id: string; nome: string }[];
 }) {
   const router = useRouter();
   const [mensagens, setMensagens] = useState(mensagensIniciais);
@@ -28,6 +34,7 @@ export function TicketChat({
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mostrarTransferencia, setMostrarTransferencia] = useState(false);
+  const [mostrarFechar, setMostrarFechar] = useState(false);
   const fimRef = useRef<HTMLDivElement>(null);
 
   useAtendimentoRealtime<Mensagem>(
@@ -66,11 +73,6 @@ export function TicketChat({
     router.refresh();
   }
 
-  async function fechar() {
-    await fetch(`/api/atendimento/tickets/${ticket.id}/fechar`, { method: "POST" });
-    router.refresh();
-  }
-
   const empresa = ticket.contato?.company;
 
   return (
@@ -103,7 +105,7 @@ export function TicketChat({
               <Button size="md" variant="secondary" onClick={() => setMostrarTransferencia((v) => !v)}>
                 Transferir
               </Button>
-              <Button size="md" variant="secondary" onClick={fechar}>
+              <Button size="md" variant="secondary" onClick={() => setMostrarFechar(true)}>
                 Fechar
               </Button>
             </>
@@ -115,8 +117,22 @@ export function TicketChat({
         <TransferenciaForm
           ticketId={ticket.id}
           departamentos={departamentos}
+          atendentesPorDepartamento={atendentesPorDepartamento}
+          todosAtendentes={todosAtendentes}
           onConcluido={() => {
             setMostrarTransferencia(false);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {mostrarFechar && (
+        <FecharModal
+          ticketId={ticket.id}
+          assuntos={assuntos}
+          onCancelar={() => setMostrarFechar(false)}
+          onConcluido={() => {
+            setMostrarFechar(false);
             router.refresh();
           }}
         />
@@ -262,16 +278,31 @@ function VisualizadorMidia({ mensagem }: { mensagem: Mensagem }) {
 function TransferenciaForm({
   ticketId,
   departamentos,
+  atendentesPorDepartamento,
+  todosAtendentes,
   onConcluido,
 }: {
   ticketId: string;
   departamentos: { id: string; nome: string }[];
+  atendentesPorDepartamento: Record<string, { id: string; nome: string }[]>;
+  todosAtendentes: { id: string; nome: string }[];
   onConcluido: () => void;
 }) {
   const [departamentoId, setDepartamentoId] = useState("");
+  const [atendenteId, setAtendenteId] = useState("");
   const [comentario, setComentario] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+
+  // Sem ninguém cadastrado nesse departamento (ver
+  // atendimento_usuario_departamentos — gerenciável só por Supabase
+  // Studio por enquanto), cai pra mostrar todo mundo em vez de um
+  // seletor vazio.
+  const atendentesDisponiveis = departamentoId
+    ? atendentesPorDepartamento[departamentoId]?.length
+      ? atendentesPorDepartamento[departamentoId]
+      : todosAtendentes
+    : [];
 
   async function confirmar() {
     if (!departamentoId || !comentario.trim()) {
@@ -283,7 +314,11 @@ function TransferenciaForm({
     const resposta = await fetch(`/api/atendimento/tickets/${ticketId}/transferir`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ departamento_id: departamentoId, comentario: comentario.trim() }),
+      body: JSON.stringify({
+        departamento_id: departamentoId,
+        atendente_id: atendenteId || null,
+        comentario: comentario.trim(),
+      }),
     });
     const dados = await resposta.json();
     setEnviando(false);
@@ -296,14 +331,30 @@ function TransferenciaForm({
 
   return (
     <div className="space-y-2 border-b border-border bg-surface-muted px-4 py-3">
-      <Select value={departamentoId} onChange={(e) => setDepartamentoId(e.target.value)}>
-        <option value="">Transferir para...</option>
+      <Select
+        value={departamentoId}
+        onChange={(e) => {
+          setDepartamentoId(e.target.value);
+          setAtendenteId("");
+        }}
+      >
+        <option value="">Transferir para departamento...</option>
         {departamentos.map((dep) => (
           <option key={dep.id} value={dep.id}>
             {dep.nome}
           </option>
         ))}
       </Select>
+      {departamentoId && (
+        <Select value={atendenteId} onChange={(e) => setAtendenteId(e.target.value)}>
+          <option value="">Transferir para atendente (opcional)</option>
+          {atendentesDisponiveis.map((at) => (
+            <option key={at.id} value={at.id}>
+              {at.nome}
+            </option>
+          ))}
+        </Select>
+      )}
       <textarea
         value={comentario}
         onChange={(e) => setComentario(e.target.value)}
@@ -315,6 +366,86 @@ function TransferenciaForm({
       <Button size="md" onClick={confirmar} loading={enviando}>
         Confirmar transferência
       </Button>
+    </div>
+  );
+}
+
+function FecharModal({
+  ticketId,
+  assuntos,
+  onCancelar,
+  onConcluido,
+}: {
+  ticketId: string;
+  assuntos: { id: string; nome: string }[];
+  onCancelar: () => void;
+  onConcluido: () => void;
+}) {
+  const [assuntoId, setAssuntoId] = useState("");
+  const [resumo, setResumo] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  async function confirmar() {
+    setEnviando(true);
+    setErro(null);
+    const resposta = await fetch(`/api/atendimento/tickets/${ticketId}/fechar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assunto_id: assuntoId || null, resumo }),
+    });
+    setEnviando(false);
+    if (!resposta.ok) {
+      const dados = await resposta.json().catch(() => ({}));
+      setErro(dados.error || "Falha ao fechar o chamado.");
+      return;
+    }
+    onConcluido();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-xl bg-surface p-6 text-center shadow-lg">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border-2 border-warning text-2xl font-bold text-warning">
+          !
+        </div>
+        <h2 className="text-lg font-semibold text-foreground">Fechar chamado</h2>
+        <p className="mt-1 text-sm text-foreground/55">Você tem certeza que deseja fechar o chamado?</p>
+
+        <div className="mt-4 space-y-3 text-left">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-foreground/60">Assunto do chamado</label>
+            <Select value={assuntoId} onChange={(e) => setAssuntoId(e.target.value)}>
+              <option value="">Selecione...</option>
+              {assuntos.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.nome}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-foreground/60">Resumo do atendimento</label>
+            <textarea
+              value={resumo}
+              onChange={(e) => setResumo(e.target.value)}
+              placeholder="Resumo do atendimento"
+              rows={3}
+              className="w-full resize-none rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
+            />
+          </div>
+          {erro && <Alert>{erro}</Alert>}
+        </div>
+
+        <div className="mt-5 flex justify-center gap-2">
+          <Button variant="secondary" onClick={onCancelar} disabled={enviando}>
+            Cancelar
+          </Button>
+          <Button onClick={confirmar} loading={enviando}>
+            Fechar chamado
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

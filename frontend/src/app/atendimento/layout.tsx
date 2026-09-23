@@ -1,10 +1,19 @@
 import Link from "next/link";
 import { requireAtendimentoAccess } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
+import { NovaConversaModal } from "@/components/atendimento/NovaConversaModal";
 
 export default async function AtendimentoLayout({
   children,
 }: LayoutProps<"/atendimento">) {
   await requireAtendimentoAccess();
+
+  const supabase = await createClient();
+  const { data: departamentos } = await supabase
+    .from("atendimento_departamentos")
+    .select("id, nome")
+    .eq("ativo", true)
+    .order("nome");
 
   return (
     <div className="flex h-dvh flex-col bg-background">
@@ -24,6 +33,7 @@ export default async function AtendimentoLayout({
             Conexões
           </Link>
         </nav>
+        <NovaConversaModal departamentos={departamentos ?? []} />
         <div className="ml-auto">
           <Link href="/admin" className="text-sm text-foreground/55 hover:text-foreground">
             Sair do Atendimento
