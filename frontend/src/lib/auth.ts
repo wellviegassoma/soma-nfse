@@ -86,6 +86,20 @@ export async function requireExtratosAccess() {
   if (!ok) redirect("/");
 }
 
+// Atendimento é o inbox de WhatsApp da própria SOMA — cliente nunca vê,
+// mesmo padrão de requireLegalizacaoAccess/requireExtratosAccess.
+export async function requireAtendimentoAccess() {
+  await requireUser();
+  const companies = await getUserCompanies();
+  const ok = companies.some(
+    (c) =>
+      c.role === "SUPER_ADMIN" ||
+      c.role === "ADMIN_SOMA" ||
+      c.role === "ANALISTA_ATENDIMENTO",
+  );
+  if (!ok) redirect("/");
+}
+
 // Financeiro é o único módulo que staff e cliente usam sobre o MESMO dado
 // sensível (saldo, fornecedor, folha). Espelha exatamente a função
 // pode_financeiro() da RLS — se as duas divergirem, a RLS é quem manda, e o
