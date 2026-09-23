@@ -407,8 +407,23 @@ async function enviarMensagem({ jid, telefone, corpo }) {
   // reconstrói a partir do telefone pra contato antigo, de antes desta
   // correção, que ainda não teve o jid preenchido pela auto-cura.
   const destino = jid || `${digitosTelefone(telefone)}@s.whatsapp.net`;
-  const resultado = await socketAtual.sendMessage(destino, { text: corpo });
-  return resultado?.key?.id ?? null;
+
+  try {
+    const resultado = await socketAtual.sendMessage(destino, { text: corpo });
+    return resultado?.key?.id ?? null;
+  } catch (err) {
+    // Contato criado antes do jid existir, com telefone que na verdade é
+    // um @lid (não um número de verdade) — a reconstrução acima manda
+    // pra um endereço que não existe, e o Baileys quebra com um erro
+    // interno confuso em vez de dizer isso. Achado testando: precisa de
+    // uma mensagem nova do contato pra auto-cura preencher o jid certo.
+    if (!jid) {
+      throw new Error(
+        "Não foi possível enviar — este contato ainda não tem o endereço de envio salvo. Peça pra ele mandar uma mensagem nova (qualquer uma) que o cadastro se corrige sozinho.",
+      );
+    }
+    throw err;
+  }
 }
 
 module.exports = { iniciarConexao, enviarMensagem };
