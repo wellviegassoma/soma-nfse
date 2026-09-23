@@ -2,7 +2,9 @@ const {
   default: makeWASocket,
   DisconnectReason,
   useMultiFileAuthState,
+  downloadMediaMessage,
 } = require("@whiskeysockets/baileys");
+const { put } = require("@vercel/blob");
 const pino = require("pino");
 const QRCode = require("qrcode");
 const { obterCliente } = require("./supabaseClient");
@@ -183,44 +185,96 @@ function ehEncaminhada(m) {
 // figurinha, foto sem legenda, documento, localização) não pode virar
 // bolha vazia, e um tipo que a gente ainda não trata explicitamente vira
 // um rótulo com o nome do campo (não corpo=null) pra dar pra investigar
-// depois e pro atendente pelo menos saber que chegou algo. O
-// download/armazenamento do arquivo de mídia em si fica pra uma fase
-// seguinte (ver docs/atendimento.md); por enquanto o rótulo já é melhor
-// do que nada.
+// depois e pro atendente pelo menos saber que chegou algo. Devolve
+// também a mensagem já desembrulhada, pra baixarEArmazenarMidia não
+// precisar desembrulhar de novo.
 function extrairConteudo(msg) {
   const m = desembrulhar(msg.message || {});
   const prefixo = ehEncaminhada(m) ? "↪ Encaminhada:\n" : "";
 
-  if (m.conversation) return { corpo: prefixo + m.conversation, midiaTipo: null };
-  if (m.extendedTextMessage?.text) return { corpo: prefixo + m.extendedTextMessage.text, midiaTipo: null };
-  if (m.imageMessage) return { corpo: prefixo + (m.imageMessage.caption || "[Imagem]"), midiaTipo: "image" };
-  if (m.videoMessage) return { corpo: prefixo + (m.videoMessage.caption || "[Vídeo]"), midiaTipo: "video" };
+  if (m.conversation) return { corpo: prefixo + m.conversation, midiaTipo: null, m };
+  if (m.extendedTextMessage?.text) return { corpo: prefixo + m.extendedTextMessage.text, midiaTipo: null, m };
+  if (m.imageMessage) return { corpo: prefixo + (m.imageMessage.caption || "[Imagem]"), midiaTipo: "image", m };
+  if (m.videoMessage) return { corpo: prefixo + (m.videoMessage.caption || "[Vídeo]"), midiaTipo: "video", m };
   if (m.audioMessage) {
-    return { corpo: prefixo + (m.audioMessage.ptt ? "[Áudio]" : "[Arquivo de áudio]"), midiaTipo: "audio" };
+    return { corpo: prefixo + (m.audioMessage.ptt ? "[Áudio]" : "[Arquivo de áudio]"), midiaTipo: "audio", m };
   }
-  if (m.stickerMessage) return { corpo: prefixo + "[Figurinha]", midiaTipo: "sticker" };
+  if (m.stickerMessage) return { corpo: prefixo + "[Figurinha]", midiaTipo: "sticker", m };
   if (m.documentMessage) {
     return {
       corpo: prefixo + `[Documento: ${m.documentMessage.fileName || "arquivo"}]`,
       midiaTipo: "document",
+      m,
     };
   }
-  if (m.locationMessage) return { corpo: prefixo + "[Localização compartilhada]", midiaTipo: "location" };
+  if (m.locationMessage) return { corpo: prefixo + "[Localização compartilhada]", midiaTipo: "location", m };
   if (m.contactMessage) {
-    return { corpo: prefixo + `[Contato: ${m.contactMessage.displayName || "sem nome"}]`, midiaTipo: "contact" };
+    return {
+      corpo: prefixo + `[Contato: ${m.contactMessage.displayName || "sem nome"}]`,
+      midiaTipo: "contact",
+      m,
+    };
   }
 
   const tipos = Object.keys(m);
-  if (tipos.length === 0) return { corpo: null, midiaTipo: null };
-  return { corpo: `[Mensagem não suportada: ${tipos.join(", ")}]`, midiaTipo: "unsupported" };
+  if (tipos.length === 0) return { corpo: null, midiaTipo: null, m };
+  return { corpo: `[Mensagem não suportada: ${tipos.join(", ")}]`, midiaTipo: "unsupported", m };
 }
 
-async function inserirMensagemRecebida(supabase, { ticketId, corpo, midiaTipo, whatsappMessageId }) {
+// Só estes têm arquivo de verdade pra baixar — contato/localização já
+// viram texto inteiro em extrairConteudo, e "unsupported" não tem como
+// saber que tipo de mídia é (Baileys precisa do node de mídia certo).
+const TIPOS_COM_ARQUIVO = new Set(["image", "video", "audio", "sticker", "document"]);
+
+const EXTENSAO_POR_TIPO = { image: "jpg", video: "mp4", audio: "ogg", sticker: "webp" };
+
+function obterExtensao(midiaTipo, m) {
+  if (midiaTipo === "document" && m.documentMessage?.fileName?.includes(".")) {
+    return m.documentMessage.fileName.split(".").pop();
+  }
+  return EXTENSAO_POR_TIPO[midiaTipo] || "bin";
+}
+
+// Baixa do WhatsApp (descriptografa) e sobe pro Vercel Blob, privado —
+// mesmo padrão de Legalização (arquivo não vai pro Postgres, só o
+// caminho). Nunca lança: falha aqui não pode derrubar o registro da
+// mensagem por inteiro — o atendente ainda vê o rótulo (`[Imagem]` etc.)
+// mesmo sem o arquivo baixado.
+async function baixarEArmazenarMidia(msg, socket, midiaTipo, m) {
+  if (!TIPOS_COM_ARQUIVO.has(midiaTipo) || !process.env.BLOB_READ_WRITE_TOKEN) return null;
+
+  try {
+    const buffer = await downloadMediaMessage(
+      msg,
+      "buffer",
+      {},
+      { logger: pino({ level: "warn" }), reuploadRequest: socket.updateMediaMessage },
+    );
+    const extensao = obterExtensao(midiaTipo, m);
+    // Nome determinístico (id da própria mensagem do WhatsApp) — uma
+    // retentativa de comRetentativas reenviando a mesma mensagem sobe por
+    // cima do mesmo arquivo em vez de duplicar no Blob.
+    const pathname = `atendimento/${CONEXAO_ID}/${msg.key.id}.${extensao}`;
+    const resultado = await put(pathname, buffer, {
+      access: "private",
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+      addRandomSuffix: false,
+    });
+    return { url: resultado.url, pathname: resultado.pathname };
+  } catch (err) {
+    console.error("Falha ao baixar/guardar mídia:", err.message);
+    return null;
+  }
+}
+
+async function inserirMensagemRecebida(supabase, { ticketId, corpo, midiaTipo, midiaUrl, midiaPathname, whatsappMessageId }) {
   const { error } = await supabase.from("atendimento_mensagens").insert({
     ticket_id: ticketId,
     remetente_tipo: "CONTATO",
     corpo,
     midia_tipo: midiaTipo,
+    midia_url: midiaUrl,
+    midia_pathname: midiaPathname,
     whatsapp_message_id: whatsappMessageId,
     status: "RECEBIDA",
   });
@@ -234,7 +288,7 @@ async function inserirMensagemRecebida(supabase, { ticketId, corpo, midiaTipo, w
   }
 }
 
-async function registrarMensagemRecebida(msg) {
+async function registrarMensagemRecebida(msg, socket) {
   if (!CONEXAO_ID || msg.key.fromMe) return;
 
   const jid = msg.key.remoteJid || "";
@@ -251,16 +305,20 @@ async function registrarMensagemRecebida(msg) {
   const telefone = digitosTelefone(jid.split("@")[0]);
   if (!telefone) return;
 
-  const { corpo, midiaTipo } = extrairConteudo(msg);
+  const { corpo, midiaTipo, m } = extrairConteudo(msg);
   const supabase = obterCliente();
 
   const contato = await encontrarOuCriarContato(supabase, { telefone, jid, nomePush: msg.pushName });
   const ticketId = await encontrarOuCriarTicketAberto(supabase, contato.id);
 
+  const midia = midiaTipo ? await baixarEArmazenarMidia(msg, socket, midiaTipo, m) : null;
+
   await inserirMensagemRecebida(supabase, {
     ticketId,
     corpo,
     midiaTipo,
+    midiaUrl: midia?.url ?? null,
+    midiaPathname: midia?.pathname ?? null,
     whatsappMessageId: msg.key.id,
   });
 }
@@ -331,7 +389,7 @@ async function iniciarConexao() {
     if (type !== "notify" && type !== "append") return;
     for (const msg of messages) {
       try {
-        await comRetentativas(() => registrarMensagemRecebida(msg));
+        await comRetentativas(() => registrarMensagemRecebida(msg, socket));
       } catch (err) {
         console.error("Falha ao registrar mensagem recebida (após retentativas):", err.message);
       }

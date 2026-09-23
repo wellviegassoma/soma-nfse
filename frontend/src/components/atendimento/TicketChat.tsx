@@ -221,9 +221,42 @@ function MensagemBolha({
           <div className="mb-0.5 text-xs font-medium text-brand-foreground/70">{nomeAtendente}</div>
         )}
         {mensagem.corpo}
+        <VisualizadorMidia mensagem={mensagem} />
       </div>
     </div>
   );
+}
+
+// midia_url só vem preenchido quando o whatsapp-connector conseguiu
+// baixar e guardar o arquivo no Blob — sem isso, o rótulo em `corpo`
+// (ex.: "[Imagem]") já é a única informação disponível, mostrado sozinho.
+function VisualizadorMidia({ mensagem }: { mensagem: Mensagem }) {
+  if (!mensagem.midia_url) return null;
+  const src = `/api/atendimento/midia/${mensagem.id}`;
+
+  if (mensagem.midia_tipo === "image" || mensagem.midia_tipo === "sticker") {
+    // eslint-disable-next-line @next/next/no-img-element -- vem de rota própria autenticada, não vale otimização de imagem remota
+    return <img src={src} alt="Mídia recebida" className="mt-1.5 max-h-72 rounded-md" />;
+  }
+  if (mensagem.midia_tipo === "video") {
+    return <video controls src={src} className="mt-1.5 max-h-72 rounded-md" />;
+  }
+  if (mensagem.midia_tipo === "audio") {
+    return <audio controls src={src} className="mt-1.5 max-w-full" />;
+  }
+  if (mensagem.midia_tipo === "document") {
+    return (
+      <a
+        href={src}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-1.5 inline-block text-sm underline underline-offset-2"
+      >
+        Abrir arquivo
+      </a>
+    );
+  }
+  return null;
 }
 
 function TransferenciaForm({

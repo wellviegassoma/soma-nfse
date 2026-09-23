@@ -172,7 +172,7 @@ departamentos (já vem semeado com os 11 setores da SOMA), tags, respostas rápi
 
 | Fase | Escopo | Status |
 |---|---|---|
-| **F1** Fundação | Papel, RLS, schema completo, conector Baileys, inbox com fila por departamento, transferência com comentário, nota interna, fechar/assumir chamado, Realtime | **Feito** nesta entrega |
+| **F1** Fundação | Papel, RLS, schema completo, conector Baileys, inbox com fila por departamento, transferência com comentário, nota interna, fechar/assumir chamado automático ao responder, Realtime, download de mídia (Vercel Blob) | **Feito** nesta entrega |
 | **F2** Produtividade | Telas de departamentos/tags/respostas rápidas (hoje só via Supabase Studio), busca no inbox, filtro por departamento/tag na lista | Próxima |
 | **F3** Relatórios | Tempo de espera, tempo de atendimento, volume por departamento, exportação | Próxima |
 | **F4** Robô por fluxo | Construtor visual (mensagem, condição, gatilho, tag, webhook) | Depois |
@@ -192,11 +192,10 @@ departamentos (já vem semeado com os 11 setores da SOMA), tags, respostas rápi
   — pode errar com número compartilhado por duas empresas ou portado. Nunca é usado pra
   autorização, só contexto visual pro atendente.
 - **Sem chatbot nem relatório na F1** — quem depender disso continua no Digisac até a F3/F4.
-- **Mídia recebida (áudio, foto, figurinha, documento, localização) ainda não é baixada nem
-  guardada** — o whatsapp-connector reconhece o tipo e grava um rótulo (`[Áudio]`, `[Imagem]`
-  etc.) em vez de bolha vazia, mas o arquivo em si fica só no WhatsApp do cliente. Download +
-  upload pro Vercel Blob (mesmo padrão de Legalização) fica pra F2 — decisão consciente pra não
-  atrasar o F1 com uma peça que exige armazenamento e política de retenção próprios.
+- **Localização e cartão de contato viram só texto** (`[Localização compartilhada]`,
+  `[Contato: nome]`) — não têm um arquivo de verdade pra baixar, ficou fora de propósito.
+- **Mídia sem legenda/nome de arquivo não tem um jeito melhor de nomear** o link "Abrir
+  arquivo" além do rótulo genérico — cosmético, não bloqueia o uso.
 
 ## Como migrar do Digisac
 
