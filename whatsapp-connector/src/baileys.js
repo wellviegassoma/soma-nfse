@@ -396,6 +396,29 @@ async function iniciarConexao() {
     }
   });
 
+  // O WhatsApp manda mensagem recebida enquanto o processo estava fora do
+  // ar (deploy, queda de rede) por este evento ao reconectar, não pelo
+  // messages.upsert normal — achado real testando reconexão. Só processa
+  // mensagem dos últimos 5 minutos: esse evento também dispara no
+  // primeiro pareamento com um histórico grande de conversas antigas, e
+  // não queremos criar chamado novo pra cada uma. whatsapp_message_id
+  // único (ver migration) evita duplicar o que messages.upsert já pegou.
+  const JANELA_HISTORICO_SEGUNDOS = 5 * 60;
+  socket.ev.on("messaging-history.set", async ({ messages }) => {
+    const agora = Math.floor(Date.now() / 1000);
+    const recentes = (messages || []).filter((msg) => {
+      const timestamp = Number(msg.messageTimestamp) || 0;
+      return agora - timestamp < JANELA_HISTORICO_SEGUNDOS;
+    });
+    for (const msg of recentes) {
+      try {
+        await comRetentativas(() => registrarMensagemRecebida(msg, socket));
+      } catch (err) {
+        console.error("Falha ao sincronizar mensagem do histórico:", err.message);
+      }
+    }
+  });
+
   return socket;
 }
 

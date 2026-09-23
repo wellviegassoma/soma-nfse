@@ -17,7 +17,7 @@ export default async function TicketPage(props: PageProps<"/atendimento/[ticketI
       supabase
         .from("atendimento_tickets")
         .select(
-          "id, protocolo, status, departamento_id, atendente_id, contato:atendimento_contatos(id, nome, telefone, company_id, company:companies(id, legal_name, trade_name))",
+          "id, protocolo, status, departamento_id, atendente_id, nao_lida, contato:atendimento_contatos(id, nome, telefone, company_id, company:companies(id, legal_name, trade_name))",
         )
         .eq("id", ticketId)
         .single(),
@@ -35,6 +35,14 @@ export default async function TicketPage(props: PageProps<"/atendimento/[ticketI
     ]);
 
   if (erroTicket || !ticket) notFound();
+
+  // Abrir a tela do chamado marca como lida — só quando abre responder já
+  // implica ter visto, e assim não precisa de um botão "marcar como lida"
+  // separado. Não bloqueia o render (fire-and-forget): é cosmético, não
+  // precisa esperar a escrita terminar pra mostrar a conversa.
+  if ((ticket as unknown as { nao_lida: boolean }).nao_lida) {
+    void supabase.from("atendimento_tickets").update({ nao_lida: false }).eq("id", ticketId);
+  }
 
   const nomesAtendentes = Object.fromEntries(
     (perfis ?? []).map((p) => [p.id, p.full_name ?? "Atendente"]),

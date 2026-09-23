@@ -8,6 +8,10 @@ export type TicketResumo = {
   departamento_id: string;
   atendente_id: string | null;
   aberto_em: string;
+  ultima_mensagem_em: string | null;
+  ultima_mensagem_preview: string | null;
+  ultima_mensagem_remetente_tipo: RemetenteTipo | null;
+  nao_lida: boolean;
   contato: {
     id: string;
     nome: string | null;
