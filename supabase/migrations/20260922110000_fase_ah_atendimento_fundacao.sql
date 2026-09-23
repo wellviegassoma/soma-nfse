@@ -4,9 +4,10 @@
 -- padrão de acesso de Legalização/Extratos: só staff + analista do módulo
 -- (is_soma_staff() or is_atendimento_analista()), sem isolamento por
 -- empresa — cliente nunca loga nessas telas. `company_id` em
--- atendimento_contatos é só um vínculo opcional (auto-casado por telefone,
--- ver lib/atendimento/match-empresa.ts) pra dar contexto ao atendente,
--- nunca controla RLS.
+-- atendimento_contatos é só um vínculo opcional (auto-casado por telefone
+-- via a função atendimento_buscar_company_id_por_telefone, chamada pelo
+-- whatsapp-connector/src/baileys.js) pra dar contexto ao atendente, nunca
+-- controla RLS.
 --
 -- Levantamento feito em 22/09/2026 navegando o Digisac real (conta SOMA
 -- Contabilidade Integrada, gruposoma.digisac.co) — ver docs/atendimento.md.
@@ -86,17 +87,58 @@ create index atendimento_contatos_telefone_idx on public.atendimento_contatos(te
 create trigger atendimento_contatos_set_updated_at before update on public.atendimento_contatos
   for each row execute function public.set_updated_at();
 
+-- Auto-match por telefone: compara só os últimos 8 dígitos (ignora DDI e o
+-- 9º dígito, que variam entre como o WhatsApp manda o número e como está
+-- digitado em company_contatos_setor) — heurística suficiente pro
+-- contexto do atendente, nunca usada em RLS nem em nenhuma decisão que
+-- precise de certeza. Fica em SQL (não em JS) pra evitar que o
+-- whatsapp-connector precise puxar a tabela inteira pela rede a cada
+-- contato novo — achado na revisão do PR (o código antigo fazia
+-- `select *` em company_contatos_setor e filtrava em memória no Node).
+create or replace function public.atendimento_buscar_company_id_por_telefone(p_telefone text)
+returns uuid
+language sql
+stable
+as $$
+  select company_id
+  from public.company_contatos_setor
+  where telefone is not null
+    and right(regexp_replace(telefone, '\D', '', 'g'), 8) = right(regexp_replace(p_telefone, '\D', '', 'g'), 8)
+  limit 1;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Tickets (chamado)
 -- ---------------------------------------------------------------------------
 
-create sequence public.atendimento_protocolo_seq;
+-- Contador por ano (não uma sequence única) — achado na revisão do PR: uma
+-- sequence global nunca reinicia, então o protocolo de janeiro/2027 saía
+-- "2027-004501" em vez de "2027-000001" se 2026 tivesse terminado em 4500.
+-- `insert ... on conflict do update ... returning` é atômico por linha
+-- (o lock da linha do ano serializa chamadas concorrentes), sem precisar
+-- de uma sequence nova por ano.
+create table public.atendimento_protocolo_contador (
+  ano int primary key,
+  ultimo int not null default 0
+);
 
 create or replace function public.atendimento_gerar_protocolo()
 returns text
-language sql
+language plpgsql
+security definer
+set search_path = public
 as $$
-  select to_char(now(), 'YYYY') || '-' || lpad(nextval('public.atendimento_protocolo_seq')::text, 6, '0');
+declare
+  v_ano int := extract(year from now());
+  v_proximo int;
+begin
+  insert into public.atendimento_protocolo_contador (ano, ultimo)
+  values (v_ano, 1)
+  on conflict (ano) do update set ultimo = public.atendimento_protocolo_contador.ultimo + 1
+  returning ultimo into v_proximo;
+
+  return v_ano::text || '-' || lpad(v_proximo::text, 6, '0');
+end;
 $$;
 
 create table public.atendimento_tickets (
@@ -141,6 +183,16 @@ create table public.atendimento_mensagens (
 comment on table public.atendimento_mensagens is
   'interno=true é a nota interna (comentário que não vai pro WhatsApp) — mesma tabela, pra aparecer na linha do tempo do ticket na ordem certa, mas remetente_tipo continua ATENDENTE.';
 create index atendimento_mensagens_ticket_id_idx on public.atendimento_mensagens(ticket_id, created_at);
+-- Idempotência: se o Baileys reenviar o mesmo evento (comum depois de uma
+-- reconexão) ou a retentativa do whatsapp-connector rodar duas vezes por
+-- causa de uma falha de rede na resposta (não na gravação), o segundo
+-- insert com o mesmo whatsapp_message_id vira erro 23505 em vez de
+-- duplicar a mensagem — ver encontrarOuCriarContato/registrarMensagemRecebida
+-- em whatsapp-connector/src/baileys.js. Parcial (where not null) porque
+-- toda mensagem ENVIANDO por um atendente nasce sem whatsapp_message_id.
+create unique index atendimento_mensagens_whatsapp_message_id_idx
+  on public.atendimento_mensagens(whatsapp_message_id)
+  where whatsapp_message_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- Transferências (auditoria)
@@ -195,6 +247,7 @@ create trigger atendimento_respostas_rapidas_set_updated_at before update on pub
 -- atendimento, mesmo padrão de Legalização/Extratos (cliente nunca vê).
 -- ---------------------------------------------------------------------------
 
+alter table public.atendimento_protocolo_contador enable row level security;
 alter table public.atendimento_departamentos enable row level security;
 alter table public.atendimento_conexoes enable row level security;
 alter table public.atendimento_contatos enable row level security;
@@ -205,6 +258,9 @@ alter table public.atendimento_tags enable row level security;
 alter table public.atendimento_contato_tags enable row level security;
 alter table public.atendimento_respostas_rapidas enable row level security;
 
+create policy atendimento_protocolo_contador_all on public.atendimento_protocolo_contador
+  for all using (public.is_soma_staff() or public.is_atendimento_analista())
+  with check (public.is_soma_staff() or public.is_atendimento_analista());
 create policy atendimento_departamentos_all on public.atendimento_departamentos
   for all using (public.is_soma_staff() or public.is_atendimento_analista())
   with check (public.is_soma_staff() or public.is_atendimento_analista());
@@ -239,6 +295,10 @@ create policy atendimento_respostas_rapidas_all on public.atendimento_respostas_
 
 alter publication supabase_realtime add table public.atendimento_tickets;
 alter publication supabase_realtime add table public.atendimento_mensagens;
+-- Sem esta linha (achado na revisão do PR), a tela de Conexões nunca
+-- atualiza sozinha quando o whatsapp-connector grava o QR Code/status —
+-- ConexaoCard.tsx assina postgres_changes nesta tabela especificamente.
+alter publication supabase_realtime add table public.atendimento_conexoes;
 
 -- ---------------------------------------------------------------------------
 -- Seed: departamentos levantados no Digisac real (22/09/2026)

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/cn";
+import { useAtendimentoRealtime } from "@/lib/atendimento/useRealtimeChannel";
 import type { TicketResumo } from "@/lib/atendimento/types";
 
 const ABAS = [
@@ -16,8 +16,11 @@ const ABAS = [
 // router.refresh() re-executa o Server Component (InboxShell) que busca a
 // lista — mais simples que duplicar a query no cliente, e consistente com
 // o resto do projeto (que não usa Realtime em nenhum outro módulo ainda).
-// Custo: um refresh a mais do que o estritamente necessário quando o
-// evento não afeta a aba atual — aceitável pro volume de um inbox interno.
+// O canal não filtra por departamento/atendente porque a aba "Todas" (e a
+// necessidade de um atendente ver o volume mudar em outro departamento)
+// exige ver qualquer mudança na tabela — o debounce abaixo é o que evita
+// isso virar uma tempestade de refresh quando várias mudanças chegam
+// juntas (achado na revisão do PR).
 export function TicketListRealtime({
   tickets,
   aba,
@@ -28,22 +31,24 @@ export function TicketListRealtime({
   selectedTicketId?: string;
 }) {
   const router = useRouter();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const refrescarComDebounce = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => router.refresh(), 400);
+  }, [router]);
 
   useEffect(() => {
-    const supabase = createClient();
-    const canal = supabase
-      .channel("atendimento-tickets-lista")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "atendimento_tickets" },
-        () => router.refresh(),
-      )
-      .subscribe();
-
     return () => {
-      supabase.removeChannel(canal);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [router]);
+  }, []);
+
+  useAtendimentoRealtime(
+    "atendimento-tickets-lista",
+    { event: "*", table: "atendimento_tickets" },
+    refrescarComDebounce,
+  );
 
   return (
     <div className="flex h-full flex-col border-r border-border">

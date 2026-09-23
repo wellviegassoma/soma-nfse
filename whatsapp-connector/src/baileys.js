@@ -7,12 +7,35 @@ const {
 const pino = require("pino");
 const QRCode = require("qrcode");
 const { obterCliente } = require("./supabaseClient");
-const { digitosTelefone, telefonesCorrespondem } = require("./normalizePhone");
+const { digitosTelefone } = require("./normalizePhone");
 
 const AUTH_DIR = process.env.BAILEYS_AUTH_DIR || "./auth_info_baileys";
 const CONEXAO_ID = process.env.ATENDIMENTO_CONEXAO_ID;
 
+const CODIGO_VIOLACAO_UNICA = "23505";
+
 let socketAtual = null;
+
+// Envolve uma operação que só faz leitura + escrita idempotente (achar-ou-
+// criar, ou um insert já protegido contra 23505) — retentar a função
+// inteira é seguro porque encontrarOuCriarContato/encontrarOuCriarTicketAberto
+// releem antes de escrever, e o insert de mensagem trata duplicata como
+// sucesso. Cobre o caso mais comum de mensagem perdida: uma falha
+// transiente de rede/Supabase, não um erro de configuração.
+async function comRetentativas(fn, tentativas = 3, esperaMs = 500) {
+  let ultimoErro;
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      ultimoErro = err;
+      if (i < tentativas - 1) {
+        await new Promise((resolve) => setTimeout(resolve, esperaMs * (i + 1)));
+      }
+    }
+  }
+  throw ultimoErro;
+}
 
 async function atualizarConexao(campos) {
   if (!CONEXAO_ID) return;
@@ -22,12 +45,17 @@ async function atualizarConexao(campos) {
 }
 
 // Auto-match de empresa por telefone: melhor esforço, nunca bloqueia o
-// fluxo principal (ticket é criado com ou sem company_id).
+// fluxo principal (ticket é criado com ou sem company_id). A comparação
+// em si mora em SQL (atendimento_buscar_company_id_por_telefone, ver
+// migration) pra não puxar a tabela company_contatos_setor inteira pela
+// rede a cada contato novo.
 async function buscarCompanyIdPorTelefone(supabase, telefone) {
   try {
-    const { data } = await supabase.from("company_contatos_setor").select("company_id, telefone");
-    const match = (data || []).find((linha) => telefonesCorrespondem(linha.telefone, telefone));
-    return match ? match.company_id : null;
+    const { data, error } = await supabase.rpc("atendimento_buscar_company_id_por_telefone", {
+      p_telefone: telefone,
+    });
+    if (error) throw error;
+    return data ?? null;
   } catch (err) {
     console.error("Falha no auto-match de empresa por telefone:", err.message);
     return null;
@@ -51,7 +79,23 @@ async function encontrarOuCriarContato(supabase, telefone, nomePush) {
     .insert({ conexao_id: CONEXAO_ID, telefone, nome: nomePush || null, company_id: companyId })
     .select("id, company_id")
     .single();
-  if (error) throw error;
+
+  if (error) {
+    // Outra mensagem do mesmo contato novo venceu a corrida entre o
+    // SELECT e o INSERT acima (unique(conexao_id, telefone)) — busca de
+    // novo em vez de propagar o erro e perder a mensagem.
+    if (error.code === CODIGO_VIOLACAO_UNICA) {
+      const { data: jaExistente, error: erroRefetch } = await supabase
+        .from("atendimento_contatos")
+        .select("id, company_id")
+        .eq("conexao_id", CONEXAO_ID)
+        .eq("telefone", telefone)
+        .single();
+      if (erroRefetch) throw erroRefetch;
+      return jaExistente;
+    }
+    throw error;
+  }
   return novo;
 }
 
@@ -92,14 +136,50 @@ async function encontrarOuCriarTicketAberto(supabase, contatoId) {
   return novo.id;
 }
 
-function extrairCorpoTexto(msg) {
-  return (
-    msg.message?.conversation ||
-    msg.message?.extendedTextMessage?.text ||
-    msg.message?.imageMessage?.caption ||
-    msg.message?.videoMessage?.caption ||
-    null
-  );
+// Sempre devolve algo pro atendente ver — mensagem sem texto (áudio,
+// figurinha, foto sem legenda, documento, localização) não pode virar
+// bolha vazia. O download/armazenamento do arquivo de mídia em si fica
+// pra uma fase seguinte (ver docs/atendimento.md); por enquanto o rótulo
+// já é melhor do que nada.
+function extrairConteudo(msg) {
+  const m = msg.message || {};
+
+  if (m.conversation) return { corpo: m.conversation, midiaTipo: null };
+  if (m.extendedTextMessage?.text) return { corpo: m.extendedTextMessage.text, midiaTipo: null };
+  if (m.imageMessage) return { corpo: m.imageMessage.caption || "[Imagem]", midiaTipo: "image" };
+  if (m.videoMessage) return { corpo: m.videoMessage.caption || "[Vídeo]", midiaTipo: "video" };
+  if (m.audioMessage) {
+    return { corpo: m.audioMessage.ptt ? "[Áudio]" : "[Arquivo de áudio]", midiaTipo: "audio" };
+  }
+  if (m.stickerMessage) return { corpo: "[Figurinha]", midiaTipo: "sticker" };
+  if (m.documentMessage) {
+    return { corpo: `[Documento: ${m.documentMessage.fileName || "arquivo"}]`, midiaTipo: "document" };
+  }
+  if (m.locationMessage) return { corpo: "[Localização compartilhada]", midiaTipo: "location" };
+  if (m.contactMessage) {
+    return { corpo: `[Contato: ${m.contactMessage.displayName || "sem nome"}]`, midiaTipo: "contact" };
+  }
+
+  return { corpo: null, midiaTipo: null };
+}
+
+async function inserirMensagemRecebida(supabase, { ticketId, corpo, midiaTipo, whatsappMessageId }) {
+  const { error } = await supabase.from("atendimento_mensagens").insert({
+    ticket_id: ticketId,
+    remetente_tipo: "CONTATO",
+    corpo,
+    midia_tipo: midiaTipo,
+    whatsapp_message_id: whatsappMessageId,
+    status: "RECEBIDA",
+  });
+  if (error) {
+    // Baileys redelivera mensagem recente depois de reconectar, e a
+    // retentativa de comRetentativas pode rodar duas vezes se a primeira
+    // gravou mas a resposta se perdeu — nos dois casos já está gravada,
+    // então 23505 aqui é sucesso, não erro.
+    if (error.code === CODIGO_VIOLACAO_UNICA) return;
+    throw error;
+  }
 }
 
 async function registrarMensagemRecebida(msg) {
@@ -113,20 +193,18 @@ async function registrarMensagemRecebida(msg) {
   const telefone = digitosTelefone(jid.split("@")[0]);
   if (!telefone) return;
 
-  const corpo = extrairCorpoTexto(msg);
+  const { corpo, midiaTipo } = extrairConteudo(msg);
   const supabase = obterCliente();
 
   const contato = await encontrarOuCriarContato(supabase, telefone, msg.pushName);
   const ticketId = await encontrarOuCriarTicketAberto(supabase, contato.id);
 
-  const { error } = await supabase.from("atendimento_mensagens").insert({
-    ticket_id: ticketId,
-    remetente_tipo: "CONTATO",
+  await inserirMensagemRecebida(supabase, {
+    ticketId,
     corpo,
-    whatsapp_message_id: msg.key.id,
-    status: "RECEBIDA",
+    midiaTipo,
+    whatsappMessageId: msg.key.id,
   });
-  if (error) throw error;
 }
 
 async function iniciarConexao() {
@@ -161,7 +239,13 @@ async function iniciarConexao() {
     }
 
     if (connection === "close") {
+      // Zera antes de decidir reconectar — sem isso, enviarMensagem()
+      // continuaria achando que há uma conexão pronta (seu único guard é
+      // `if (!socketAtual)`) e chamaria .sendMessage() num socket morto
+      // durante a janela até a reconexão.
+      socketAtual = null;
       await atualizarConexao({ status: "DESCONECTADO" });
+
       // error.output.statusCode vem de @hapi/boom (dependência do próprio
       // Baileys) — DisconnectReason.loggedOut é o único caso em que NÃO
       // devemos tentar reconectar sozinho (sessão foi de fato encerrada
@@ -179,9 +263,9 @@ async function iniciarConexao() {
     if (type !== "notify") return;
     for (const msg of messages) {
       try {
-        await registrarMensagemRecebida(msg);
+        await comRetentativas(() => registrarMensagemRecebida(msg));
       } catch (err) {
-        console.error("Falha ao registrar mensagem recebida:", err.message);
+        console.error("Falha ao registrar mensagem recebida (após retentativas):", err.message);
       }
     }
   });

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
 import { Card } from "@/components/ui/Card";
+import { useAtendimentoRealtime } from "@/lib/atendimento/useRealtimeChannel";
 
 type Conexao = {
   id: string;
@@ -28,26 +28,11 @@ const STATUS_CLASS: Record<string, string> = {
 export function ConexaoCard({ conexao: inicial }: { conexao: Conexao }) {
   const [conexao, setConexao] = useState(inicial);
 
-  useEffect(() => {
-    const supabase = createClient();
-    const canal = supabase
-      .channel(`atendimento-conexao-${inicial.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "atendimento_conexoes",
-          filter: `id=eq.${inicial.id}`,
-        },
-        (payload) => setConexao(payload.new as Conexao),
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(canal);
-    };
-  }, [inicial.id]);
+  useAtendimentoRealtime<Conexao>(
+    `atendimento-conexao-${inicial.id}`,
+    { event: "UPDATE", table: "atendimento_conexoes", filter: `id=eq.${inicial.id}` },
+    (payload) => setConexao(payload.new as Conexao),
+  );
 
   return (
     <Card className="p-4">

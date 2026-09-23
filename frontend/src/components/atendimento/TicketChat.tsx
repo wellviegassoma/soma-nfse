@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
 import { cn } from "@/lib/cn";
+import { useAtendimentoRealtime } from "@/lib/atendimento/useRealtimeChannel";
 import type { Mensagem, TicketDetalhe } from "@/lib/atendimento/types";
 
 export function TicketChat({
@@ -28,29 +28,14 @@ export function TicketChat({
   const [mostrarTransferencia, setMostrarTransferencia] = useState(false);
   const fimRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const supabase = createClient();
-    const canal = supabase
-      .channel(`atendimento-ticket-${ticket.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "atendimento_mensagens",
-          filter: `ticket_id=eq.${ticket.id}`,
-        },
-        (payload) => {
-          const nova = payload.new as Mensagem;
-          setMensagens((atuais) => (atuais.some((m) => m.id === nova.id) ? atuais : [...atuais, nova]));
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(canal);
-    };
-  }, [ticket.id]);
+  useAtendimentoRealtime<Mensagem>(
+    `atendimento-ticket-${ticket.id}`,
+    { event: "INSERT", table: "atendimento_mensagens", filter: `ticket_id=eq.${ticket.id}` },
+    (payload) => {
+      const nova = payload.new as Mensagem;
+      setMensagens((atuais) => (atuais.some((m) => m.id === nova.id) ? atuais : [...atuais, nova]));
+    },
+  );
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: "smooth" });

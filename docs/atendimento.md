@@ -98,6 +98,18 @@ o canal é sempre alcançável via `contato.conexao.tipo` — duplicar em `atend
 `atendimento_mensagens` criaria uma segunda fonte de verdade que poderia divergir se a conexão
 mudar de tipo (ex.: migração Baileys → Cloud API).
 
+### Protocolo reinicia por ano, e mensagem recebida é idempotente
+
+`atendimento_gerar_protocolo()` usa uma tabela `atendimento_protocolo_contador` (uma linha por
+ano, incrementada com `insert ... on conflict do update ... returning`) em vez de uma
+`sequence` única — uma sequence nunca reinicia, então o protocolo de janeiro viria colado no
+contador de dezembro do ano anterior em vez de recomeçar em `AAAA-000001`.
+
+`atendimento_mensagens.whatsapp_message_id` tem índice único parcial (só quando não nulo).
+Baileys reenvia mensagem recente depois de reconectar, e o `whatsapp-connector` faz até 3
+retentativas em falha transiente — sem esse índice, os dois casos duplicariam a mensagem no
+inbox; com ele, o segundo insert vira erro `23505`, tratado como sucesso (idempotente).
+
 ## Papéis e RLS
 
 Papel novo no enum, em migration própria (valor de enum recém-criado não pode ser usado na
@@ -140,8 +152,9 @@ Next.js, protegida por RLS. Enviar mensagem é o caminho inverso: o Next.js grav
 (status `ENVIANDO`) e chama `POST /enviar` no connector; se falhar, a linha vira `FALHOU` em vez
 de desaparecer, pra o atendente ver que não foi.
 
-Realtime do Supabase (`postgres_changes` em `atendimento_tickets` e `atendimento_mensagens`)
-mantém o inbox e a conversa atualizados sozinhos, sem polling — primeiro uso de Realtime no
+Realtime do Supabase (`postgres_changes` em `atendimento_tickets`, `atendimento_mensagens` e
+`atendimento_conexoes` — essa última é o que faz a tela de pareamento por QR Code atualizar
+sozinha) mantém o inbox e a conversa atualizados sozinhos, sem polling — primeiro uso de Realtime no
 projeto (o resto do sistema é tudo request/response com revalidação de página).
 
 ## Telas
@@ -179,6 +192,11 @@ departamentos (já vem semeado com os 11 setores da SOMA), tags, respostas rápi
   — pode errar com número compartilhado por duas empresas ou portado. Nunca é usado pra
   autorização, só contexto visual pro atendente.
 - **Sem chatbot nem relatório na F1** — quem depender disso continua no Digisac até a F3/F4.
+- **Mídia recebida (áudio, foto, figurinha, documento, localização) ainda não é baixada nem
+  guardada** — o whatsapp-connector reconhece o tipo e grava um rótulo (`[Áudio]`, `[Imagem]`
+  etc.) em vez de bolha vazia, mas o arquivo em si fica só no WhatsApp do cliente. Download +
+  upload pro Vercel Blob (mesmo padrão de Legalização) fica pra F2 — decisão consciente pra não
+  atrasar o F1 com uma peça que exige armazenamento e política de retenção próprios.
 
 ## Como migrar do Digisac
 
