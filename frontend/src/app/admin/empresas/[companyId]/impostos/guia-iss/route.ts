@@ -84,10 +84,20 @@ export async function GET(
   }
 
   const pdfBytes = await response.arrayBuffer();
-  return new NextResponse(pdfBytes, {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="guia-iss-${competencia ?? "atual"}.pdf"`,
-    },
-  });
+  const headers: Record<string, string> = {
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `attachment; filename="guia-iss-${competencia ?? "atual"}.pdf"`,
+  };
+  for (const nome of [
+    "X-Regime",
+    "X-Quantidade-Profissionais",
+    "X-Valor-Servicos",
+    "X-Base-Calculo",
+    "X-Valor-Iss",
+    "X-Valor-Total",
+  ]) {
+    const valor = response.headers.get(nome);
+    if (valor) headers[nome] = valor;
+  }
+  return new NextResponse(pdfBytes, { headers });
 }

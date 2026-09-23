@@ -5,7 +5,8 @@ export type UserRole =
   | "EMISSOR"
   | "ANALISTA_LEGALIZACAO"
   | "ANALISTA_CONTABIL"
-  | "ANALISTA_FINANCEIRO";
+  | "ANALISTA_FINANCEIRO"
+  | "ANALISTA_ATENDIMENTO";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -15,6 +16,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   ANALISTA_LEGALIZACAO: "Analista de Legalização",
   ANALISTA_CONTABIL: "Analista Contábil",
   ANALISTA_FINANCEIRO: "Analista Financeiro",
+  ANALISTA_ATENDIMENTO: "Analista de Atendimento",
 };
 
 export type TaxRegime = "SIMPLES_NACIONAL" | "LUCRO_PRESUMIDO" | "LUCRO_REAL" | "IMUNE_ISENTO";

@@ -41,6 +41,12 @@ export default async function AdminLayout({
             >
               Financeiro
             </Link>
+            <Link
+              href="/atendimento"
+              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
+            >
+              Atendimento
+            </Link>
             <div className="hidden h-8 w-px bg-border sm:block" />
             <Link
               href="/"

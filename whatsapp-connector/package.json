@@ -1,0 +1,21 @@
+{
+  "name": "whatsapp-connector",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Conector Baileys (WhatsApp não-oficial) do módulo Atendimento do SOMA Gestão — serviço sempre-ativo, isolado do resto do projeto.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pino": "^9.4.0",
+    "qrcode": "^1.5.4"
+  }
+}

@@ -1,21 +1,7 @@
-import crypto from "node:crypto";
 import { NextResponse, after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncAllCompanies } from "@/lib/sync-notas";
-
-// Comparação em tempo constante — evita timing attack pra adivinhar o
-// segredo, e falha fechado (nunca autoriza) se CRON_SECRET não estiver
-// configurado. Achado real: sem essa checagem, `CRON_SECRET` ausente virava
-// a string literal "undefined" na comparação (`Bearer ${undefined}`), e
-// mandar o header `Authorization: Bearer undefined` passava despercebido.
-function autorizado(authHeader: string | null): boolean {
-  const esperado = process.env.CRON_SECRET;
-  if (!esperado || !authHeader) return false;
-  const a = Buffer.from(authHeader);
-  const b = Buffer.from(`Bearer ${esperado}`);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
+import { autorizarChamadaInterna } from "@/lib/internal-auth";
 
 export const maxDuration = 300;
 
@@ -29,10 +15,10 @@ export const maxDuration = 300;
 const TAMANHO_LOTE = 20;
 
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (!autorizado(authHeader)) {
+  if (!autorizarChamadaInterna(request)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+  const authHeader = request.headers.get("authorization");
 
   const url = new URL(request.url);
   const offset = Number(url.searchParams.get("offset") ?? "0") || 0;

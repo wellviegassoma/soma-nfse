@@ -1,17 +1,6 @@
-import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-// Mesma checagem de sync-notas: comparação em tempo constante e falha fechado
-// se CRON_SECRET não estiver configurado (sem isso, `Bearer undefined` passa).
-function autorizado(authHeader: string | null): boolean {
-  const esperado = process.env.CRON_SECRET;
-  if (!esperado || !authHeader) return false;
-  const a = Buffer.from(authHeader);
-  const b = Buffer.from(`Bearer ${esperado}`);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
+import { autorizarChamadaInterna } from "@/lib/internal-auth";
 
 export const maxDuration = 300;
 
@@ -24,7 +13,7 @@ export const maxDuration = 300;
  * sem conta agendada no dia seguinte.
  */
 export async function GET(request: Request) {
-  if (!autorizado(request.headers.get("authorization"))) {
+  if (!autorizarChamadaInterna(request)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

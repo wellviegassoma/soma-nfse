@@ -23,6 +23,9 @@ export default async function HomePage() {
   if (companies.some((c) => c.role === "ANALISTA_FINANCEIRO")) {
     redirect("/financeiro");
   }
+  if (companies.some((c) => c.role === "ANALISTA_ATENDIMENTO")) {
+    redirect("/atendimento");
+  }
 
   if (companies.length === 1) {
     redirect(`/empresas/${companies[0].company_id}`);
