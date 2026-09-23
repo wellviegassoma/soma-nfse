@@ -5,6 +5,7 @@ const {
   downloadMediaMessage,
 } = require("@whiskeysockets/baileys");
 const { put } = require("@vercel/blob");
+const fs = require("fs");
 const pino = require("pino");
 const QRCode = require("qrcode");
 const { obterCliente } = require("./supabaseClient");
@@ -400,14 +401,29 @@ async function iniciarConexao() {
       await atualizarConexao({ status: "DESCONECTADO" });
 
       // error.output.statusCode vem de @hapi/boom (dependência do próprio
-      // Baileys) — DisconnectReason.loggedOut é o único caso em que NÃO
-      // devemos tentar reconectar sozinho (sessão foi de fato encerrada
-      // pelo celular, precisa de novo QR Code). encerramentoDeliberado
-      // cobre o outro caso de não reconectar: processo sendo desligado de
-      // propósito (deploy) — reconectar aqui só pra ser matado de novo
-      // alguns milissegundos depois é trabalho e log inúteis.
+      // Baileys). encerramentoDeliberado cobre não reconectar quando o
+      // processo está sendo desligado de propósito (deploy) — reconectar
+      // aqui só pra ser morto de novo alguns milissegundos depois é
+      // trabalho e log inúteis.
+      if (encerramentoDeliberado) return;
+
       const codigo = lastDisconnect?.error?.output?.statusCode;
-      if (codigo !== DisconnectReason.loggedOut && !encerramentoDeliberado) {
+      if (codigo === DisconnectReason.loggedOut) {
+        // Sessão de fato inválida (não é queda de rede) — achado real:
+        // sem limpar e tentar de novo, o serviço ficava parado em
+        // "Desconectado" pra sempre, sem nunca gerar QR Code novo,
+        // exigindo reiniciar manualmente na Railway. Limpa o que sobrou
+        // da sessão velha no Volume e já parte pro pareamento novo
+        // sozinho.
+        try {
+          fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        } catch (err) {
+          console.error("Falha ao limpar sessão antiga:", err.message);
+        }
+        setTimeout(() => {
+          iniciarConexao().catch((err) => console.error("Falha ao reiniciar pareamento:", err));
+        }, 2_000);
+      } else {
         setTimeout(() => {
           iniciarConexao().catch((err) => console.error("Falha ao reconectar:", err));
         }, 5_000);
