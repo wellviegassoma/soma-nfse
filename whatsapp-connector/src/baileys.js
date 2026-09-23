@@ -452,6 +452,13 @@ async function iniciarConexao() {
     auth: state,
     logger: pino({ level: "warn" }),
     browser: ["SOMA Atendimento", "Chrome", "1.0"],
+    // Sem isso, messaging-history.set manda só um resumo limitado (ótimo
+    // pra popular lista de chat, ruim pra recuperar mensagem perdida de
+    // verdade) — achado real testando: sessão que precisou de QR novo
+    // (não foi só reconexão) não trouxe as mensagens do período fora do
+    // ar até ligar isso. Custo: mais dado sincronizado no pareamento
+    // inicial (aceitável pro volume de uma linha de atendimento).
+    syncFullHistory: true,
   });
 
   socketAtual = socket;
@@ -530,13 +537,15 @@ async function iniciarConexao() {
   });
 
   // O WhatsApp manda mensagem recebida enquanto o processo estava fora do
-  // ar (deploy, queda de rede) por este evento ao reconectar, não pelo
-  // messages.upsert normal — achado real testando reconexão. Só processa
-  // mensagem dos últimos 5 minutos: esse evento também dispara no
-  // primeiro pareamento com um histórico grande de conversas antigas, e
-  // não queremos criar chamado novo pra cada uma. whatsapp_message_id
+  // ar (deploy, queda de rede, ou sessão que precisou de QR novo) por
+  // este evento, não pelo messages.upsert normal. 24h em vez dos 5min
+  // originais — achado real testando: um dia inteiro de testes com
+  // reconexões e QR novo perdia mensagem fora dessa janela pequena. Não
+  // é "histórico completo" (isso encheria o inbox de conversa antiga
+  // irrelevante todo pareamento novo) — é o equilíbrio entre recuperar
+  // outage real e não importar anos de conversa. whatsapp_message_id
   // único (ver migration) evita duplicar o que messages.upsert já pegou.
-  const JANELA_HISTORICO_SEGUNDOS = 5 * 60;
+  const JANELA_HISTORICO_SEGUNDOS = 24 * 60 * 60;
   socket.ev.on("messaging-history.set", async ({ messages, contacts }) => {
     const agora = Math.floor(Date.now() / 1000);
     const recentes = (messages || []).filter((msg) => {
