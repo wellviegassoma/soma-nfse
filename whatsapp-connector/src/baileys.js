@@ -30,6 +30,25 @@ const idsEnviadosPorNos = new Set();
 // (groupMetadata) toda hora, só na primeira mensagem de um grupo novo.
 const cacheNomesGrupo = new Map();
 
+// Ponto de corte (unix seconds) pra messaging-history.set decidir o que é
+// "mensagem perdida" a recuperar — lido do banco (ultima_sincronizacao_em)
+// a cada connection==="open", nunca um número fixo. JANELA_PADRAO_SEGUNDOS
+// só entra quando não há checkpoint salvo (primeiro pareamento de
+// verdade, sem histórico prévio pra comparar).
+let checkpointSincronizacaoSegundos = 0;
+const JANELA_PADRAO_SEGUNDOS = 24 * 60 * 60;
+
+async function avancarCheckpointSincronizacao() {
+  if (!CONEXAO_ID) return;
+  const agora = new Date().toISOString();
+  checkpointSincronizacaoSegundos = Math.floor(Date.now() / 1000);
+  const { error } = await obterCliente()
+    .from("atendimento_conexoes")
+    .update({ ultima_sincronizacao_em: agora })
+    .eq("id", CONEXAO_ID);
+  if (error) console.error("Falha ao avançar checkpoint de sincronização:", error.message);
+}
+
 // Envolve uma operação que só faz leitura + escrita idempotente (achar-ou-
 // criar, ou um insert já protegido contra 23505) — retentar a função
 // inteira é seguro porque encontrarOuCriarContato/encontrarOuCriarTicketAberto
@@ -502,11 +521,25 @@ async function iniciarConexao() {
     }
 
     if (connection === "open") {
+      // Lê o checkpoint ANTES de sobrescrever — é a partir dele que
+      // messaging-history.set decide o que é "mensagem perdida" a
+      // recuperar. Sem checkpoint salvo (primeiro pareamento de
+      // verdade), cai no padrão de JANELA_PADRAO_SEGUNDOS.
+      const { data: conexaoAtual } = await obterCliente()
+        .from("atendimento_conexoes")
+        .select("ultima_sincronizacao_em")
+        .eq("id", CONEXAO_ID)
+        .maybeSingle();
+      checkpointSincronizacaoSegundos = conexaoAtual?.ultima_sincronizacao_em
+        ? Math.floor(new Date(conexaoAtual.ultima_sincronizacao_em).getTime() / 1000)
+        : Math.floor(Date.now() / 1000) - JANELA_PADRAO_SEGUNDOS;
+
       await atualizarConexao({
         status: "CONECTADO",
         qr_code: null,
         numero: socket.user?.id ? digitosTelefone(socket.user.id.split(":")[0]) : null,
         conectado_em: new Date().toISOString(),
+        ultima_sincronizacao_em: new Date().toISOString(),
       });
     }
 
@@ -563,23 +596,25 @@ async function iniciarConexao() {
         console.error("Falha ao registrar mensagem recebida (após retentativas):", err.message);
       }
     }
+    // Mensagem ao vivo processada com sucesso = prova de que a conexão
+    // está sincronizada até agora — avança o checkpoint pra próxima
+    // reconexão não precisar reprocessar esse trecho de novo.
+    avancarCheckpointSincronizacao();
   });
 
   // O WhatsApp manda mensagem recebida enquanto o processo estava fora do
   // ar (deploy, queda de rede, ou sessão que precisou de QR novo) por
-  // este evento, não pelo messages.upsert normal. 24h em vez dos 5min
-  // originais — achado real testando: um dia inteiro de testes com
-  // reconexões e QR novo perdia mensagem fora dessa janela pequena. Não
-  // é "histórico completo" (isso encheria o inbox de conversa antiga
-  // irrelevante todo pareamento novo) — é o equilíbrio entre recuperar
-  // outage real e não importar anos de conversa. whatsapp_message_id
-  // único (ver migration) evita duplicar o que messages.upsert já pegou.
-  const JANELA_HISTORICO_SEGUNDOS = 24 * 60 * 60;
+  // este evento, não pelo messages.upsert normal. Usa checkpointSincronizacaoSegundos
+  // (o instante exato da última vez que se sabe que a conexão estava em
+  // dia, lido no connection==="open" acima) em vez de uma janela fixa —
+  // pedido direto testando: número redondo tanto sobrava (reprocessava
+  // à toa, inofensivo pela idempotência) quanto faltava (perdia mensagem
+  // de queda mais longa que a janela). whatsapp_message_id único (ver
+  // migration) evita duplicar o que messages.upsert já pegou.
   socket.ev.on("messaging-history.set", async ({ messages, contacts }) => {
-    const agora = Math.floor(Date.now() / 1000);
     const recentes = (messages || []).filter((msg) => {
       const timestamp = Number(msg.messageTimestamp) || 0;
-      return agora - timestamp < JANELA_HISTORICO_SEGUNDOS;
+      return timestamp > checkpointSincronizacaoSegundos;
     });
     for (const msg of recentes) {
       try {
@@ -588,6 +623,7 @@ async function iniciarConexao() {
         console.error("Falha ao sincronizar mensagem do histórico:", err.message);
       }
     }
+    avancarCheckpointSincronizacao();
 
     // Esse pacote inicial de histórico costuma vir com a agenda de
     // contatos junto — sincroniza também daqui, além de contacts.set,
