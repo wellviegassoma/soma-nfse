@@ -19,7 +19,7 @@ const serviceSchema = z.object({
   description: z.string().trim().optional(),
   nationalTaxCode: z.string().trim().optional(),
   municipalTaxCode: z.string().trim().optional(),
-  nbs: z.string().trim().optional(),
+  nbs: z.string().trim().min(1, "Informe o código NBS — obrigatório na NFS-e nacional."),
   issRate: z
     .string()
     .optional()

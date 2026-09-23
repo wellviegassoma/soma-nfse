@@ -133,6 +133,12 @@ export async function issueNfse(
         "Esse serviço ainda não tem a tributação configurada. Peça pra SOMA completar o cadastro do serviço antes de emitir.",
     };
   }
+  if (!service.nbs) {
+    return {
+      error:
+        "Esse serviço ainda não tem o código NBS cadastrado (obrigatório na NFS-e nacional). Peça pra SOMA completar o cadastro do serviço antes de emitir.",
+    };
+  }
 
   // Certificado: só o service role lê — nunca passa pela sessão do usuário.
   const admin = createAdminClient();

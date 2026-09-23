@@ -108,8 +108,8 @@ export function ServiceForm({
               defaultValue={service?.municipal_tax_code ?? ""}
             />
           </Field>
-          <Field label="NBS" htmlFor="nbs">
-            <Input id="nbs" name="nbs" list="nbsOptions" defaultValue={service?.nbs ?? ""} />
+          <Field label="NBS (obrigatório para emitir)" htmlFor="nbs">
+            <Input id="nbs" name="nbs" list="nbsOptions" defaultValue={service?.nbs ?? ""} required />
             <datalist id="nbsOptions">
               {suggestions?.nbsCodes.map((code) => (
                 <option key={code} value={code} />
