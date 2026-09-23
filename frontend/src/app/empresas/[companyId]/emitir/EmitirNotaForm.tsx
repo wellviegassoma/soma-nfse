@@ -159,8 +159,11 @@ export function EmitirNotaForm({
       {customers.length === 0 &&
         (basePath ? (
           <p className="-mt-2 text-xs text-foreground/50">
-            Nenhum tomador cadastrado ainda pra essa empresa — peça pro cliente cadastrar no
-            portal dele, ou entre em contato com o suporte.
+            Nenhum tomador cadastrado ainda pra essa empresa —{" "}
+            <Link href={`${base}/tomadores/novo`} className="font-medium text-brand hover:underline">
+              cadastre um
+            </Link>
+            .
           </p>
         ) : (
           <p className="-mt-2 text-xs text-foreground/50">

@@ -13,9 +13,16 @@ import type { Customer } from "@/lib/types";
 export function TomadorForm({
   companyId,
   customer,
+  redirectTo,
+  cancelHref,
 }: {
   companyId: string;
   customer?: Customer;
+  /** Pra onde ir depois de salvar — sem isso, cai no portal do cliente
+   * (/empresas/[companyId]/tomadores). O módulo de emissão da equipe
+   * (/admin/emissao-notas) usa isso pra voltar pra tela de emitir nota. */
+  redirectTo?: string;
+  cancelHref?: string;
 }) {
   const [state, formAction, pending] = useActionState(saveCustomer, undefined);
   const [type, setType] = useState(customer?.type ?? "PF");
@@ -24,6 +31,7 @@ export function TomadorForm({
     <form action={formAction} className="flex flex-col gap-5">
       <input type="hidden" name="companyId" value={companyId} />
       {customer && <input type="hidden" name="customerId" value={customer.id} />}
+      {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
 
       {state?.error && <Alert tone="danger">{state.error}</Alert>}
 
@@ -86,7 +94,7 @@ export function TomadorForm({
           Salvar
         </Button>
         <Link
-          href={`/empresas/${companyId}/tomadores`}
+          href={cancelHref ?? `/empresas/${companyId}/tomadores`}
           className="text-sm font-medium text-foreground/60 hover:underline"
         >
           Cancelar

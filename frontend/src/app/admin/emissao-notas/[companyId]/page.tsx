@@ -40,9 +40,14 @@ export default async function AdminEmitirNotaPage(
           <h1 className="text-xl font-semibold text-foreground">
             Emitir nota — {company.trade_name || company.legal_name}
           </h1>
-          <Link href={`${basePath}/notas`} className="text-sm font-medium text-brand hover:underline">
-            Ver notas já emitidas
-          </Link>
+          <div className="flex gap-3">
+            <Link href={`${basePath}/notas`} className="text-sm font-medium text-brand hover:underline">
+              Ver notas já emitidas
+            </Link>
+            <Link href={`${basePath}/tomadores/novo`} className="text-sm font-medium text-brand hover:underline">
+              + Novo tomador
+            </Link>
+          </div>
         </div>
         <Link href="/admin/emissao-notas" className="text-sm text-foreground/60 hover:underline">
           ← Trocar empresa

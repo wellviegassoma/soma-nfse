@@ -94,8 +94,17 @@ export async function saveCustomer(
     };
   }
 
-  revalidatePath(`/empresas/${rest.companyId}/tomadores`);
-  redirect(`/empresas/${rest.companyId}/tomadores`);
+  // Reaproveitado pelo módulo de emissão da equipe (/admin/emissao-notas) —
+  // sem redirectTo explícito, cai no comportamento original (portal do
+  // cliente). Só aceita caminho relativo interno, nunca uma URL externa.
+  const redirectToRaw = formData.get("redirectTo");
+  const redirectTo =
+    typeof redirectToRaw === "string" && redirectToRaw.startsWith("/")
+      ? redirectToRaw
+      : `/empresas/${rest.companyId}/tomadores`;
+
+  revalidatePath(redirectTo);
+  redirect(redirectTo);
 }
 
 export type ImportTomadoresState =
