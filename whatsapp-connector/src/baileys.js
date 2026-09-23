@@ -276,9 +276,26 @@ function extrairConteudo(msg) {
   }
 
   const tipos = Object.keys(m);
-  if (tipos.length === 0) return { corpo: null, midiaTipo: null, m };
+  if (tipos.length === 0 || tipos.every((t) => TIPOS_IGNORADOS.has(t))) {
+    // Não é conteúdo de conversa de verdade — mensagem de protocolo
+    // interno do WhatsApp (confirmação de entrega, distribuição de
+    // chave, reação, edição/exclusão). Criar ticket pra isso é ruído
+    // puro — achado real com syncFullHistory ligado, que resincroniza
+    // um monte desse tipo de evento junto com mensagem de verdade.
+    return { corpo: null, midiaTipo: null, m, ignorar: true };
+  }
   return { corpo: `[Mensagem não suportada: ${tipos.join(", ")}]`, midiaTipo: "unsupported", m };
 }
+
+const TIPOS_IGNORADOS = new Set([
+  "protocolMessage",
+  "senderKeyDistributionMessage",
+  "messageContextInfo",
+  "reactionMessage",
+  "pollUpdateMessage",
+  "editedMessage",
+  "keepInChatMessage",
+]);
 
 // Só estes têm arquivo de verdade pra baixar — contato/localização já
 // viram texto inteiro em extrairConteudo, e "unsupported" não tem como
@@ -358,7 +375,8 @@ async function registrarMensagemEnviadaPeloCelular(msg, socket, jid) {
   const telefone = digitosTelefone(jid.split("@")[0]);
   if (!telefone) return;
 
-  const { corpo, midiaTipo, m } = extrairConteudo(msg);
+  const { corpo, midiaTipo, m, ignorar } = extrairConteudo(msg);
+  if (ignorar) return;
   const supabase = obterCliente();
 
   const nomePush = ehGrupo(jid) ? await obterNomeGrupo(socket, jid) : null;
@@ -407,7 +425,8 @@ async function registrarMensagemRecebida(msg, socket) {
   const telefone = digitosTelefone(jid.split("@")[0]);
   if (!telefone) return;
 
-  const { corpo: corpoBase, midiaTipo, m } = extrairConteudo(msg);
+  const { corpo: corpoBase, midiaTipo, m, ignorar } = extrairConteudo(msg);
+  if (ignorar) return;
   const supabase = obterCliente();
 
   // Em grupo, pushName é de quem mandou a mensagem dentro do grupo, não
