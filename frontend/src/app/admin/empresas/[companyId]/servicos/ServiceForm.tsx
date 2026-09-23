@@ -15,6 +15,8 @@ import {
   type TratamentoAtividade,
 } from "@/lib/simples-nacional-atividades";
 import { sugerirAtividade } from "@/lib/lc116-sugestao-atividade";
+import { descricaoLc116 } from "@/lib/lc116-lista-servicos";
+import { descricaoNbs } from "@/lib/nbs-tabela";
 import type { ServiceCodeSuggestions } from "./suggestions";
 
 const GRUPOS_TRATAMENTO: { tratamento: TratamentoAtividade; label: string }[] = [
@@ -45,6 +47,11 @@ export function ServiceForm({
   // só porque o código tributário foi editado depois.
   const [atividadeTocada, setAtividadeTocada] = useState(Boolean(service?.atividade_simples_nacional));
   const atividadeSelecionada = buscarAtividade(atividadeId);
+
+  const [nationalTaxCode, setNationalTaxCode] = useState(service?.national_tax_code ?? "");
+  const [nbs, setNbs] = useState(service?.nbs ?? "");
+  const descricaoNationalTaxCode = descricaoLc116(nationalTaxCode);
+  const descricaoNbsAtual = descricaoNbs(nbs);
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
@@ -88,7 +95,8 @@ export function ServiceForm({
               id="nationalTaxCode"
               name="nationalTaxCode"
               list="nationalTaxCodeOptions"
-              defaultValue={service?.national_tax_code ?? ""}
+              value={nationalTaxCode}
+              onChange={(e) => setNationalTaxCode(e.target.value)}
               onBlur={(e) => {
                 if (atividadeTocada) return;
                 const sugestao = sugerirAtividade(e.target.value);
@@ -100,6 +108,11 @@ export function ServiceForm({
                 <option key={code} value={code} />
               ))}
             </datalist>
+            {nationalTaxCode.trim() && (
+              <p className="mt-1 text-xs text-foreground/50">
+                {descricaoNationalTaxCode ?? "Código LC 116 não reconhecido — confira se digitou certo."}
+              </p>
+            )}
           </Field>
           <Field label="Código tributário municipal" htmlFor="municipalTaxCode">
             <Input
@@ -107,14 +120,30 @@ export function ServiceForm({
               name="municipalTaxCode"
               defaultValue={service?.municipal_tax_code ?? ""}
             />
+            <p className="mt-1 text-xs text-foreground/50">
+              Código específico da prefeitura do município da empresa — não tem tabela nacional,
+              confira com o cadastro municipal ou uma guia/nota já emitida.
+            </p>
           </Field>
           <Field label="NBS (obrigatório para emitir)" htmlFor="nbs">
-            <Input id="nbs" name="nbs" list="nbsOptions" defaultValue={service?.nbs ?? ""} required />
+            <Input
+              id="nbs"
+              name="nbs"
+              list="nbsOptions"
+              value={nbs}
+              onChange={(e) => setNbs(e.target.value)}
+              required
+            />
             <datalist id="nbsOptions">
               {suggestions?.nbsCodes.map((code) => (
                 <option key={code} value={code} />
               ))}
             </datalist>
+            {nbs.trim() && (
+              <p className="mt-1 text-xs text-foreground/50">
+                {descricaoNbsAtual ?? "Código NBS não reconhecido — confira se digitou certo."}
+              </p>
+            )}
           </Field>
           <Field label="Alíquota ISS (%)" htmlFor="issRate">
             <Input
