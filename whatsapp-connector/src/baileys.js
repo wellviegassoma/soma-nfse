@@ -440,6 +440,16 @@ async function registrarMensagemRecebida(msg, socket) {
     const remetente =
       msg.pushName || digitosTelefone((msg.key.participant || "").split("@")[0]) || "Alguém";
     corpo = corpoBase ? `*${remetente}:*\n${corpoBase}` : corpoBase;
+    // Também aproveita pra guardar o participante na agenda (não só o
+    // grupo) — pode ser útil iniciar uma conversa individual com ele depois.
+    if (msg.key.participant && msg.pushName) {
+      sincronizarContatosWhatsapp([{ id: msg.key.participant, name: msg.pushName }]).catch(() => {});
+    }
+  } else if (msg.pushName) {
+    // contacts.set/contacts.upsert não populou a agenda nessa conta (achado
+    // testando) — aproveita toda mensagem recebida com pushName pra ir
+    // preenchendo aos poucos, em vez de depender só dos eventos dedicados.
+    sincronizarContatosWhatsapp([{ id: jid, name: msg.pushName }]).catch(() => {});
   }
 
   const contato = await encontrarOuCriarContato(supabase, { telefone, jid, nomePush: nomeContato });
