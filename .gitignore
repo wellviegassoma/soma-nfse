@@ -13,3 +13,6 @@ backups/
 scripts/import-nibo-planilha/plano.json
 scripts/import-nibo-planilha/relatorio.txt
 scripts/import-nibo-planilha/gravacao_log.txt
+scripts/import-comercial-trello/plano.json
+scripts/import-comercial-trello/relatorio.txt
+scripts/import-comercial-trello/gravacao_log.txt

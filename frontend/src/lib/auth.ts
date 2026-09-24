@@ -154,6 +154,12 @@ export async function requireAtendimentoAccess() {
   await requirePermissao("atendimento.atender");
 }
 
+// Comercial (onboarding de prospects) — só time interno, mesmo padrão de
+// requireLegalizacaoAccess/requireExtratosAccess.
+export async function requireComercialAccess() {
+  await requirePermissao("comercial.ver");
+}
+
 // Financeiro é o único módulo que staff e cliente usam sobre o MESMO dado
 // sensível (saldo, fornecedor, folha). temPermissao já cobre os dois casos
 // num só teste: staff/analista têm financeiro.ver GLOBAL (companyId é

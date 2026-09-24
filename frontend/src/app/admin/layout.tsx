@@ -14,6 +14,7 @@ export default async function AdminLayout({
     (await temPermissao("usuarios.gerenciar_equipe")) ||
     (await temPermissao("usuarios.gerenciar_clientes"));
   const podeEmitirNotas = await temPermissao("notas.emitir");
+  const podeVerComercial = await temPermissao("comercial.ver");
 
   return (
     <div className="min-h-dvh bg-background">
@@ -72,6 +73,7 @@ export default async function AdminLayout({
           isSuperAdmin={superAdmin}
           podeGerenciarUsuarios={podeGerenciarUsuarios}
           podeEmitirNotas={podeEmitirNotas}
+          podeVerComercial={podeVerComercial}
         />
         <div className="pt-6">{children}</div>
       </div>

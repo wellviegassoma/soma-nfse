@@ -38,7 +38,9 @@ export type Permissao =
   | "portal.ver"
   | "notas.emitir"
   | "notas.cancelar"
-  | "tomadores.editar";
+  | "tomadores.editar"
+  | "comercial.ver"
+  | "comercial.editar";
 
 export type EscopoPermissao = "GLOBAL" | "EMPRESA" | "AMBOS";
 
@@ -71,6 +73,7 @@ export const MODULOS_EQUIPE = [
   "atendimento",
   "financeiro",
   "portal",
+  "comercial",
 ] as const;
 
 export const MODULO_LABELS: Record<string, string> = {
@@ -90,6 +93,7 @@ export const MODULO_LABELS: Record<string, string> = {
   atendimento: "Atendimento",
   financeiro: "Financeiro",
   portal: "Portal do cliente",
+  comercial: "Comercial",
 };
 
 export const PERMISSOES: Record<Permissao, PermissaoInfo> = {
@@ -425,6 +429,25 @@ export const PERMISSOES: Record<Permissao, PermissaoInfo> = {
     escopo: "EMPRESA",
     irreversivel: false,
     implica: ["portal.ver"],
+  },
+  "comercial.ver": {
+    chave: "comercial.ver",
+    modulo: "comercial",
+    moduloLabel: "Comercial",
+    label: "Ver módulo Comercial",
+    descricao: "Ver o quadro de prospects/onboarding de clientes novos.",
+    escopo: "GLOBAL",
+    irreversivel: false,
+  },
+  "comercial.editar": {
+    chave: "comercial.editar",
+    modulo: "comercial",
+    moduloLabel: "Comercial",
+    label: "Editar módulo Comercial",
+    descricao: "Criar e mover prospects, marcar checklist, confirmar virada pra Cliente Ativo.",
+    escopo: "GLOBAL",
+    irreversivel: false,
+    implica: ["comercial.ver"],
   },
 };
 

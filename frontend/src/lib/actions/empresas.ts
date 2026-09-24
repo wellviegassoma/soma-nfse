@@ -22,6 +22,91 @@ export async function buscarCnpjAction(
 
 const taxRegimeEnum = z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "IMUNE_ISENTO"]);
 
+export type CriarEmpresaInput = {
+  organizationName: string;
+  legalName: string;
+  tradeName?: string;
+  personType: "PF" | "PJ";
+  cnpj?: string;
+  cpf?: string;
+  cnae?: string;
+  municipalityIbgeCode?: string;
+  municipalityName?: string;
+  state?: string;
+  addressStreet?: string;
+  addressNumber?: string;
+  addressComplement?: string;
+  addressNeighborhood?: string;
+  addressZip?: string;
+  taxRegime?: "SIMPLES_NACIONAL" | "LUCRO_PRESUMIDO" | "LUCRO_REAL" | "IMUNE_ISENTO" | "";
+};
+
+// Miolo de criação de empresa (organization + company), sem redirect() nem
+// FormData — extraído de createCompany pra ser reaproveitado por qualquer
+// fluxo que precise criar uma empresa de verdade a partir de dados já
+// estruturados (ex.: confirmarClienteAtivo do módulo Comercial).
+export async function criarEmpresaComOrganizacao(
+  input: CriarEmpresaInput,
+): Promise<{ companyId: string } | { error: string }> {
+  const supabase = await createClient();
+
+  const { data: org, error: orgError } = await supabase
+    .from("organizations")
+    .insert({ name: input.organizationName })
+    .select("id")
+    .single();
+  if (orgError || !org) {
+    return { error: "Não foi possível criar a organização." };
+  }
+
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .insert({
+      organization_id: org.id,
+      legal_name: input.legalName,
+      trade_name: input.tradeName || null,
+      person_type: input.personType,
+      cnpj: input.personType === "PJ" ? input.cnpj || null : null,
+      cpf: input.personType === "PF" ? input.cpf || null : null,
+      cnae: input.cnae || null,
+      municipality_ibge_code: input.municipalityIbgeCode || null,
+      municipality_name: input.municipalityName || null,
+      state: input.state || null,
+      address_street: input.addressStreet || null,
+      address_number: input.addressNumber || null,
+      address_complement: input.addressComplement || null,
+      address_neighborhood: input.addressNeighborhood || null,
+      address_zip: input.addressZip || null,
+      tax_regime: input.personType === "PJ" ? input.taxRegime || null : null,
+      regime_especial_tributacao: input.personType === "PF" ? 5 : 0,
+    })
+    .select("id")
+    .single();
+  if (companyError || !company) {
+    return {
+      error:
+        companyError?.code === "23505"
+          ? "Já existe uma empresa cadastrada com esse CNPJ/CPF."
+          : "Não foi possível criar a empresa.",
+    };
+  }
+
+  await logAudit({
+    companyId: company.id,
+    action: "CREATE",
+    entity: "company",
+    entityId: company.id,
+    newValue: {
+      legal_name: input.legalName,
+      person_type: input.personType,
+      cnpj: input.cnpj ?? null,
+      cpf: input.cpf ?? null,
+    },
+  });
+
+  return { companyId: company.id };
+}
+
 const createCompanySchema = z.object({
   organizationName: z.string().trim().min(2, "Informe o nome da empresa/organização."),
   legalName: z.string().trim().min(2, "Informe a razão social."),
@@ -81,64 +166,11 @@ export async function createCompany(
     return { error: "Informe o CPF." };
   }
 
-  const supabase = await createClient();
-
-  const { data: org, error: orgError } = await supabase
-    .from("organizations")
-    .insert({ name: parsed.data.organizationName })
-    .select("id")
-    .single();
-  if (orgError || !org) {
-    return { error: "Não foi possível criar a organização." };
-  }
-
-  const { data: company, error: companyError } = await supabase
-    .from("companies")
-    .insert({
-      organization_id: org.id,
-      legal_name: parsed.data.legalName,
-      trade_name: parsed.data.tradeName || null,
-      person_type: parsed.data.personType,
-      cnpj: parsed.data.personType === "PJ" ? parsed.data.cnpj || null : null,
-      cpf: parsed.data.personType === "PF" ? parsed.data.cpf || null : null,
-      cnae: parsed.data.cnae || null,
-      municipality_ibge_code: parsed.data.municipalityIbgeCode || null,
-      municipality_name: parsed.data.municipalityName || null,
-      state: parsed.data.state || null,
-      address_street: parsed.data.addressStreet || null,
-      address_number: parsed.data.addressNumber || null,
-      address_complement: parsed.data.addressComplement || null,
-      address_neighborhood: parsed.data.addressNeighborhood || null,
-      address_zip: parsed.data.addressZip || null,
-      tax_regime: parsed.data.personType === "PJ" ? parsed.data.taxRegime || null : null,
-      regime_especial_tributacao: parsed.data.personType === "PF" ? 5 : 0,
-    })
-    .select("id")
-    .single();
-  if (companyError || !company) {
-    return {
-      error:
-        companyError?.code === "23505"
-          ? "Já existe uma empresa cadastrada com esse CNPJ/CPF."
-          : "Não foi possível criar a empresa.",
-    };
-  }
-
-  await logAudit({
-    companyId: company.id,
-    action: "CREATE",
-    entity: "company",
-    entityId: company.id,
-    newValue: {
-      legal_name: parsed.data.legalName,
-      person_type: parsed.data.personType,
-      cnpj: parsed.data.cnpj ?? null,
-      cpf: parsed.data.cpf ?? null,
-    },
-  });
+  const resultado = await criarEmpresaComOrganizacao(parsed.data);
+  if ("error" in resultado) return { error: resultado.error };
 
   revalidatePath("/admin/empresas");
-  redirect(`/admin/empresas/${company.id}`);
+  redirect(`/admin/empresas/${resultado.companyId}`);
 }
 
 const updateIdentitySchema = z.object({

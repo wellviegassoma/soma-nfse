@@ -19,27 +19,32 @@ const TABS: Tab[] = [
 ];
 
 const TAB_EMISSAO_NOTAS: Tab = { href: "/admin/emissao-notas", label: "Emissão de Notas" };
+const TAB_COMERCIAL: Tab = { href: "/admin/comercial", label: "Comercial" };
 const TAB_USUARIOS: Tab = { href: "/admin/usuarios", label: "Usuários" };
 const TAB_SUPER_ADMIN: Tab = { href: "/admin/configuracoes/contador-responsavel", label: "Configurações" };
 
-// `isSuperAdmin`/`podeGerenciarUsuarios`/`podeEmitirNotas` vêm do layout
-// (server component) — a aba só some da UI pra quem não pode usar; a
-// página em si também é protegida (requireSuperAdmin /
-// usuarios.gerenciar_equipe|clientes / notas.emitir), então isso aqui é só
-// uma questão de não poluir a navegação, não a proteção de verdade.
+// `isSuperAdmin`/`podeGerenciarUsuarios`/`podeEmitirNotas`/`podeVerComercial`
+// vêm do layout (server component) — a aba só some da UI pra quem não pode
+// usar; a página em si também é protegida (requireSuperAdmin /
+// usuarios.gerenciar_equipe|clientes / notas.emitir / comercial.ver), então
+// isso aqui é só uma questão de não poluir a navegação, não a proteção de
+// verdade.
 export function AdminNav({
   isSuperAdmin,
   podeGerenciarUsuarios,
   podeEmitirNotas,
+  podeVerComercial,
 }: {
   isSuperAdmin: boolean;
   podeGerenciarUsuarios: boolean;
   podeEmitirNotas: boolean;
+  podeVerComercial: boolean;
 }) {
   const pathname = usePathname();
   const tabs = [
     ...TABS,
     ...(podeEmitirNotas ? [TAB_EMISSAO_NOTAS] : []),
+    ...(podeVerComercial ? [TAB_COMERCIAL] : []),
     ...(podeGerenciarUsuarios ? [TAB_USUARIOS] : []),
     ...(isSuperAdmin ? [TAB_SUPER_ADMIN] : []),
   ];
