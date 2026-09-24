@@ -34,10 +34,20 @@ python gravar.py --commit   # grava de verdade
   `20260925200000_fase_an_comercial_fundacao.sql`).
 - Extrai o valor de "Honorários SOMA: R$ X" da descrição do card por regex
   (melhor esforço — se não achar, fica em branco pra preencher depois).
-- Baixa cada anexo do Trello (exige `TRELLO_KEY`/`TRELLO_TOKEN` também em
-  `gravar.py`) e reenvia pro Vercel Blob chamando
+- Tenta baixar cada anexo do Trello (exige `TRELLO_KEY`/`TRELLO_TOKEN` também
+  em `gravar.py`) e reenviar pro Vercel Blob chamando
   `frontend/scripts/upload-blob-cli.mjs` (reaproveita o `put()` oficial do
   `@vercel/blob`, não reimplementa o contrato REST do Blob em Python).
+  **Limitação conhecida da API do Trello**: o endpoint de download de
+  anexo (`/1/cards/.../attachments/.../download/...`) responde
+  `401 unauthorized permission requested` pra key+token, mesmo com escopo
+  `read` — arquivos hospedados pelo Trello só baixam com sessão de
+  navegador (cookie), não com token de API. Por isso o download de anexo é
+  melhor-esforço: se falhar, fica registrado em `gravacao_log.txt` mas
+  **não** impede a criação do prospect (dados estruturados + checklist
+  entram normalmente). Anexo que falhar precisa ser baixado manualmente do
+  Trello (logado no navegador) e anexado depois pela tela do prospect no
+  soma-nfse.
 - Cada prospect criado grava o id do card do Trello dentro de
   `comercial_prospect_atividade.metadata` (evento `SISTEMA`) — reexecutar
   `gravar.py --commit` não duplica, mesmo com o mesmo `plano.json`.

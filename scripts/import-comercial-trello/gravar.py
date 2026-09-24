@@ -90,6 +90,9 @@ def enviar_pro_blob(arquivo_local: Path, pathname: str) -> dict:
 
 
 def main():
+    if sys.stdout.encoding != "utf-8":
+        sys.stdout.reconfigure(encoding="utf-8")
+
     modo = sys.argv[1] if len(sys.argv) > 1 else "--dry"
     if modo not in ("--dry", "--commit"):
         print("Uso: python gravar.py [--dry|--commit]", file=sys.stderr)
@@ -152,21 +155,28 @@ def main():
                 } for i, item in enumerate(prospect["checklist"])]
                 rest("POST", url_base, service_key, "comercial_prospect_checklist", body=linhas_checklist)
 
+            # Anexo é melhor-esforço — o Trello exige sessão de navegador (não
+            # key+token) pra baixar o arquivo de verdade dos anexos
+            # hospedados por ele (limitação conhecida da API), então uma
+            # falha aqui não pode derrubar a criação do prospect em si.
             for anexo in prospect["anexos"]:
                 if not (trello_key and trello_token):
                     log_linhas.append(f"{prospect['nome']!r}: anexo {anexo['nome']!r} pulado (sem TRELLO_KEY/TOKEN)")
                     continue
-                tmp = baixar_anexo(anexo["url"], trello_key, trello_token)
                 try:
-                    blob = enviar_pro_blob(tmp, f"comercial/{prospect_id}/{anexo['nome']}")
-                finally:
-                    tmp.unlink(missing_ok=True)
-                rest("POST", url_base, service_key, "comercial_prospect_anexos", body={
-                    "prospect_id": prospect_id,
-                    "blob_url": blob["url"],
-                    "blob_pathname": blob["pathname"],
-                    "nome_arquivo": anexo["nome"],
-                })
+                    tmp = baixar_anexo(anexo["url"], trello_key, trello_token)
+                    try:
+                        blob = enviar_pro_blob(tmp, f"comercial/{prospect_id}/{anexo['nome']}")
+                    finally:
+                        tmp.unlink(missing_ok=True)
+                    rest("POST", url_base, service_key, "comercial_prospect_anexos", body={
+                        "prospect_id": prospect_id,
+                        "blob_url": blob["url"],
+                        "blob_pathname": blob["pathname"],
+                        "nome_arquivo": anexo["nome"],
+                    })
+                except Exception as exc_anexo:
+                    log_linhas.append(f"{prospect['nome']!r}: falha no anexo {anexo['nome']!r}: {exc_anexo}")
 
             rest("POST", url_base, service_key, "comercial_prospect_atividade", body={
                 "prospect_id": prospect_id,

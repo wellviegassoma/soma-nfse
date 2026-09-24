@@ -130,6 +130,9 @@ def montar_anexos(card: dict) -> list[dict]:
 
 
 def main():
+    if sys.stdout.encoding != "utf-8":
+        sys.stdout.reconfigure(encoding="utf-8")
+
     trello_key = os.environ.get("TRELLO_KEY")
     trello_token = os.environ.get("TRELLO_TOKEN")
     if not trello_key or not trello_token:
