@@ -19,7 +19,7 @@ export default async function AdminLayout({
   return (
     <div className="min-h-dvh bg-background">
       <header className="sticky top-0 z-10 border-b border-border bg-surface/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-4">
+        <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between gap-4 px-4">
           <div className="flex items-center gap-4">
             <Logo />
             <div className="hidden h-8 w-px bg-border sm:block" />
@@ -68,7 +68,7 @@ export default async function AdminLayout({
           </div>
         </div>
       </header>
-      <div className="mx-auto max-w-5xl px-4 py-8">
+      <div className="mx-auto max-w-[1600px] px-4 py-8">
         <AdminNav
           isSuperAdmin={superAdmin}
           podeGerenciarUsuarios={podeGerenciarUsuarios}
