@@ -155,6 +155,7 @@ export function FaseRow({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dataConclusao, setDataConclusao] = useState(hojeSaoPaulo());
+  const [aberto, setAberto] = useState(false);
   const router = useRouter();
   const status = statusEfetivoFase(fase, prazoFinalProcesso);
 
@@ -191,107 +192,120 @@ export function FaseRow({
     });
   }
 
+  const metaPartes = [
+    fase.data_conclusao && `concluída em ${new Date(fase.data_conclusao + "T00:00:00").toLocaleDateString("pt-BR")}`,
+    fase.responsavel_nome,
+    fase.prazo && `prazo ${new Date(fase.prazo + "T00:00:00").toLocaleDateString("pt-BR")}`,
+  ].filter(Boolean);
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2 text-sm">
-      <div className="min-w-0 flex-1">
-        <span className="font-medium text-foreground">{fase.ordem} — {fase.nome}</span>
-        {fase.data_conclusao && (
-          <span className="ml-2 text-xs text-foreground/40">
-            concluída em {new Date(fase.data_conclusao + "T00:00:00").toLocaleDateString("pt-BR")}
-          </span>
+    <div className="rounded-lg border border-border bg-surface text-sm">
+      <button
+        type="button"
+        onClick={() => podeEditar && setAberto((v) => !v)}
+        className={cn(
+          "flex w-full items-center justify-between gap-3 px-3 py-2 text-left",
+          podeEditar && "cursor-pointer hover:bg-surface-muted",
         )}
-      </div>
+      >
+        <div className="min-w-0 flex-1">
+          <span className="font-medium text-foreground">{fase.ordem} — {fase.nome}</span>
+          {metaPartes.length > 0 && (
+            <span className="ml-2 text-xs text-foreground/40">{metaPartes.join(" · ")}</span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <StatusBadge status={status} />
+          {podeEditar && <span className="text-xs text-foreground/40">{aberto ? "▲" : "▼"}</span>}
+        </div>
+      </button>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={status} />
+      {podeEditar && aberto && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2.5">
+          <Select
+            className="h-8 w-40 text-xs"
+            value={fase.responsavel_id ?? ""}
+            disabled={pending}
+            onChange={(e) => {
+              setError(null);
+              startTransition(() => definirResponsavelFase(fase.id, processoId, e.target.value || null));
+            }}
+          >
+            <option value="">Sem responsável</option>
+            {responsaveis.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.full_name}
+              </option>
+            ))}
+          </Select>
 
-        {podeEditar && (
-          <>
-            <Select
-              className="h-8 w-40 text-xs"
-              value={fase.responsavel_id ?? ""}
+          <Input
+            type="date"
+            className="h-8 w-36 text-xs"
+            value={fase.prazo ?? ""}
+            disabled={pending}
+            onChange={(e) => {
+              setError(null);
+              startTransition(() => definirPrazoFase(fase.id, processoId, e.target.value || null));
+            }}
+          />
+
+          {fase.data_conclusao ? (
+            <button
+              type="button"
               disabled={pending}
-              onChange={(e) => {
-                setError(null);
-                startTransition(() => definirResponsavelFase(fase.id, processoId, e.target.value || null));
-              }}
+              onClick={() => startTransition(() => reabrirFase(fase.id, processoId))}
+              className="h-8 rounded-lg border border-border px-2.5 text-xs font-medium text-foreground/70 hover:bg-surface-muted disabled:opacity-50"
             >
-              <option value="">Sem responsável</option>
-              {responsaveis.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.full_name}
-                </option>
-              ))}
-            </Select>
-
-            <Input
-              type="date"
-              className="h-8 w-36 text-xs"
-              value={fase.prazo ?? ""}
+              Reabrir
+            </button>
+          ) : (
+            <>
+              <Select
+                className="h-8 w-40 text-xs"
+                value=""
+                disabled={pending}
+                onChange={(e) => {
+                  if (e.target.value) acao(e.target.value);
+                  e.target.value = "";
+                }}
+              >
+                <option value="">Status...</option>
+                <option value="AGUARDANDO_DADOS">Aguardando dados</option>
+                <option value="A_CONFERIR">A conferir</option>
+                <option value="PARALISADO">Paralisar</option>
+                {fase.status_manual && <option value="A_FAZER">Voltar pra A fazer</option>}
+              </Select>
+              <Input
+                type="date"
+                className="h-8 w-36 text-xs"
+                value={dataConclusao}
+                disabled={pending}
+                onChange={(e) => setDataConclusao(e.target.value)}
+              />
+              <button
+                type="button"
+                disabled={pending}
+                onClick={concluir}
+                className="h-8 rounded-lg bg-brand px-2.5 text-xs font-medium text-brand-foreground hover:bg-brand-hover disabled:opacity-50"
+              >
+                Concluir
+              </button>
+            </>
+          )}
+          {onRemover && (
+            <button
+              type="button"
               disabled={pending}
-              onChange={(e) => {
-                setError(null);
-                startTransition(() => definirPrazoFase(fase.id, processoId, e.target.value || null));
-              }}
-            />
-
-            {fase.data_conclusao ? (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => startTransition(() => reabrirFase(fase.id, processoId))}
-                className="h-8 rounded-lg border border-border px-2.5 text-xs font-medium text-foreground/70 hover:bg-surface-muted disabled:opacity-50"
-              >
-                Reabrir
-              </button>
-            ) : (
-              <>
-                <Select
-                  className="h-8 w-40 text-xs"
-                  value=""
-                  disabled={pending}
-                  onChange={(e) => {
-                    if (e.target.value) acao(e.target.value);
-                    e.target.value = "";
-                  }}
-                >
-                  <option value="">Status...</option>
-                  <option value="AGUARDANDO_DADOS">Aguardando dados</option>
-                  <option value="A_CONFERIR">A conferir</option>
-                  <option value="PARALISADO">Paralisar</option>
-                  {fase.status_manual && <option value="A_FAZER">Voltar pra A fazer</option>}
-                </Select>
-                <Input
-                  type="date"
-                  className="h-8 w-36 text-xs"
-                  value={dataConclusao}
-                  disabled={pending}
-                  onChange={(e) => setDataConclusao(e.target.value)}
-                />
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={concluir}
-                  className="h-8 rounded-lg bg-brand px-2.5 text-xs font-medium text-brand-foreground hover:bg-brand-hover disabled:opacity-50"
-                >
-                  Concluir
-                </button>
-              </>
-            )}
-            {onRemover && (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={onRemover}
-                className="h-8 rounded-lg px-2 text-xs font-medium text-danger hover:bg-danger-soft disabled:opacity-50"
-              >
-                Remover
-              </button>
-            )}
-          </>
-        )}
-      </div>
-      {error && <p className="w-full text-xs text-danger">{error}</p>}
+              onClick={onRemover}
+              className="h-8 rounded-lg px-2 text-xs font-medium text-danger hover:bg-danger-soft disabled:opacity-50"
+            >
+              Remover
+            </button>
+          )}
+        </div>
+      )}
+      {error && <p className="px-3 pb-2 text-xs text-danger">{error}</p>}
     </div>
   );
 }
