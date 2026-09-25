@@ -7,6 +7,14 @@ import { cn } from "@/lib/cn";
 import { statusDocumento, tipoAplicavel } from "@/app/legalizacao/status";
 import { STATUS_PILL_CLASSES, formatarEndereco, formatarDocumentoEmpresa } from "@/lib/formatters";
 import { TAX_REGIME_LABELS, type Company } from "@/lib/types";
+import {
+  STATUS_LABELS,
+  STATUS_TONES,
+  TIPO_PROCESSO_LABELS,
+  hojeSaoPaulo,
+  statusEfetivoProcesso,
+  type FaseParaStatus,
+} from "@/app/legalizacao/processos/status";
 import { ConsultarCnpjReceitaButton } from "./ConsultarCnpjReceitaButton";
 
 export const metadata = { title: "Legalização — Empresa" };
@@ -17,7 +25,7 @@ export default async function LegalizacaoEmpresaPage(
   const { companyId } = await props.params;
   const supabase = await createClient();
 
-  const [{ data: company }, { data: tipos }, { data: documentos }, { data: excecoes }] =
+  const [{ data: company }, { data: tipos }, { data: documentos }, { data: excecoes }, { data: processos }] =
     await Promise.all([
       supabase
         .from("companies")
@@ -39,6 +47,14 @@ export default async function LegalizacaoEmpresaPage(
         .from("legalizacao_tipos_empresas_excecao")
         .select("tipo_id, aplicavel")
         .eq("company_id", companyId),
+      supabase
+        .from("legalizacao_processos")
+        .select(
+          "id, tipo_processo, nome, prazo_final, data_conclusao, fases:legalizacao_processo_fases(data_conclusao, status_manual, prazo)",
+        )
+        .eq("company_id", companyId)
+        .is("arquivado_em", null)
+        .order("created_at", { ascending: false }),
     ]);
 
   if (!company) notFound();
@@ -65,6 +81,14 @@ export default async function LegalizacaoEmpresaPage(
   const tiposNaoAplicaveisNomes = (tipos ?? [])
     .filter((t) => !tipoAplicavel(t.aplica_a_todas, excecaoPorTipo.get(t.id)))
     .map((t) => t.nome);
+
+  const hoje = hojeSaoPaulo();
+  const processosComStatus = (processos ?? []).map((p) => ({
+    id: p.id,
+    tipo_processo: p.tipo_processo,
+    nome: p.nome,
+    status: statusEfetivoProcesso(p, (p.fases ?? []) as FaseParaStatus[], hoje),
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -115,6 +139,44 @@ export default async function LegalizacaoEmpresaPage(
             {formatarEndereco(empresa) ?? "Não cadastrado"}
           </div>
         </div>
+      </Card>
+
+      <Card className="p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-foreground/70">Processos de legalização</h2>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/legalizacao/processos/novo?companyId=${companyId}&tipo=ALTERACAO`}>
+              <Button variant="secondary" size="md" className="h-8 px-3 text-xs">
+                + Alteração contratual
+              </Button>
+            </Link>
+            <Link href={`/legalizacao/processos/novo?companyId=${companyId}&tipo=ENCERRAMENTO`}>
+              <Button variant="secondary" size="md" className="h-8 px-3 text-xs">
+                + Encerrar empresa
+              </Button>
+            </Link>
+          </div>
+        </div>
+        {processosComStatus.length === 0 ? (
+          <p className="text-sm text-foreground/50">Nenhum processo em andamento pra essa empresa.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {processosComStatus.map((p) => (
+              <Link
+                key={p.id}
+                href={`/legalizacao/processos/${p.id}`}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface-muted"
+              >
+                <span className="font-medium text-foreground">
+                  {TIPO_PROCESSO_LABELS[p.tipo_processo]}
+                </span>
+                <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", STATUS_PILL_CLASSES[STATUS_TONES[p.status]])}>
+                  {STATUS_LABELS[p.status]}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Card className="overflow-hidden">

@@ -6,15 +6,17 @@ import { cn } from "@/lib/cn";
 
 const TABS = [
   { href: "/legalizacao", label: "Visão geral", exact: true },
+  { href: "/legalizacao/processos", label: "Processos" },
+  { href: "/legalizacao/fluxos", label: "Fluxos", editarOnly: true },
   { href: "/legalizacao/tipos", label: "Tipos de documento" },
 ];
 
-export function LegalizacaoNav() {
+export function LegalizacaoNav({ podeEditar }: { podeEditar: boolean }) {
   const pathname = usePathname();
 
   return (
     <nav className="flex gap-1 border-b border-border">
-      {TABS.map((tab) => {
+      {TABS.filter((tab) => !tab.editarOnly || podeEditar).map((tab) => {
         const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
         return (
           <Link
