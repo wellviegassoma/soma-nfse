@@ -1,0 +1,35 @@
+Total lido no eLegalize: 30
+Importáveis: 29 (Abertura 6 / Alteração 22 / Encerramento 1)
+Excluídos (fluxo fora de escopo): 1
+Precisam revisão manual (empresa não encontrada com confiança): 0
+================================================================================
+[ok] #562 ENCERRAMENTO 088 - Adelfos Medical LTDA -> ADELFOS MEDICAL LTDA (1.00)
+[OK] #529 ABERTURA     401 - Genetrack Tecnologia LTDA
+[OK] #496 ABERTURA     370 - Serviços Medicos Ana Roenick LTDA
+[OK] #463 ABERTURA     256 - Instituto Respirar Pneumologia e Estudo do S
+[OK] #430 ABERTURA     398 - Heloisa Oliveira Serviços Medicos LTDA
+[OK] #397 ABERTURA     068 - RCBastos
+[OK] #364 ABERTURA     250 - Mancini Health LTDA
+[confirmado] #332 ALTERACAO    390 - AMCF Participações -> confirmado manualmente
+[confirmado] #331 ALTERACAO    389 - BFM Treinamentos LTDA -> confirmado manualmente
+[ok] #299 ALTERACAO    380 - Instituto Wogel Ltda -> WOGEL MEDICINA FUNCIONAL LTDA (0.64)
+[ok] #298 ALTERACAO    383 - Soma Consultoria Criação e Treinamento LTDA -> SOMA CONSULTORIA E TREINAMENTO LTDA (0.90)
+[ok] #265 ALTERACAO    196 - Junqueir Barros - Alteração do QSA -> JUNQUEIRA BARROS CLINICA E CIRURGIA (0.66)
+[confirmado] #233 ALTERACAO    386 - Sensualità Moda Íntima Unissex -> confirmado manualmente
+[ok] #232 ALTERACAO    385 - BMS Soluções Financeiras LTDA -> BMS SOLUCOES FINANCEIRAS LTDA (1.00)
+[ok] #201 ALTERACAO    302 - Espaço VN The Wellness -> ESPACO VN THE WELLNESS E SKIN CLUB LTDA (0.72)
+[ok] #200 ALTERACAO    107 - UNITEC Radiologia LTDA - Alteração do QSA -> UNITEC RADIOLOGIA LTDA (0.72)
+[ok] #199 ALTERACAO    370 - Serviços Médicos Ana Roenick LTDA -> ANA ROENICK SERVICOS MEDICOS LTDA. (0.64)
+[ok] #166 ALTERACAO    342 - Clinica Otoserrana - Alteração -> CLINICA OTOSERRANA LTDA (0.86)
+[ok] #133 ALTERACAO    381 - Aliviar Prime Medicina da Dor LTDA -> ALIVIAR MEDICINA DA DOR TREINAMENTO E SAUDE LTDA (0.68)
+[confirmado] #120 ALTERACAO    134 - RRAD - Alteração de endereço e atividade -> confirmado manualmente
+[confirmado] #118 ALTERACAO    COMAF - Alteração de socios e de endereço -> confirmado manualmente
+[confirmado] #116 ALTERACAO    LIGA - Alteração do quadro societario -> confirmado manualmente
+[confirmado] #115 ALTERACAO    TechBone - RCPJ para JUCERJA -> confirmado manualmente
+[confirmado] #114 ALTERACAO    Instituto Dela - Alteração colocando 2 socias -> confirmado manualmente
+[confirmado] #113 ALTERACAO    Odonto Medical - Alteração dos socios e atividades -> confirmado manualmente
+[ok] #112 ALTERACAO    Winkler Clinic - Alteração dos sócios e atividade -> WINKLER CLINIC SERVICOS LTDA (0.64)
+[ok] #110 ALTERACAO    Kamaroff Participações LTDA -> KAMAROFF PARTICIPACOES LTDA (1.00)
+[ok] #109 ALTERACAO    CLINICA ANTUNES SAUDE ESPECIALIZADA LTDA -> CLINICA ANTUNES SAUDE ESPECIALIZADA LTDA (1.00)
+[ok] #106 ALTERACAO    CAIADO CIRURGIA PLASTICA,, ENSINO E PESQUISA LTDA -> CAIADO CIRURGIA PLASTICA, ENSINO E PESQUISA LTDA (1.00)
+[EXCLUIDO] #117 6 fases (fluxo fora de escopo) — BFM Diagnostico por imagem LTDA

@@ -1,0 +1,2838 @@
+{
+  "resumo": {
+    "total_lidos": 30,
+    "importaveis": 29,
+    "excluidos": 1,
+    "abertura": 6,
+    "alteracao": 22,
+    "encerramento": 1,
+    "precisam_revisao_manual": 0
+  },
+  "processos": [
+    {
+      "origem_externa_id": "562",
+      "tipo_processo": "ENCERRAMENTO",
+      "fluxo_chave": "ENCERRAMENTO_EMPRESA",
+      "nome_eLegalize": "088 - Adelfos Medical LTDA",
+      "data_inicio": "2026-09-25",
+      "prazo_final": "2026-09-30",
+      "company_id": "1a0701a4-136d-4312-ac52-ce8d1339448d",
+      "company_match_nome": "ADELFOS MEDICAL LTDA",
+      "company_match_score": 1.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Distrato do Contrato assinado",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Baixa Inscrição Municipal",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Baixa Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "529",
+      "tipo_processo": "ABERTURA",
+      "fluxo_chave": "ABERTURA_EMPRESA",
+      "nome_eLegalize": "401 - Genetrack Tecnologia LTDA",
+      "data_inicio": "2026-09-24",
+      "prazo_final": "2026-09-30",
+      "company_id": null,
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "496",
+      "tipo_processo": "ABERTURA",
+      "fluxo_chave": "ABERTURA_EMPRESA",
+      "nome_eLegalize": "370 - Serviços Medicos Ana Roenick LTDA",
+      "data_inicio": "2026-09-23",
+      "prazo_final": "2026-09-30",
+      "company_id": null,
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-09-23",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-09-23",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-09-23",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "463",
+      "tipo_processo": "ABERTURA",
+      "fluxo_chave": "ABERTURA_EMPRESA",
+      "nome_eLegalize": "256 - Instituto Respirar Pneumologia e Estudo do S",
+      "data_inicio": "2026-09-17",
+      "prazo_final": "2026-09-30",
+      "company_id": null,
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "430",
+      "tipo_processo": "ABERTURA",
+      "fluxo_chave": "ABERTURA_EMPRESA",
+      "nome_eLegalize": "398 - Heloisa Oliveira Serviços Medicos LTDA",
+      "data_inicio": "2026-09-14",
+      "prazo_final": "2026-09-30",
+      "company_id": null,
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-09-14",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-09-14",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-09-21",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-09-21",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-09-22",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "397",
+      "tipo_processo": "ABERTURA",
+      "fluxo_chave": "ABERTURA_EMPRESA",
+      "nome_eLegalize": "068 - RCBastos",
+      "data_inicio": "2026-09-14",
+      "prazo_final": "2026-09-30",
+      "company_id": null,
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-09-14",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-09-14",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "364",
+      "tipo_processo": "ABERTURA",
+      "fluxo_chave": "ABERTURA_EMPRESA",
+      "nome_eLegalize": "250 - Mancini Health LTDA",
+      "data_inicio": "2026-09-04",
+      "prazo_final": "2026-09-30",
+      "company_id": null,
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-09-08",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-09-08",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-09-08",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-09-10",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-09-11",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-09-17",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-09-17",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-09-17",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-09-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-09-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-09-21",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "332",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "390 - AMCF Participações",
+      "data_inicio": "2026-08-25",
+      "prazo_final": "2026-09-30",
+      "company_id": "20a77db3-e5d6-4978-91bb-180cc1210062",
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-09-08",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-09-08",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-09-08",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-09-23",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-09-23",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "331",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "389 - BFM Treinamentos LTDA",
+      "data_inicio": "2026-08-25",
+      "prazo_final": "2026-09-30",
+      "company_id": "3631682e-4e70-4f59-9a7c-bd209ace395b",
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-08-25",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-08-25",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-09-01",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-09-08",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "299",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "380 - Instituto Wogel Ltda",
+      "data_inicio": "2026-08-18",
+      "prazo_final": "2026-08-31",
+      "company_id": "be8f3e74-7739-4256-bac5-9413f94249b3",
+      "company_match_nome": "WOGEL MEDICINA FUNCIONAL LTDA",
+      "company_match_score": 0.638,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-08-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-08-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-08-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-08-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-08-24",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": "2026-08-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": "2026-08-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": "2026-09-10",
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": "2026-09-11",
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "298",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "383 - Soma Consultoria Criação e Treinamento LTDA",
+      "data_inicio": "2026-08-18",
+      "prazo_final": "2026-08-31",
+      "company_id": "67f2fc08-0817-4544-a048-fb02bba83e0d",
+      "company_match_nome": "SOMA CONSULTORIA E TREINAMENTO LTDA",
+      "company_match_score": 0.897,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-09-11",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "265",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "196 - Junqueir Barros - Alteração do QSA",
+      "data_inicio": "2026-08-11",
+      "prazo_final": "2026-08-31",
+      "company_id": "55d877d4-3953-4d82-8178-2d728e30f5ba",
+      "company_match_nome": "JUNQUEIRA BARROS CLINICA E CIRURGIA",
+      "company_match_score": 0.657,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "233",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "386 - Sensualità Moda Íntima Unissex",
+      "data_inicio": "2026-08-10",
+      "prazo_final": "2026-08-31",
+      "company_id": "2129ce06-0ceb-4a93-9b80-a7265682a8c7",
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-08-10",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-08-10",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-08-11",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-08-11",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-08-11",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "232",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "385 - BMS Soluções Financeiras LTDA",
+      "data_inicio": "2026-08-10",
+      "prazo_final": "2026-08-31",
+      "company_id": "43aaefe6-6c10-4255-b4eb-e968e0e2e5b5",
+      "company_match_nome": "BMS SOLUCOES FINANCEIRAS LTDA",
+      "company_match_score": 1.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-08-10",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-08-10",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-08-10",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-08-11",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-08-13",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-08-25",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-08-25",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-25",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-08-25",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-08-25",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-09-11",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "201",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "302 - Espaço VN The Wellness",
+      "data_inicio": "2026-08-06",
+      "prazo_final": "2026-08-31",
+      "company_id": "6b838025-0c85-4517-b4ba-eee7d4353f21",
+      "company_match_nome": "ESPACO VN THE WELLNESS E SKIN CLUB LTDA",
+      "company_match_score": 0.721,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-08-10",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-08-10",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-08-10",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-08-11",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-08-11",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-08-11",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-12",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-08-14",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-08-14",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-08-14",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "200",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "107 - UNITEC Radiologia LTDA - Alteração do QSA",
+      "data_inicio": "2026-08-06",
+      "prazo_final": "2026-08-31",
+      "company_id": "b9305d13-0e71-4026-911f-148107fca272",
+      "company_match_nome": "UNITEC RADIOLOGIA LTDA",
+      "company_match_score": 0.721,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "199",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "370 - Serviços Médicos Ana Roenick LTDA",
+      "data_inicio": "2026-08-06",
+      "prazo_final": "2026-08-31",
+      "company_id": "df1fe1e1-3434-4f7e-92f7-e37b894929f8",
+      "company_match_nome": "ANA ROENICK SERVICOS MEDICOS LTDA.",
+      "company_match_score": 0.636,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-08-11",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-08-11",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-08-11",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-08-11",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-08-13",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-08-25",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-08-25",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-25",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-08-26",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-08-26",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-08-26",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": "2026-08-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": "2026-08-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "166",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "342 - Clinica Otoserrana - Alteração",
+      "data_inicio": "2026-07-30",
+      "prazo_final": "2026-08-31",
+      "company_id": "9a01b413-6b7e-4753-ba63-74d6ecc85784",
+      "company_match_nome": "CLINICA OTOSERRANA LTDA",
+      "company_match_score": 0.863,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-07-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-07-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-07-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-07-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "133",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "381 - Aliviar Prime Medicina da Dor LTDA",
+      "data_inicio": "2026-07-28",
+      "prazo_final": "2026-08-31",
+      "company_id": "60648c1d-710f-46ed-b722-b600cc12a1df",
+      "company_match_nome": "ALIVIAR MEDICINA DA DOR TREINAMENTO E SAUDE LTDA",
+      "company_match_score": 0.683,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-09-02",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-09-03",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-09-03",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-09-03",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-09-04",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-09-04",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "120",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "134 - RRAD - Alteração de endereço e atividade",
+      "data_inicio": "2026-07-27",
+      "prazo_final": "2026-08-31",
+      "company_id": "ed430c7f-f14d-4fac-9d1d-11232c6e3d6a",
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": "2026-09-04",
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "118",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "COMAF - Alteração de socios e de endereço",
+      "data_inicio": "2026-07-27",
+      "prazo_final": "2026-08-31",
+      "company_id": "a18391e9-7c6c-4b16-854c-b566e78884ee",
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-05",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "116",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "LIGA - Alteração do quadro societario",
+      "data_inicio": "2026-07-27",
+      "prazo_final": "2026-08-15",
+      "company_id": "04c1456e-0bc3-462d-9979-15efee8b3639",
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "115",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "TechBone - RCPJ para JUCERJA",
+      "data_inicio": "2026-07-27",
+      "prazo_final": "2026-08-31",
+      "company_id": "b8173af1-2510-4640-8cf3-87e28234725a",
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "114",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "Instituto Dela - Alteração colocando 2 socias",
+      "data_inicio": "2026-07-27",
+      "prazo_final": "2026-08-31",
+      "company_id": "de5be0e9-511a-400f-a9b7-96c331b724eb",
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-08-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-08-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-08-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "113",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "Odonto Medical - Alteração dos socios e atividades",
+      "data_inicio": "2026-07-27",
+      "prazo_final": "2026-08-31",
+      "company_id": "19343490-9fd7-486b-ad3a-0599eecf197b",
+      "company_match_nome": null,
+      "company_match_score": 0.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "112",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "Winkler Clinic - Alteração dos sócios e atividade",
+      "data_inicio": "2026-07-27",
+      "prazo_final": "2026-08-31",
+      "company_id": "55ecc5c4-33d3-4b30-a7d2-ebde82e6e692",
+      "company_match_nome": "WINKLER CLINIC SERVICOS LTDA",
+      "company_match_score": 0.64,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-07-28",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": null,
+          "status_manual": "PARALISADO"
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "110",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "Kamaroff Participações LTDA",
+      "data_inicio": "2026-07-27",
+      "prazo_final": "2026-08-31",
+      "company_id": "2e77df9e-27f0-413a-9470-3bdad17ed0cc",
+      "company_match_nome": "KAMAROFF PARTICIPACOES LTDA",
+      "company_match_score": 1.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-08-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-08-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-08-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-09-01",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-09-02",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "109",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "CLINICA ANTUNES SAUDE ESPECIALIZADA LTDA",
+      "data_inicio": "2026-07-27",
+      "prazo_final": "2026-08-31",
+      "company_id": "68b50b78-d134-453b-b47d-1c04d085282d",
+      "company_match_nome": "CLINICA ANTUNES SAUDE ESPECIALIZADA LTDA",
+      "company_match_score": 1.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-08-04",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-08-04",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-04",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-08-04",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-08-05",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-08-05",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": "2026-08-18",
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": "2026-09-21",
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": null,
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    },
+    {
+      "origem_externa_id": "106",
+      "tipo_processo": "ALTERACAO",
+      "fluxo_chave": "ALTERACAO_CONTRATUAL",
+      "nome_eLegalize": "CAIADO CIRURGIA PLASTICA,, ENSINO E PESQUISA LTDA",
+      "data_inicio": "2026-07-27",
+      "prazo_final": "2026-08-31",
+      "company_id": "125a33a3-d140-4d72-bff1-b022c4fa1ac4",
+      "company_match_nome": "CAIADO CIRURGIA PLASTICA, ENSINO E PESQUISA LTDA",
+      "company_match_score": 1.0,
+      "revisar_manualmente": false,
+      "empresa_ainda_nao_existe": false,
+      "fases": [
+        {
+          "nome": "Documentos Solicitados",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Documentos Recebidos",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Feita",
+          "data_conclusao": "2026-07-27",
+          "status_manual": null
+        },
+        {
+          "nome": "Minuta Aprovada",
+          "data_conclusao": "2026-08-04",
+          "status_manual": null
+        },
+        {
+          "nome": "Consulta Prévia / Viabilidade",
+          "data_conclusao": "2026-08-05",
+          "status_manual": null
+        },
+        {
+          "nome": "DBE",
+          "data_conclusao": "2026-08-06",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato / Enquadramento / Procurações assinadas",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Processo",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Protocolo Deferido",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Assinatura do Gov para CNPJ",
+          "data_conclusao": "2026-08-07",
+          "status_manual": null
+        },
+        {
+          "nome": "Certificado Digital",
+          "data_conclusao": "2026-08-12",
+          "status_manual": null
+        },
+        {
+          "nome": "CRIAR PROCESSOS DE CADASTRO",
+          "data_conclusao": "2026-08-31",
+          "status_manual": null
+        },
+        {
+          "nome": "Contrato de Prestação de Serviços com a SOMA",
+          "data_conclusao": "2026-09-21",
+          "status_manual": null
+        },
+        {
+          "nome": "Corpo de Bombeiros",
+          "data_conclusao": "2026-09-21",
+          "status_manual": null
+        },
+        {
+          "nome": "Alvará de Funcionamento",
+          "data_conclusao": "2026-09-21",
+          "status_manual": null
+        },
+        {
+          "nome": "Vigilância Sanitária",
+          "data_conclusao": "2026-09-21",
+          "status_manual": null
+        },
+        {
+          "nome": "Conselho de Classe",
+          "data_conclusao": "2026-09-24",
+          "status_manual": null
+        },
+        {
+          "nome": "CNES",
+          "data_conclusao": null,
+          "status_manual": null
+        }
+      ]
+    }
+  ]
+}
