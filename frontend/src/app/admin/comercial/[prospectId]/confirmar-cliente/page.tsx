@@ -16,7 +16,7 @@ export default async function ConfirmarClientePage(
   const supabase = await createClient();
   const { data: prospect } = await supabase
     .from("comercial_prospects")
-    .select("id, nome, pessoa_tipo, cnpj, cpf, regime_tributario, company_id")
+    .select("id, nome, pessoa_tipo, cnpj, cpf, regime_tributario, cidade, company_id")
     .eq("id", prospectId)
     .maybeSingle();
   if (!prospect) notFound();

@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import Link from "next/link";
 import { criarProspect, buscarCnpjParaProspect } from "@/lib/actions/comercial";
+import { formatarBlocoCnpj, inserirBlocoCnpj } from "@/lib/comercial/formatar-dados-cnpj";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -16,7 +17,10 @@ export function NovoProspectForm() {
   const [cnpj, setCnpj] = useState("");
   const [cpf, setCpf] = useState("");
   const [nome, setNome] = useState("");
+  const [cidade, setCidade] = useState("");
   const [regimeTributario, setRegimeTributario] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [origemLead, setOrigemLead] = useState("");
 
   const [buscando, setBuscando] = useState(false);
   const [buscaErro, setBuscaErro] = useState<string | null>(null);
@@ -42,11 +46,13 @@ export function NovoProspectForm() {
     const dados = resultado.data;
     setPessoaTipo("PJ");
     if (!nome) setNome(dados.nomeFantasia || dados.razaoSocial);
+    if (dados.municipio) setCidade(dados.municipio);
     if (dados.simplesNacional) setRegimeTributario("SIMPLES_NACIONAL");
+    setDescricao((atual) => inserirBlocoCnpj(atual, formatarBlocoCnpj(dados)));
     setBuscaInfo(
       `${dados.razaoSocial}${dados.municipio ? ` · ${dados.municipio}/${dados.uf}` : ""}${
         dados.ativa ? "" : ` · situação: ${dados.situacaoCadastral ?? "não ativa"}`
-      }`,
+      } — dados completos adicionados na descrição.`,
     );
   }
 
@@ -58,7 +64,7 @@ export function NovoProspectForm() {
         <Input id="nome" name="nome" autoFocus required value={nome} onChange={(e) => setNome(e.target.value)} />
       </Field>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Tipo do caso" htmlFor="tipoOnboarding">
           <Select id="tipoOnboarding" name="tipoOnboarding" defaultValue="">
             <option value="">Não definido</option>
@@ -109,9 +115,24 @@ export function NovoProspectForm() {
         </Field>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Especialidade / cidade" htmlFor="especialidade" hint="Opcional">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Especialidade" htmlFor="especialidade" hint="Opcional">
           <Input id="especialidade" name="especialidade" />
+        </Field>
+        <Field label="Cidade" htmlFor="cidade" hint="Opcional">
+          <Input id="cidade" name="cidade" value={cidade} onChange={(e) => setCidade(e.target.value)} />
+        </Field>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Origem do lead" htmlFor="origemLead" hint="Opcional">
+          <Select id="origemLead" name="origemLead" value={origemLead} onChange={(e) => setOrigemLead(e.target.value)}>
+            <option value="">Não definido</option>
+            <option value="INSTAGRAM">Instagram</option>
+            <option value="AULA">Aula</option>
+            <option value="INDICACAO">Indicação</option>
+            <option value="OUTRO">Outro</option>
+          </Select>
         </Field>
         <Field label="Regime tributário" htmlFor="regimeTributario" hint="Opcional">
           <Input
@@ -123,7 +144,13 @@ export function NovoProspectForm() {
         </Field>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      {origemLead === "INDICACAO" && (
+        <Field label="Quem indicou" htmlFor="indicadoPor" hint="Opcional">
+          <Input id="indicadoPor" name="indicadoPor" />
+        </Field>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Faturamento médio estimado" htmlFor="faturamentoMedioEstimado" hint="Opcional">
           <Input id="faturamentoMedioEstimado" name="faturamentoMedioEstimado" inputMode="decimal" placeholder="0,00" />
         </Field>
@@ -136,7 +163,9 @@ export function NovoProspectForm() {
         <textarea
           id="descricao"
           name="descricao"
-          rows={4}
+          rows={8}
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
           className="w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-[15px] text-foreground outline-none transition-shadow focus:border-brand focus:ring-4 focus:ring-brand/15"
         />
       </Field>

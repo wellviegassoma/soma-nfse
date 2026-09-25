@@ -24,6 +24,7 @@ type Prospect = {
   id: string;
   nome: string;
   especialidade: string | null;
+  cidade: string | null;
   honorario_soma: number | null;
   etapa_id: string;
   responsavelNome: string | null;
@@ -35,11 +36,12 @@ function formatMoney(value: number | null) {
 }
 
 function ProspectCardContent({ prospect }: { prospect: Prospect }) {
+  const especialidadeECidade = [prospect.especialidade, prospect.cidade].filter(Boolean).join(" · ");
   return (
     <>
       <span className="text-sm font-medium text-foreground">{prospect.nome}</span>
-      {prospect.especialidade && (
-        <p className="mt-0.5 text-xs text-foreground/50">{prospect.especialidade}</p>
+      {especialidadeECidade && (
+        <p className="mt-0.5 text-xs text-foreground/50">{especialidadeECidade}</p>
       )}
       <div className="mt-1 flex items-center justify-between text-xs text-foreground/50">
         <span>{formatMoney(prospect.honorario_soma) ?? "—"}</span>
@@ -78,7 +80,7 @@ function DroppableColumn({ etapa, children }: { etapa: Etapa; children: React.Re
     <div
       ref={setNodeRef}
       className={cn(
-        "flex min-h-[120px] flex-col gap-2 rounded-lg p-1.5 transition-colors",
+        "flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto rounded-lg p-1.5 transition-colors",
         isOver && "bg-brand/10 ring-2 ring-brand",
       )}
     >
@@ -158,13 +160,16 @@ export function KanbanBoard({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div
+          className="flex gap-4 overflow-x-auto pb-4"
+          style={{ height: "calc(100vh - 280px)", minHeight: 360 }}
+        >
           {etapas.map((etapa) => {
             const cards = porEtapa.get(etapa.id) ?? [];
             return (
-              <div key={etapa.id} className="flex w-72 shrink-0 flex-col gap-3">
+              <div key={etapa.id} className="flex w-[85vw] shrink-0 flex-col gap-3 sm:w-72">
                 <div
-                  className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-white"
+                  className="flex shrink-0 items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold text-white"
                   style={{ backgroundColor: etapa.cor }}
                 >
                   <span>{etapa.nome}</span>

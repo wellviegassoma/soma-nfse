@@ -21,7 +21,8 @@ export default async function ComercialBoardPage() {
       .order("ordem", { ascending: true }),
     supabase
       .from("comercial_prospects")
-      .select("id, nome, especialidade, honorario_soma, etapa_id, responsavel:profiles(full_name)")
+      .select("id, nome, especialidade, cidade, honorario_soma, etapa_id, responsavel:profiles(full_name)")
+      .is("arquivado_em", null)
       .order("updated_at", { ascending: false }),
   ]);
 
@@ -30,6 +31,7 @@ export default async function ComercialBoardPage() {
     id: p.id,
     nome: p.nome,
     especialidade: p.especialidade,
+    cidade: p.cidade,
     honorario_soma: p.honorario_soma,
     etapa_id: p.etapa_id,
     responsavelNome: (p.responsavel as unknown as { full_name: string } | null)?.full_name ?? null,
@@ -37,7 +39,7 @@ export default async function ComercialBoardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Comercial</h1>
           <p className="text-sm text-foreground/60">
@@ -45,7 +47,7 @@ export default async function ComercialBoardPage() {
             Arraste um card pra mover de etapa.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {podeConfigurarFunil && (
             <Link href="/admin/comercial/etapas" className="text-sm font-medium text-foreground/60 hover:underline">
               Configurar etapas

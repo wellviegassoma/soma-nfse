@@ -32,6 +32,9 @@ const prospectSchema = z.object({
   tipoOnboarding: z.enum(["TRANSICAO_CONTABIL", "ABERTURA_NOVO_CNPJ"]).optional(),
   pessoaTipo: z.enum(["PF", "PJ"]).optional(),
   especialidade: z.string().trim().optional(),
+  cidade: z.string().trim().optional(),
+  origemLead: z.enum(["INSTAGRAM", "AULA", "INDICACAO", "OUTRO"]).optional(),
+  indicadoPor: z.string().trim().optional(),
   regimeTributario: z.string().trim().optional(),
   faturamentoMedioEstimado: z
     .string()
@@ -65,6 +68,9 @@ export async function criarProspect(
     tipoOnboarding: formData.get("tipoOnboarding") || undefined,
     pessoaTipo: formData.get("pessoaTipo") || undefined,
     especialidade: formData.get("especialidade") || undefined,
+    cidade: formData.get("cidade") || undefined,
+    origemLead: formData.get("origemLead") || undefined,
+    indicadoPor: formData.get("indicadoPor") || undefined,
     regimeTributario: formData.get("regimeTributario") || undefined,
     faturamentoMedioEstimado: formData.get("faturamentoMedioEstimado") || undefined,
     cnpj: formData.get("cnpj") || undefined,
@@ -97,6 +103,9 @@ export async function criarProspect(
       tipo_onboarding: parsed.data.tipoOnboarding || null,
       pessoa_tipo: parsed.data.pessoaTipo || null,
       especialidade: parsed.data.especialidade || null,
+      cidade: parsed.data.cidade || null,
+      origem_lead: parsed.data.origemLead || null,
+      indicado_por: parsed.data.origemLead === "INDICACAO" ? parsed.data.indicadoPor || null : null,
       regime_tributario: parsed.data.regimeTributario || null,
       faturamento_medio_estimado: parsed.data.faturamentoMedioEstimado ?? null,
       cnpj: parsed.data.cnpj || null,
@@ -162,6 +171,9 @@ export async function editarProspect(
     tipoOnboarding: formData.get("tipoOnboarding") || undefined,
     pessoaTipo: formData.get("pessoaTipo") || undefined,
     especialidade: formData.get("especialidade") || undefined,
+    cidade: formData.get("cidade") || undefined,
+    origemLead: formData.get("origemLead") || undefined,
+    indicadoPor: formData.get("indicadoPor") || undefined,
     regimeTributario: formData.get("regimeTributario") || undefined,
     faturamentoMedioEstimado: formData.get("faturamentoMedioEstimado") || undefined,
     cnpj: formData.get("cnpj") || undefined,
@@ -182,6 +194,9 @@ export async function editarProspect(
       tipo_onboarding: rest.tipoOnboarding || null,
       pessoa_tipo: rest.pessoaTipo || null,
       especialidade: rest.especialidade || null,
+      cidade: rest.cidade || null,
+      origem_lead: rest.origemLead || null,
+      indicado_por: rest.origemLead === "INDICACAO" ? rest.indicadoPor || null : null,
       regime_tributario: rest.regimeTributario || null,
       faturamento_medio_estimado: rest.faturamentoMedioEstimado ?? null,
       cnpj: rest.cnpj || null,
@@ -367,6 +382,43 @@ export async function apagarAnexoComercial(anexoId: string, prospectId: string) 
 
   await del(anexo.blob_pathname).catch(() => {});
   revalidatePath(`/admin/comercial/${prospectId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Arquivar / excluir — arquivar é reversível (some do quadro, mantém
+// checklist/histórico/atividade); excluir é permanente (cascata apaga tudo).
+// ---------------------------------------------------------------------------
+export async function arquivarProspect(prospectId: string) {
+  await requirePermissao("comercial.editar");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("comercial_prospects")
+    .update({ arquivado_em: new Date().toISOString() })
+    .eq("id", prospectId);
+  if (error) throw new Error("Não foi possível arquivar o prospect.");
+  revalidatePath("/admin/comercial");
+  revalidatePath(`/admin/comercial/${prospectId}`);
+}
+
+export async function desarquivarProspect(prospectId: string) {
+  await requirePermissao("comercial.editar");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("comercial_prospects")
+    .update({ arquivado_em: null })
+    .eq("id", prospectId);
+  if (error) throw new Error("Não foi possível desarquivar o prospect.");
+  revalidatePath("/admin/comercial");
+  revalidatePath(`/admin/comercial/${prospectId}`);
+}
+
+export async function excluirProspectPermanente(prospectId: string) {
+  await requirePermissao("comercial.editar");
+  const supabase = await createClient();
+  const { error } = await supabase.from("comercial_prospects").delete().eq("id", prospectId);
+  if (error) throw new Error("Não foi possível excluir o prospect.");
+  revalidatePath("/admin/comercial");
+  redirect("/admin/comercial");
 }
 
 // ---------------------------------------------------------------------------

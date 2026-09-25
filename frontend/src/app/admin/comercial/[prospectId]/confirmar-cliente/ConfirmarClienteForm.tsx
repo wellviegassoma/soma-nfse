@@ -19,6 +19,7 @@ type Prospect = {
   cnpj: string | null;
   cpf: string | null;
   regime_tributario: string | null;
+  cidade: string | null;
 };
 
 export function ConfirmarClienteForm({ prospect }: { prospect: Prospect }) {
@@ -34,7 +35,7 @@ export function ConfirmarClienteForm({ prospect }: { prospect: Prospect }) {
   const [tradeName, setTradeName] = useState("");
   const [cnae, setCnae] = useState("");
   const [municipalityIbgeCode, setMunicipalityIbgeCode] = useState("");
-  const [municipalityName, setMunicipalityName] = useState("");
+  const [municipalityName, setMunicipalityName] = useState(prospect.cidade ?? "");
   const [uf, setUf] = useState("");
   const [addressStreet, setAddressStreet] = useState("");
   const [addressNumber, setAddressNumber] = useState("");
@@ -153,7 +154,7 @@ export function ConfirmarClienteForm({ prospect }: { prospect: Prospect }) {
       </Field>
 
       {!isPF && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="CNAE principal" htmlFor="cnae" hint="Opcional">
             <Input id="cnae" name="cnae" value={cnae} onChange={(e) => setCnae(e.target.value)} />
           </Field>
@@ -170,7 +171,7 @@ export function ConfirmarClienteForm({ prospect }: { prospect: Prospect }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4 border-t border-border pt-4">
+      <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
         <Field label="Logradouro" htmlFor="addressStreet" hint="Opcional">
           <Input id="addressStreet" name="addressStreet" value={addressStreet} onChange={(e) => setAddressStreet(e.target.value)} />
         </Field>

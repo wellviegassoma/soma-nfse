@@ -4,10 +4,12 @@ import { requireComercialAccess, temPermissao } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
 import { EditarProspectForm } from "./EditarProspectForm";
 import { ChecklistSection } from "./ChecklistSection";
 import { AnexoSection } from "./AnexoSection";
 import { AtividadeSection } from "./AtividadeSection";
+import { ArquivarExcluirProspect } from "./ArquivarExcluirProspect";
 import { MoverEtapaMenu } from "../MoverEtapaMenu";
 
 export const metadata = { title: "Prospect — Comercial" };
@@ -25,7 +27,7 @@ export default async function ProspectDetailPage(
       supabase
         .from("comercial_prospects")
         .select(
-          "id, nome, tipo_onboarding, pessoa_tipo, especialidade, regime_tributario, faturamento_medio_estimado, cnpj, cpf, honorario_soma, descricao, etapa_id, company_id, etapa:comercial_etapas(id, nome, cor, tipo)",
+          "id, nome, tipo_onboarding, pessoa_tipo, especialidade, cidade, origem_lead, indicado_por, regime_tributario, faturamento_medio_estimado, cnpj, cpf, honorario_soma, descricao, etapa_id, company_id, arquivado_em, etapa:comercial_etapas(id, nome, cor, tipo)",
         )
         .eq("id", prospectId)
         .maybeSingle(),
@@ -58,9 +60,13 @@ export default async function ProspectDetailPage(
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      {prospect.arquivado_em && (
+        <Alert tone="warning">Este prospect está arquivado — não aparece no quadro.</Alert>
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-xl font-semibold text-foreground">{prospect.nome}</h1>
             {etapa && (
               <span
@@ -80,7 +86,7 @@ export default async function ProspectDetailPage(
             </Link>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {podeEditar && etapa && (
             <MoverEtapaMenu prospectId={prospect.id} etapaAtualId={etapa.id} etapas={etapas ?? []} />
           )}
@@ -96,7 +102,7 @@ export default async function ProspectDetailPage(
           <EditarProspectForm prospect={prospect} podeEditar={podeEditar} />
         </Card>
 
-        <Card className="p-6">
+        <Card className="self-start p-6">
           <h2 className="mb-4 text-sm font-semibold text-foreground/70">Anexos</h2>
           <AnexoSection prospectId={prospect.id} anexos={anexos ?? []} podeEditar={podeEditar} />
         </Card>
@@ -124,11 +130,16 @@ export default async function ProspectDetailPage(
         />
       </Card>
 
-      {etapa?.tipo !== "TERMINAL_GANHO" && !prospect.company_id && podeEditar && (
-        <div>
-          <Link href={`/admin/comercial/${prospect.id}/confirmar-cliente`}>
-            <Button variant="secondary">✓ Virar Cliente Ativo…</Button>
-          </Link>
+      {podeEditar && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          {etapa?.tipo !== "TERMINAL_GANHO" && !prospect.company_id ? (
+            <Link href={`/admin/comercial/${prospect.id}/confirmar-cliente`}>
+              <Button variant="secondary">✓ Virar Cliente Ativo…</Button>
+            </Link>
+          ) : (
+            <span />
+          )}
+          <ArquivarExcluirProspect prospectId={prospect.id} arquivado={Boolean(prospect.arquivado_em)} />
         </div>
       )}
     </div>
