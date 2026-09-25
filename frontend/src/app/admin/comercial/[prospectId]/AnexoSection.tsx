@@ -56,7 +56,7 @@ export function AnexoSection({
         <ul className="flex flex-col gap-1.5">
           {anexos.map((anexo) => (
             <li key={anexo.id} className="flex items-center justify-between gap-2 text-sm">
-              <a href={anexo.blob_url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
+              <a href={`/api/comercial/anexos/${anexo.id}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
                 {anexo.nome_arquivo}
               </a>
               {podeEditar && (
