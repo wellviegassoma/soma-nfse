@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { editarProspect, buscarCnpjParaProspect } from "@/lib/actions/comercial";
 import { formatarBlocoCnpj, inserirBlocoCnpj } from "@/lib/comercial/formatar-dados-cnpj";
+import { DadosAberturaSection } from "../DadosAberturaSection";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -24,6 +25,13 @@ type Prospect = {
   cpf: string | null;
   honorario_soma: number | null;
   descricao: string | null;
+  abertura_cartorio_jucerja: string | null;
+  abertura_capital_social: number | null;
+  abertura_divisao_capital: string | null;
+  abertura_administrador: string | null;
+  abertura_cota_tipo: string | null;
+  abertura_cnaes: string | null;
+  abertura_opcoes_nome: string | null;
 };
 
 export function EditarProspectForm({ prospect, podeEditar }: { prospect: Prospect; podeEditar: boolean }) {
@@ -34,6 +42,7 @@ export function EditarProspectForm({ prospect, podeEditar }: { prospect: Prospec
   const [regimeTributario, setRegimeTributario] = useState(prospect.regime_tributario ?? "");
   const [descricao, setDescricao] = useState(prospect.descricao ?? "");
   const [origemLead, setOrigemLead] = useState(prospect.origem_lead ?? "");
+  const [tipoOnboarding, setTipoOnboarding] = useState(prospect.tipo_onboarding ?? "");
 
   const [buscando, setBuscando] = useState(false);
   const [buscaErro, setBuscaErro] = useState<string | null>(null);
@@ -79,7 +88,12 @@ export function EditarProspectForm({ prospect, podeEditar }: { prospect: Prospec
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Tipo do caso" htmlFor="tipoOnboarding">
-            <Select id="tipoOnboarding" name="tipoOnboarding" defaultValue={prospect.tipo_onboarding ?? ""}>
+            <Select
+              id="tipoOnboarding"
+              name="tipoOnboarding"
+              value={tipoOnboarding}
+              onChange={(e) => setTipoOnboarding(e.target.value)}
+            >
               <option value="">Não definido</option>
               <option value="TRANSICAO_CONTABIL">Transição contábil (já tem CNPJ)</option>
               <option value="ABERTURA_NOVO_CNPJ">Abertura de CNPJ novo</option>
@@ -185,6 +199,20 @@ export function EditarProspectForm({ prospect, podeEditar }: { prospect: Prospec
             className="w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-[15px] text-foreground outline-none transition-shadow focus:border-brand focus:ring-4 focus:ring-brand/15"
           />
         </Field>
+
+        {tipoOnboarding === "ABERTURA_NOVO_CNPJ" && (
+          <DadosAberturaSection
+            defaults={{
+              cartorioJucerja: prospect.abertura_cartorio_jucerja,
+              capitalSocial: prospect.abertura_capital_social,
+              divisaoCapital: prospect.abertura_divisao_capital,
+              administrador: prospect.abertura_administrador,
+              cotaTipo: prospect.abertura_cota_tipo,
+              cnaes: prospect.abertura_cnaes,
+              opcoesNome: prospect.abertura_opcoes_nome,
+            }}
+          />
+        )}
 
         {podeEditar && (
           <div>

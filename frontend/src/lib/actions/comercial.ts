@@ -55,6 +55,19 @@ const prospectSchema = z.object({
     .optional()
     .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
   descricao: z.string().trim().optional(),
+  // Dados pro contrato social — só fazem sentido quando tipoOnboarding =
+  // ABERTURA_NOVO_CNPJ (a empresa ainda não existe), mas ficam sempre
+  // opcionais no schema pra não travar o resto do formulário.
+  aberturaCartorioJucerja: z.string().trim().optional(),
+  aberturaCapitalSocial: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
+  aberturaDivisaoCapital: z.string().trim().optional(),
+  aberturaAdministrador: z.string().trim().optional(),
+  aberturaCotaTipo: z.enum(["PROPORCIONAL", "DESPROPORCIONAL"]).optional(),
+  aberturaCnaes: z.string().trim().optional(),
+  aberturaOpcoesNome: z.string().trim().optional(),
 });
 
 export async function criarProspect(
@@ -77,6 +90,13 @@ export async function criarProspect(
     cpf: formData.get("cpf") || undefined,
     honorarioSoma: formData.get("honorarioSoma") || undefined,
     descricao: formData.get("descricao") || undefined,
+    aberturaCartorioJucerja: formData.get("aberturaCartorioJucerja") || undefined,
+    aberturaCapitalSocial: formData.get("aberturaCapitalSocial") || undefined,
+    aberturaDivisaoCapital: formData.get("aberturaDivisaoCapital") || undefined,
+    aberturaAdministrador: formData.get("aberturaAdministrador") || undefined,
+    aberturaCotaTipo: formData.get("aberturaCotaTipo") || undefined,
+    aberturaCnaes: formData.get("aberturaCnaes") || undefined,
+    aberturaOpcoesNome: formData.get("aberturaOpcoesNome") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -112,6 +132,13 @@ export async function criarProspect(
       cpf: parsed.data.cpf || null,
       honorario_soma: parsed.data.honorarioSoma ?? null,
       descricao: parsed.data.descricao || null,
+      abertura_cartorio_jucerja: parsed.data.aberturaCartorioJucerja || null,
+      abertura_capital_social: parsed.data.aberturaCapitalSocial ?? null,
+      abertura_divisao_capital: parsed.data.aberturaDivisaoCapital || null,
+      abertura_administrador: parsed.data.aberturaAdministrador || null,
+      abertura_cota_tipo: parsed.data.aberturaCotaTipo || null,
+      abertura_cnaes: parsed.data.aberturaCnaes || null,
+      abertura_opcoes_nome: parsed.data.aberturaOpcoesNome || null,
       etapa_id: primeiraEtapa.id,
       responsavel_id: user.id,
     })
@@ -180,6 +207,13 @@ export async function editarProspect(
     cpf: formData.get("cpf") || undefined,
     honorarioSoma: formData.get("honorarioSoma") || undefined,
     descricao: formData.get("descricao") || undefined,
+    aberturaCartorioJucerja: formData.get("aberturaCartorioJucerja") || undefined,
+    aberturaCapitalSocial: formData.get("aberturaCapitalSocial") || undefined,
+    aberturaDivisaoCapital: formData.get("aberturaDivisaoCapital") || undefined,
+    aberturaAdministrador: formData.get("aberturaAdministrador") || undefined,
+    aberturaCotaTipo: formData.get("aberturaCotaTipo") || undefined,
+    aberturaCnaes: formData.get("aberturaCnaes") || undefined,
+    aberturaOpcoesNome: formData.get("aberturaOpcoesNome") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -203,6 +237,13 @@ export async function editarProspect(
       cpf: rest.cpf || null,
       honorario_soma: rest.honorarioSoma ?? null,
       descricao: rest.descricao || null,
+      abertura_cartorio_jucerja: rest.tipoOnboarding === "ABERTURA_NOVO_CNPJ" ? rest.aberturaCartorioJucerja || null : null,
+      abertura_capital_social: rest.tipoOnboarding === "ABERTURA_NOVO_CNPJ" ? rest.aberturaCapitalSocial ?? null : null,
+      abertura_divisao_capital: rest.tipoOnboarding === "ABERTURA_NOVO_CNPJ" ? rest.aberturaDivisaoCapital || null : null,
+      abertura_administrador: rest.tipoOnboarding === "ABERTURA_NOVO_CNPJ" ? rest.aberturaAdministrador || null : null,
+      abertura_cota_tipo: rest.tipoOnboarding === "ABERTURA_NOVO_CNPJ" ? rest.aberturaCotaTipo || null : null,
+      abertura_cnaes: rest.tipoOnboarding === "ABERTURA_NOVO_CNPJ" ? rest.aberturaCnaes || null : null,
+      abertura_opcoes_nome: rest.tipoOnboarding === "ABERTURA_NOVO_CNPJ" ? rest.aberturaOpcoesNome || null : null,
     })
     .eq("id", prospectId);
   if (error) return { error: "Não foi possível salvar." };

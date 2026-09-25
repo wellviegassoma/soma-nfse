@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { criarProspect, buscarCnpjParaProspect } from "@/lib/actions/comercial";
 import { formatarBlocoCnpj, inserirBlocoCnpj } from "@/lib/comercial/formatar-dados-cnpj";
+import { DadosAberturaSection } from "../DadosAberturaSection";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -13,6 +14,7 @@ import { Alert } from "@/components/ui/Alert";
 export function NovoProspectForm() {
   const [state, formAction, pending] = useActionState(criarProspect, undefined);
 
+  const [tipoOnboarding, setTipoOnboarding] = useState("");
   const [pessoaTipo, setPessoaTipo] = useState<"PF" | "PJ" | "">("");
   const [cnpj, setCnpj] = useState("");
   const [cpf, setCpf] = useState("");
@@ -66,7 +68,12 @@ export function NovoProspectForm() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Tipo do caso" htmlFor="tipoOnboarding">
-          <Select id="tipoOnboarding" name="tipoOnboarding" defaultValue="">
+          <Select
+            id="tipoOnboarding"
+            name="tipoOnboarding"
+            value={tipoOnboarding}
+            onChange={(e) => setTipoOnboarding(e.target.value)}
+          >
             <option value="">Não definido</option>
             <option value="TRANSICAO_CONTABIL">Transição contábil (já tem CNPJ)</option>
             <option value="ABERTURA_NOVO_CNPJ">Abertura de CNPJ novo</option>
@@ -169,6 +176,8 @@ export function NovoProspectForm() {
           className="w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-[15px] text-foreground outline-none transition-shadow focus:border-brand focus:ring-4 focus:ring-brand/15"
         />
       </Field>
+
+      {tipoOnboarding === "ABERTURA_NOVO_CNPJ" && <DadosAberturaSection />}
 
       <div className="mt-2 flex items-center gap-3">
         <Button type="submit" loading={pending}>

@@ -27,7 +27,7 @@ export default async function ProspectDetailPage(
       supabase
         .from("comercial_prospects")
         .select(
-          "id, nome, tipo_onboarding, pessoa_tipo, especialidade, cidade, origem_lead, indicado_por, regime_tributario, faturamento_medio_estimado, cnpj, cpf, honorario_soma, descricao, etapa_id, company_id, arquivado_em, etapa:comercial_etapas(id, nome, cor, tipo)",
+          "id, nome, tipo_onboarding, pessoa_tipo, especialidade, cidade, origem_lead, indicado_por, regime_tributario, faturamento_medio_estimado, cnpj, cpf, honorario_soma, descricao, abertura_cartorio_jucerja, abertura_capital_social, abertura_divisao_capital, abertura_administrador, abertura_cota_tipo, abertura_cnaes, abertura_opcoes_nome, etapa_id, company_id, arquivado_em, etapa:comercial_etapas(id, nome, cor, tipo)",
         )
         .eq("id", prospectId)
         .maybeSingle(),
