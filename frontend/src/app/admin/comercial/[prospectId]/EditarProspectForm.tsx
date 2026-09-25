@@ -3,7 +3,6 @@
 import { useActionState, useState } from "react";
 import { editarProspect, buscarCnpjParaProspect } from "@/lib/actions/comercial";
 import { formatarBlocoCnpj, inserirBlocoCnpj } from "@/lib/comercial/formatar-dados-cnpj";
-import { DadosAberturaSection } from "../DadosAberturaSection";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -34,7 +33,22 @@ type Prospect = {
   abertura_opcoes_nome: string | null;
 };
 
-export function EditarProspectForm({ prospect, podeEditar }: { prospect: Prospect; podeEditar: boolean }) {
+// Id fixo do <form> — a seção "Dados para o contrato social" vive fisicamente
+// no card de Anexos (pra melhor distribuir a tela), mas continua submetendo
+// junto com este form via atributo HTML `form` em cada campo.
+export const EDITAR_PROSPECT_FORM_ID = "editar-prospect-form";
+
+export function EditarProspectForm({
+  prospect,
+  podeEditar,
+  tipoOnboarding,
+  onTipoOnboardingChange,
+}: {
+  prospect: Prospect;
+  podeEditar: boolean;
+  tipoOnboarding: string;
+  onTipoOnboardingChange: (valor: string) => void;
+}) {
   const [state, formAction, pending] = useActionState(editarProspect, undefined);
 
   const [cnpj, setCnpj] = useState(prospect.cnpj ?? "");
@@ -42,7 +56,6 @@ export function EditarProspectForm({ prospect, podeEditar }: { prospect: Prospec
   const [regimeTributario, setRegimeTributario] = useState(prospect.regime_tributario ?? "");
   const [descricao, setDescricao] = useState(prospect.descricao ?? "");
   const [origemLead, setOrigemLead] = useState(prospect.origem_lead ?? "");
-  const [tipoOnboarding, setTipoOnboarding] = useState(prospect.tipo_onboarding ?? "");
 
   const [buscando, setBuscando] = useState(false);
   const [buscaErro, setBuscaErro] = useState<string | null>(null);
@@ -78,7 +91,7 @@ export function EditarProspectForm({ prospect, podeEditar }: { prospect: Prospec
 
   return (
     <fieldset disabled={!podeEditar} className="contents">
-      <form action={formAction} className="flex flex-col gap-4">
+      <form id={EDITAR_PROSPECT_FORM_ID} action={formAction} className="flex flex-col gap-4">
         <input type="hidden" name="prospectId" value={prospect.id} />
         {state?.error && <Alert tone="danger">{state.error}</Alert>}
 
@@ -92,7 +105,7 @@ export function EditarProspectForm({ prospect, podeEditar }: { prospect: Prospec
               id="tipoOnboarding"
               name="tipoOnboarding"
               value={tipoOnboarding}
-              onChange={(e) => setTipoOnboarding(e.target.value)}
+              onChange={(e) => onTipoOnboardingChange(e.target.value)}
             >
               <option value="">Não definido</option>
               <option value="TRANSICAO_CONTABIL">Transição contábil (já tem CNPJ)</option>
@@ -199,20 +212,6 @@ export function EditarProspectForm({ prospect, podeEditar }: { prospect: Prospec
             className="w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-[15px] text-foreground outline-none transition-shadow focus:border-brand focus:ring-4 focus:ring-brand/15"
           />
         </Field>
-
-        {tipoOnboarding === "ABERTURA_NOVO_CNPJ" && (
-          <DadosAberturaSection
-            defaults={{
-              cartorioJucerja: prospect.abertura_cartorio_jucerja,
-              capitalSocial: prospect.abertura_capital_social,
-              divisaoCapital: prospect.abertura_divisao_capital,
-              administrador: prospect.abertura_administrador,
-              cotaTipo: prospect.abertura_cota_tipo,
-              cnaes: prospect.abertura_cnaes,
-              opcoesNome: prospect.abertura_opcoes_nome,
-            }}
-          />
-        )}
 
         {podeEditar && (
           <div>

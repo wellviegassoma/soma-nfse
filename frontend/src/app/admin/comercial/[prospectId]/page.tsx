@@ -5,9 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
-import { EditarProspectForm } from "./EditarProspectForm";
+import { ProspectDadosAnexos } from "./ProspectDadosAnexos";
 import { ChecklistSection } from "./ChecklistSection";
-import { AnexoSection } from "./AnexoSection";
 import { AtividadeSection } from "./AtividadeSection";
 import { ArquivarExcluirProspect } from "./ArquivarExcluirProspect";
 import { MoverEtapaMenu } from "../MoverEtapaMenu";
@@ -96,17 +95,7 @@ export default async function ProspectDetailPage(
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="p-6">
-          <h2 className="mb-4 text-sm font-semibold text-foreground/70">Dados</h2>
-          <EditarProspectForm prospect={prospect} podeEditar={podeEditar} />
-        </Card>
-
-        <Card className="self-start p-6">
-          <h2 className="mb-4 text-sm font-semibold text-foreground/70">Anexos</h2>
-          <AnexoSection prospectId={prospect.id} anexos={anexos ?? []} podeEditar={podeEditar} />
-        </Card>
-      </div>
+      <ProspectDadosAnexos prospect={prospect} anexos={anexos ?? []} podeEditar={podeEditar} />
 
       <Card className="p-6">
         <h2 className="mb-4 text-sm font-semibold text-foreground/70">Checklist</h2>

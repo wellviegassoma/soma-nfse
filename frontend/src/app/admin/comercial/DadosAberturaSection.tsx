@@ -36,7 +36,21 @@ type Defaults = {
 // não existe, então esses dados (pro contrato social) e a lista de
 // documentos não têm outro lugar melhor pra viver enquanto o prospect não
 // vira cliente ativo de verdade.
-export function DadosAberturaSection({ defaults = {} }: { defaults?: Defaults }) {
+//
+// formId: quando esta seção é renderizada FORA do <form> (ex.: no card de
+// Anexos, pra melhor distribuir a tela), cada campo usa o atributo HTML
+// `form` pra continuar submetendo junto com o form de verdade em outro
+// lugar do DOM. Sem formId, os campos assumem que já estão dentro do form
+// (caso do formulário de "Novo prospect", que é uma coluna só).
+export function DadosAberturaSection({
+  defaults = {},
+  formId,
+  podeEditar = true,
+}: {
+  defaults?: Defaults;
+  formId?: string;
+  podeEditar?: boolean;
+}) {
   const [copiado, setCopiado] = useState(false);
 
   async function copiarTexto() {
@@ -51,17 +65,18 @@ export function DadosAberturaSection({ defaults = {} }: { defaults?: Defaults })
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface-muted/40 p-4">
+    <fieldset disabled={!podeEditar} className="flex flex-col gap-4 rounded-lg border border-border bg-surface-muted/40 p-4">
       <h3 className="text-sm font-semibold text-foreground/70">Dados para o contrato social</h3>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Cartório ou JUCERJA" htmlFor="aberturaCartorioJucerja" hint="Opcional">
-          <Input id="aberturaCartorioJucerja" name="aberturaCartorioJucerja" defaultValue={defaults.cartorioJucerja ?? ""} />
+          <Input id="aberturaCartorioJucerja" name="aberturaCartorioJucerja" form={formId} defaultValue={defaults.cartorioJucerja ?? ""} />
         </Field>
         <Field label="Capital social" htmlFor="aberturaCapitalSocial" hint="Opcional">
           <Input
             id="aberturaCapitalSocial"
             name="aberturaCapitalSocial"
+            form={formId}
             inputMode="decimal"
             placeholder="0,00"
             defaultValue={defaults.capitalSocial ?? ""}
@@ -71,10 +86,10 @@ export function DadosAberturaSection({ defaults = {} }: { defaults?: Defaults })
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Divisão do capital" htmlFor="aberturaDivisaoCapital" hint="Opcional — ex.: 50% / 50%">
-          <Input id="aberturaDivisaoCapital" name="aberturaDivisaoCapital" defaultValue={defaults.divisaoCapital ?? ""} />
+          <Input id="aberturaDivisaoCapital" name="aberturaDivisaoCapital" form={formId} defaultValue={defaults.divisaoCapital ?? ""} />
         </Field>
         <Field label="Cota" htmlFor="aberturaCotaTipo" hint="Opcional">
-          <Select id="aberturaCotaTipo" name="aberturaCotaTipo" defaultValue={defaults.cotaTipo ?? ""}>
+          <Select id="aberturaCotaTipo" name="aberturaCotaTipo" form={formId} defaultValue={defaults.cotaTipo ?? ""}>
             <option value="">Não definido</option>
             <option value="PROPORCIONAL">Proporcional</option>
             <option value="DESPROPORCIONAL">Desproporcional</option>
@@ -83,17 +98,18 @@ export function DadosAberturaSection({ defaults = {} }: { defaults?: Defaults })
       </div>
 
       <Field label="Administrador" htmlFor="aberturaAdministrador" hint="Opcional — quem vai administrar a empresa">
-        <Input id="aberturaAdministrador" name="aberturaAdministrador" defaultValue={defaults.administrador ?? ""} />
+        <Input id="aberturaAdministrador" name="aberturaAdministrador" form={formId} defaultValue={defaults.administrador ?? ""} />
       </Field>
 
       <Field label="CNAEs" htmlFor="aberturaCnaes" hint="Opcional — quais atividades a empresa vai exercer">
-        <Input id="aberturaCnaes" name="aberturaCnaes" defaultValue={defaults.cnaes ?? ""} />
+        <Input id="aberturaCnaes" name="aberturaCnaes" form={formId} defaultValue={defaults.cnaes ?? ""} />
       </Field>
 
       <Field label="Opções de nome da empresa" htmlFor="aberturaOpcoesNome" hint="Opcional — pelo menos 3 opções, pra verificar disponibilidade">
         <textarea
           id="aberturaOpcoesNome"
           name="aberturaOpcoesNome"
+          form={formId}
           rows={3}
           defaultValue={defaults.opcoesNome ?? ""}
           className="w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-[15px] text-foreground outline-none transition-shadow focus:border-brand focus:ring-4 focus:ring-brand/15"
@@ -109,6 +125,6 @@ export function DadosAberturaSection({ defaults = {} }: { defaults?: Defaults })
         </div>
         <pre className="whitespace-pre-wrap font-sans text-xs text-foreground/70">{TEXTO_DOCUMENTOS_ABERTURA}</pre>
       </div>
-    </div>
+    </fieldset>
   );
 }
