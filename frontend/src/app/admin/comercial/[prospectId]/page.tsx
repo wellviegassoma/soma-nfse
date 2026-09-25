@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireComercialAccess, temPermissao } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { buscarStatusProcessoLegalizacao } from "@/lib/actions/comercial";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
@@ -19,6 +20,7 @@ export default async function ProspectDetailPage(
   const { prospectId } = await props.params;
   await requireComercialAccess();
   const podeEditar = await temPermissao("comercial.editar");
+  const podeVerLegalizacao = await temPermissao("legalizacao.ver");
 
   const supabase = await createClient();
   const [{ data: prospect }, { data: etapas }, { data: checklist }, { data: anexos }, { data: atividades }] =
@@ -26,7 +28,7 @@ export default async function ProspectDetailPage(
       supabase
         .from("comercial_prospects")
         .select(
-          "id, nome, tipo_onboarding, pessoa_tipo, especialidade, cidade, origem_lead, indicado_por, regime_tributario, faturamento_medio_estimado, cnpj, cpf, honorario_soma, descricao, abertura_cartorio_jucerja, abertura_capital_social, abertura_divisao_capital, abertura_administrador, abertura_cota_tipo, abertura_cnaes, abertura_opcoes_nome, etapa_id, company_id, arquivado_em, etapa:comercial_etapas(id, nome, cor, tipo)",
+          "id, nome, tipo_onboarding, pessoa_tipo, especialidade, cidade, origem_lead, indicado_por, regime_tributario, faturamento_medio_estimado, cnpj, cpf, honorario_soma, descricao, abertura_cartorio_jucerja, abertura_capital_social, abertura_divisao_capital, abertura_administrador, abertura_cota_tipo, abertura_cnaes, abertura_opcoes_nome, legalizacao_processo_id, etapa_id, company_id, arquivado_em, etapa:comercial_etapas(id, nome, cor, tipo)",
         )
         .eq("id", prospectId)
         .maybeSingle(),
@@ -56,6 +58,9 @@ export default async function ProspectDetailPage(
 
   if (!prospect) notFound();
   const etapa = prospect.etapa as unknown as { id: string; nome: string; cor: string; tipo: string } | null;
+  const statusProcesso = prospect.legalizacao_processo_id
+    ? await buscarStatusProcessoLegalizacao(prospect.id)
+    : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -95,7 +100,13 @@ export default async function ProspectDetailPage(
         </div>
       </div>
 
-      <ProspectDadosAnexos prospect={prospect} anexos={anexos ?? []} podeEditar={podeEditar} />
+      <ProspectDadosAnexos
+        prospect={prospect}
+        anexos={anexos ?? []}
+        podeEditar={podeEditar}
+        statusProcesso={statusProcesso}
+        podeVerLegalizacao={podeVerLegalizacao}
+      />
 
       <Card className="p-6">
         <h2 className="mb-4 text-sm font-semibold text-foreground/70">Checklist</h2>

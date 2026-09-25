@@ -4,23 +4,29 @@ import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { EditarProspectForm, EDITAR_PROSPECT_FORM_ID } from "./EditarProspectForm";
 import { AnexoSection } from "./AnexoSection";
+import { ProcessoLegalizacaoCard } from "./ProcessoLegalizacaoCard";
 import { DadosAberturaSection } from "../DadosAberturaSection";
+import type { StatusProcessoLegalizacao } from "@/lib/actions/comercial";
 
 type Prospect = Parameters<typeof EditarProspectForm>[0]["prospect"];
 type Anexo = { id: string; blob_url: string; nome_arquivo: string; created_at: string };
 
 // tipoOnboarding fica aqui (não dentro de EditarProspectForm) porque decide
-// se o card "Dados para o contrato social" aparece no card de Anexos, ao
-// lado — os dois cards precisam reagir à mesma escolha em tempo real, antes
+// se os cards "Processo de Legalização" e "Dados para o contrato social"
+// aparecem ao lado — precisam reagir à mesma escolha em tempo real, antes
 // mesmo de salvar.
 export function ProspectDadosAnexos({
   prospect,
   anexos,
   podeEditar,
+  statusProcesso,
+  podeVerLegalizacao,
 }: {
   prospect: Prospect;
   anexos: Anexo[];
   podeEditar: boolean;
+  statusProcesso: StatusProcessoLegalizacao | null;
+  podeVerLegalizacao: boolean;
 }) {
   const [tipoOnboarding, setTipoOnboarding] = useState(prospect.tipo_onboarding ?? "");
 
@@ -41,6 +47,17 @@ export function ProspectDadosAnexos({
           <h2 className="mb-4 text-sm font-semibold text-foreground/70">Anexos</h2>
           <AnexoSection prospectId={prospect.id} anexos={anexos} podeEditar={podeEditar} />
         </Card>
+
+        {(tipoOnboarding === "ABERTURA_NOVO_CNPJ" || statusProcesso) && (
+          <Card className="p-6">
+            <ProcessoLegalizacaoCard
+              prospectId={prospect.id}
+              status={statusProcesso}
+              podeEditar={podeEditar}
+              podeVerLegalizacao={podeVerLegalizacao}
+            />
+          </Card>
+        )}
 
         {tipoOnboarding === "ABERTURA_NOVO_CNPJ" && (
           <Card className="p-6">

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { del } from "@vercel/blob";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao, requireUser, isSomaStaff, temPermissao } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
@@ -55,50 +56,53 @@ const criarProcessoSchema = z.object({
   alteracaoItens: z.array(z.enum(ALTERACAO_ITENS_VALIDOS)).optional(),
 });
 
-export async function criarProcesso(
-  _prevState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  await requirePermissao("legalizacao.editar");
+export type CriarProcessoInput = {
+  tipoProcesso: "ABERTURA" | "ALTERACAO" | "ENCERRAMENTO";
+  fluxoId: string;
+  nome?: string;
+  companyId?: string;
+  cnpj?: string;
+  dataInicio: string;
+  prazoFinal?: string;
+  responsavelId?: string;
+  detalhes?: string;
+  contatoNome?: string;
+  contatoEmail?: string;
+  contatoWhatsapp?: string;
+  alteracaoItens?: string[];
+};
 
-  const parsed = criarProcessoSchema.safeParse({
-    tipoProcesso: formData.get("tipoProcesso"),
-    fluxoId: formData.get("fluxoId"),
-    nome: formData.get("nome") || undefined,
-    companyId: formData.get("companyId") || undefined,
-    cnpj: formData.get("cnpj") || undefined,
-    dataInicio: formData.get("dataInicio"),
-    prazoFinal: formData.get("prazoFinal") || undefined,
-    responsavelId: formData.get("responsavelId") || undefined,
-    detalhes: formData.get("detalhes") || undefined,
-    contatoNome: formData.get("contatoNome") || undefined,
-    contatoEmail: formData.get("contatoEmail") || undefined,
-    contatoWhatsapp: formData.get("contatoWhatsapp") || undefined,
-    alteracaoItens: formData.getAll("alteracaoItens"),
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
-  }
-  const data = parsed.data;
-
-  if (data.tipoProcesso !== "ABERTURA" && !data.companyId) {
+// Miolo de criação de processo (registro + snapshot de fases), sem
+// FormData/redirect — reaproveitado tanto pelo form de "Novo processo" do
+// próprio módulo Legalização quanto por outros módulos que precisam abrir um
+// processo por código (ex.: Comercial, ao iniciar a abertura de um
+// prospect). Aceita um client opcional porque quem chama de fora do módulo
+// (ex.: comercial.editar) não necessariamente tem legalizacao.editar — a
+// RLS de legalizacao_processos/legalizacao_fluxos bloquearia o client
+// normal, então nesse caso o chamador passa um client admin (service role)
+// já tendo verificado a própria permissão (comercial.editar) antes.
+export async function criarProcessoLegalizacaoCore(
+  input: CriarProcessoInput,
+  criadoPor: string,
+  supabaseClient?: SupabaseClient,
+): Promise<{ processoId: string } | { error: string }> {
+  if (input.tipoProcesso !== "ABERTURA" && !input.companyId) {
     return { error: "Selecione uma empresa existente." };
   }
-  if (data.tipoProcesso === "ABERTURA" && (!data.nome || data.nome.length < 2)) {
+  if (input.tipoProcesso === "ABERTURA" && (!input.nome || input.nome.length < 2)) {
     return { error: "Informe o nome do negócio." };
   }
 
-  const user = await requireUser();
-  const supabase = await createClient();
+  const supabase = supabaseClient ?? (await createClient());
 
   // Alteração/Encerramento nascem numa empresa já existente — o nome do
   // processo é o da própria empresa, não precisa ser digitado de novo.
-  let nomeProcesso = data.nome ?? "";
-  if (data.tipoProcesso !== "ABERTURA" && data.companyId) {
+  let nomeProcesso = input.nome ?? "";
+  if (input.tipoProcesso !== "ABERTURA" && input.companyId) {
     const { data: empresa } = await supabase
       .from("companies")
       .select("legal_name, trade_name")
-      .eq("id", data.companyId)
+      .eq("id", input.companyId)
       .single();
     if (!empresa) return { error: "Empresa não encontrada." };
     nomeProcesso = empresa.trade_name || empresa.legal_name;
@@ -107,10 +111,10 @@ export async function criarProcesso(
   const { data: fluxo } = await supabase
     .from("legalizacao_fluxos")
     .select("id, nome, tipo_processo")
-    .eq("id", data.fluxoId)
+    .eq("id", input.fluxoId)
     .single();
   if (!fluxo) return { error: "Fluxo não encontrado." };
-  if (fluxo.tipo_processo !== data.tipoProcesso) {
+  if (fluxo.tipo_processo !== input.tipoProcesso) {
     return { error: "Esse fluxo não corresponde ao tipo de processo selecionado." };
   }
 
@@ -127,21 +131,21 @@ export async function criarProcesso(
   const { data: processo, error } = await supabase
     .from("legalizacao_processos")
     .insert({
-      tipo_processo: data.tipoProcesso,
+      tipo_processo: input.tipoProcesso,
       fluxo_id: fluxo.id,
       fluxo_nome: fluxo.nome,
       nome: nomeProcesso,
-      company_id: data.companyId || null,
-      cnpj: data.tipoProcesso === "ABERTURA" ? data.cnpj || null : null,
-      data_inicio: data.dataInicio,
-      prazo_final: data.prazoFinal || null,
-      responsavel_id: data.responsavelId || null,
-      detalhes: data.detalhes || null,
-      contato_nome: data.contatoNome || null,
-      contato_email: data.contatoEmail || null,
-      contato_whatsapp: data.contatoWhatsapp || null,
-      alteracao_itens: data.tipoProcesso === "ALTERACAO" ? data.alteracaoItens ?? [] : [],
-      criado_por: user.id,
+      company_id: input.companyId || null,
+      cnpj: input.tipoProcesso === "ABERTURA" ? input.cnpj || null : null,
+      data_inicio: input.dataInicio,
+      prazo_final: input.prazoFinal || null,
+      responsavel_id: input.responsavelId || null,
+      detalhes: input.detalhes || null,
+      contato_nome: input.contatoNome || null,
+      contato_email: input.contatoEmail || null,
+      contato_whatsapp: input.contatoWhatsapp || null,
+      alteracao_itens: input.tipoProcesso === "ALTERACAO" ? input.alteracaoItens ?? [] : [],
+      criado_por: criadoPor,
     })
     .select("id")
     .single();
@@ -167,13 +171,45 @@ export async function criarProcesso(
   await supabase.from("legalizacao_processo_atividade").insert({
     processo_id: processo.id,
     tipo: "SISTEMA",
-    autor_id: user.id,
+    autor_id: criadoPor,
     corpo: `Processo criado — fluxo "${fluxo.nome}".`,
   });
 
   revalidatePath("/legalizacao/processos");
-  if (data.companyId) revalidatePath(`/legalizacao/empresas/${data.companyId}`);
-  redirect(`/legalizacao/processos/${processo.id}`);
+  if (input.companyId) revalidatePath(`/legalizacao/empresas/${input.companyId}`);
+  return { processoId: processo.id };
+}
+
+export async function criarProcesso(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermissao("legalizacao.editar");
+
+  const parsed = criarProcessoSchema.safeParse({
+    tipoProcesso: formData.get("tipoProcesso"),
+    fluxoId: formData.get("fluxoId"),
+    nome: formData.get("nome") || undefined,
+    companyId: formData.get("companyId") || undefined,
+    cnpj: formData.get("cnpj") || undefined,
+    dataInicio: formData.get("dataInicio"),
+    prazoFinal: formData.get("prazoFinal") || undefined,
+    responsavelId: formData.get("responsavelId") || undefined,
+    detalhes: formData.get("detalhes") || undefined,
+    contatoNome: formData.get("contatoNome") || undefined,
+    contatoEmail: formData.get("contatoEmail") || undefined,
+    contatoWhatsapp: formData.get("contatoWhatsapp") || undefined,
+    alteracaoItens: formData.getAll("alteracaoItens"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const user = await requireUser();
+  const resultado = await criarProcessoLegalizacaoCore(parsed.data, user.id);
+  if ("error" in resultado) return { error: resultado.error };
+
+  redirect(`/legalizacao/processos/${resultado.processoId}`);
 }
 
 const editarProcessoSchema = z.object({

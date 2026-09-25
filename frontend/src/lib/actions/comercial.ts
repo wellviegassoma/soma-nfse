@@ -5,12 +5,14 @@ import { revalidatePath } from "next/cache";
 import { del } from "@vercel/blob";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requirePermissao, requireSuperAdmin, requireUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import { buscarDadosCnpj, type DadosCnpj } from "@/lib/cnpj-lookup";
 import { isCpfValido } from "@/lib/formatters";
 import { criarEmpresaComOrganizacao } from "@/lib/actions/empresas";
+import { criarProcessoLegalizacaoCore } from "@/lib/actions/legalizacao-processos";
 import type { ActionState } from "@/lib/actions/auth";
 
 // Mesma buscarDadosCnpj de lib/cnpj-lookup.ts usada em createCompany — só
@@ -597,6 +599,113 @@ export async function confirmarClienteAtivo(
   revalidatePath(`/admin/comercial/${prospectId}`);
   revalidatePath("/admin/empresas");
   redirect(`/admin/empresas/${companyId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Vínculo com o processo de Abertura no módulo Legalização — deixa o time
+// Comercial acompanhar o andamento sem sair do card do prospect. Gated só
+// por comercial.editar (sem exigir legalizacao.editar) porque quem mexe
+// nisso é o próprio Comercial que está iniciando a legalização, mesmo
+// precedente de confirmarClienteAtivo criar a empresa sem checar
+// empresas.editar — todo /admin/** já exige empresas.ver de qualquer forma.
+export async function iniciarProcessoLegalizacaoDoProspect(
+  prospectId: string,
+  prazoFinal?: string,
+): Promise<{ error: string } | undefined> {
+  await requirePermissao("comercial.editar");
+  const user = await requireUser();
+  const supabase = await createClient();
+
+  const { data: prospect } = await supabase
+    .from("comercial_prospects")
+    .select("id, nome, cnpj, legalizacao_processo_id")
+    .eq("id", prospectId)
+    .single();
+  if (!prospect) return { error: "Prospect não encontrado." };
+  if (prospect.legalizacao_processo_id) return { error: "Esse prospect já tem um processo vinculado." };
+
+  // legalizacao_fluxos/legalizacao_processos exigem legalizacao.ver/editar
+  // na RLS — um Comercial-only (só comercial.editar) não tem isso, então
+  // essa parte específica roda com o client admin. A permissão de verdade já
+  // foi checada acima (requirePermissao("comercial.editar")).
+  const admin = createAdminClient();
+  const { data: fluxo } = await admin
+    .from("legalizacao_fluxos")
+    .select("id")
+    .eq("chave", "ABERTURA_EMPRESA")
+    .single();
+  if (!fluxo) return { error: "Fluxo de Abertura de Empresa não encontrado em Legalização." };
+
+  const resultado = await criarProcessoLegalizacaoCore(
+    {
+      tipoProcesso: "ABERTURA",
+      fluxoId: fluxo.id,
+      nome: prospect.nome,
+      cnpj: prospect.cnpj ?? undefined,
+      dataInicio: new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }),
+      prazoFinal: prazoFinal || undefined,
+    },
+    user.id,
+    admin,
+  );
+  if ("error" in resultado) return { error: resultado.error };
+
+  const { error } = await supabase
+    .from("comercial_prospects")
+    .update({ legalizacao_processo_id: resultado.processoId })
+    .eq("id", prospectId);
+  if (error) return { error: "Processo criado, mas não foi possível vincular ao prospect." };
+
+  await supabase.from("comercial_prospect_atividade").insert({
+    prospect_id: prospectId,
+    tipo: "SISTEMA",
+    autor_id: user.id,
+    corpo: "Processo de abertura iniciado no módulo Legalização.",
+  });
+
+  revalidatePath(`/admin/comercial/${prospectId}`);
+  return undefined;
+}
+
+export async function desvincularProcessoLegalizacaoDoProspect(prospectId: string) {
+  await requirePermissao("comercial.editar");
+  const user = await requireUser();
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("comercial_prospects")
+    .update({ legalizacao_processo_id: null })
+    .eq("id", prospectId);
+  if (error) throw new Error("Não foi possível desvincular o processo.");
+
+  await supabase.from("comercial_prospect_atividade").insert({
+    prospect_id: prospectId,
+    tipo: "SISTEMA",
+    autor_id: user.id,
+    corpo: "Desvinculou o processo de Legalização (o processo em si não foi apagado).",
+  });
+
+  revalidatePath(`/admin/comercial/${prospectId}`);
+}
+
+export type StatusProcessoLegalizacao = {
+  processo_id: string;
+  nome: string;
+  prazo_final: string | null;
+  data_conclusao: string | null;
+  arquivado_em: string | null;
+  fases: { data_conclusao: string | null; status_manual: string | null; prazo: string | null }[];
+};
+
+// RPC security definer — funciona pra quem só tem comercial.ver, mesmo sem
+// legalizacao.ver (ver migration 20260925250000).
+export async function buscarStatusProcessoLegalizacao(
+  prospectId: string,
+): Promise<StatusProcessoLegalizacao | null> {
+  await requirePermissao("comercial.ver");
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("comercial_status_processo_legalizacao", { p_prospect_id: prospectId });
+  return data?.[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------
