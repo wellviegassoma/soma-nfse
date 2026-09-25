@@ -13,7 +13,7 @@ export default async function ComercialBoardPage() {
   const podeConfigurarFunil = await temPermissao("configuracoes.editar");
 
   const supabase = await createClient();
-  const [{ data: etapas }, { data: prospects }] = await Promise.all([
+  const [{ data: etapas }, { data: prospects }, { count: arquivadosCount }] = await Promise.all([
     supabase
       .from("comercial_etapas")
       .select("id, nome, cor, tipo, ativo")
@@ -24,6 +24,10 @@ export default async function ComercialBoardPage() {
       .select("id, nome, especialidade, cidade, honorario_soma, etapa_id, responsavel:profiles(full_name)")
       .is("arquivado_em", null)
       .order("updated_at", { ascending: false }),
+    supabase
+      .from("comercial_prospects")
+      .select("id", { count: "exact", head: true })
+      .not("arquivado_em", "is", null),
   ]);
 
   const etapasAtivas = etapas ?? [];
@@ -48,6 +52,11 @@ export default async function ComercialBoardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {Boolean(arquivadosCount) && (
+            <Link href="/admin/comercial/arquivados" className="text-sm font-medium text-foreground/60 hover:underline">
+              Arquivados ({arquivadosCount})
+            </Link>
+          )}
           {podeConfigurarFunil && (
             <Link href="/admin/comercial/etapas" className="text-sm font-medium text-foreground/60 hover:underline">
               Configurar etapas

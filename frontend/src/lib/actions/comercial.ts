@@ -397,6 +397,7 @@ export async function arquivarProspect(prospectId: string) {
     .eq("id", prospectId);
   if (error) throw new Error("Não foi possível arquivar o prospect.");
   revalidatePath("/admin/comercial");
+  revalidatePath("/admin/comercial/arquivados");
   revalidatePath(`/admin/comercial/${prospectId}`);
 }
 
@@ -409,6 +410,7 @@ export async function desarquivarProspect(prospectId: string) {
     .eq("id", prospectId);
   if (error) throw new Error("Não foi possível desarquivar o prospect.");
   revalidatePath("/admin/comercial");
+  revalidatePath("/admin/comercial/arquivados");
   revalidatePath(`/admin/comercial/${prospectId}`);
 }
 
@@ -418,6 +420,7 @@ export async function excluirProspectPermanente(prospectId: string) {
   const { error } = await supabase.from("comercial_prospects").delete().eq("id", prospectId);
   if (error) throw new Error("Não foi possível excluir o prospect.");
   revalidatePath("/admin/comercial");
+  revalidatePath("/admin/comercial/arquivados");
   redirect("/admin/comercial");
 }
 
