@@ -11,10 +11,12 @@ export function CompanyNameForm({
   companyId,
   legalName,
   tradeName,
+  codigoCliente,
 }: {
   companyId: string;
   legalName: string;
   tradeName: string | null;
+  codigoCliente: string | null;
 }) {
   const [state, formAction, pending] = useActionState(updateCompanyIdentity, undefined);
 
@@ -33,6 +35,9 @@ export function CompanyNameForm({
         </Field>
         <Field label="Nome fantasia" htmlFor="tradeName" hint="Opcional">
           <Input id="tradeName" name="tradeName" defaultValue={tradeName ?? ""} />
+        </Field>
+        <Field label="Código do cliente" htmlFor="codigoCliente" hint="Número da pasta de documentos, ex.: 007">
+          <Input id="codigoCliente" name="codigoCliente" defaultValue={codigoCliente ?? ""} />
         </Field>
       </div>
 

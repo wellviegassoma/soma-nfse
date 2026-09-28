@@ -20,6 +20,7 @@ export function NewCompanyForm() {
   const [organizationName, setOrganizationName] = useState("");
   const [legalName, setLegalName] = useState("");
   const [tradeName, setTradeName] = useState("");
+  const [codigoCliente, setCodigoCliente] = useState("");
   const [cnae, setCnae] = useState("");
   const [municipalityIbgeCode, setMunicipalityIbgeCode] = useState("");
   const [municipalityName, setMunicipalityName] = useState("");
@@ -160,6 +161,15 @@ export function NewCompanyForm() {
             name="tradeName"
             value={tradeName}
             onChange={(e) => setTradeName(e.target.value)}
+          />
+        </Field>
+
+        <Field label="Código do cliente" htmlFor="codigoCliente" hint="Número da pasta de documentos, ex.: 007. Opcional">
+          <Input
+            id="codigoCliente"
+            name="codigoCliente"
+            value={codigoCliente}
+            onChange={(e) => setCodigoCliente(e.target.value)}
           />
         </Field>
 

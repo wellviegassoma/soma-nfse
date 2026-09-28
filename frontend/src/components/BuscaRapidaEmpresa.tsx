@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/Input";
 
-type Empresa = { id: string; legal_name: string; trade_name: string | null };
+type Empresa = { id: string; legal_name: string; trade_name: string | null; codigo_cliente?: string | null };
 
 function normalizar(texto: string): string {
   return texto
@@ -28,7 +28,9 @@ export function BuscaRapidaEmpresa({
     const alvo = normalizar(termo.trim());
     if (!alvo) return [];
     return empresas
-      .filter((e) => normalizar(`${e.trade_name ?? ""} ${e.legal_name}`).includes(alvo))
+      .filter((e) =>
+        normalizar(`${e.trade_name ?? ""} ${e.legal_name} ${e.codigo_cliente ?? ""}`).includes(alvo),
+      )
       .slice(0, 8);
   }, [empresas, termo]);
 
@@ -54,6 +56,9 @@ export function BuscaRapidaEmpresa({
                 onClick={() => setTermo("")}
               >
                 <span className="text-sm font-medium text-foreground">
+                  {empresa.codigo_cliente && (
+                    <span className="mr-1.5 text-foreground/40">#{empresa.codigo_cliente}</span>
+                  )}
                   {empresa.trade_name || empresa.legal_name}
                 </span>
                 <span className="text-xs text-foreground/50">{empresa.legal_name}</span>

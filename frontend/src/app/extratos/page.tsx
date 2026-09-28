@@ -12,6 +12,7 @@ type EmpresaComContas = {
   id: string;
   legal_name: string;
   trade_name: string | null;
+  codigo_cliente: string | null;
   extrato_contas_bancarias: { id: string; ativo: boolean }[] | null;
 };
 
@@ -23,7 +24,7 @@ export default async function ExtratosPage(props: PageProps<"/extratos">) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name, extrato_contas_bancarias(id, ativo)")
+    .select("id, legal_name, trade_name, codigo_cliente, extrato_contas_bancarias(id, ativo)")
     .order("legal_name", { ascending: true });
 
   const empresas = (data ?? []) as unknown as EmpresaComContas[];
@@ -73,7 +74,7 @@ export default async function ExtratosPage(props: PageProps<"/extratos">) {
       </div>
 
       <BuscaRapidaEmpresa
-        empresas={empresas.map((e) => ({ id: e.id, legal_name: e.legal_name, trade_name: e.trade_name }))}
+        empresas={empresas.map((e) => ({ id: e.id, legal_name: e.legal_name, trade_name: e.trade_name, codigo_cliente: e.codigo_cliente }))}
         basePath="/extratos/empresas"
         placeholder="Buscar empresa e acessar os extratos..."
       />

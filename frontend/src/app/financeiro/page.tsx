@@ -10,6 +10,7 @@ type EmpresaLinha = {
   id: string;
   legal_name: string;
   trade_name: string | null;
+  codigo_cliente: string | null;
   extrato_contas_bancarias: { id: string; ativo: boolean }[] | null;
   fin_categorias: { id: string }[] | null;
 };
@@ -23,7 +24,7 @@ export default async function FinanceiroPage() {
   const { data } = await supabase
     .from("companies")
     .select(
-      "id, legal_name, trade_name, extrato_contas_bancarias(id, ativo), fin_categorias(id)",
+      "id, legal_name, trade_name, codigo_cliente, extrato_contas_bancarias(id, ativo), fin_categorias(id)",
     )
     .order("legal_name", { ascending: true });
 

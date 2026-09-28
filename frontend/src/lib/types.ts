@@ -63,6 +63,7 @@ export type Company = {
   cpf: string | null;
   legal_name: string;
   trade_name: string | null;
+  codigo_cliente: string | null;
   created_at: string;
   municipal_registration: string | null;
   data_abertura: string | null;

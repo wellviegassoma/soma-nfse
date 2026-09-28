@@ -26,6 +26,7 @@ export type CriarEmpresaInput = {
   organizationName: string;
   legalName: string;
   tradeName?: string;
+  codigoCliente?: string;
   personType: "PF" | "PJ";
   cnpj?: string;
   cpf?: string;
@@ -65,6 +66,7 @@ export async function criarEmpresaComOrganizacao(
       organization_id: org.id,
       legal_name: input.legalName,
       trade_name: input.tradeName || null,
+      codigo_cliente: input.codigoCliente || null,
       person_type: input.personType,
       cnpj: input.personType === "PJ" ? input.cnpj || null : null,
       cpf: input.personType === "PF" ? input.cpf || null : null,
@@ -86,7 +88,9 @@ export async function criarEmpresaComOrganizacao(
     return {
       error:
         companyError?.code === "23505"
-          ? "Já existe uma empresa cadastrada com esse CNPJ/CPF."
+          ? companyError.message.includes("codigo_cliente")
+            ? "Já existe uma empresa cadastrada com esse código."
+            : "Já existe uma empresa cadastrada com esse CNPJ/CPF."
           : "Não foi possível criar a empresa.",
     };
   }
@@ -111,6 +115,7 @@ const createCompanySchema = z.object({
   organizationName: z.string().trim().min(2, "Informe o nome da empresa/organização."),
   legalName: z.string().trim().min(2, "Informe a razão social."),
   tradeName: z.string().trim().optional(),
+  codigoCliente: z.string().trim().optional(),
   personType: z.enum(["PF", "PJ"]).default("PJ"),
   cnpj: z
     .string()
@@ -145,6 +150,7 @@ export async function createCompany(
     organizationName: formData.get("organizationName"),
     legalName: formData.get("legalName"),
     tradeName: formData.get("tradeName") || undefined,
+    codigoCliente: formData.get("codigoCliente") || undefined,
     personType: formData.get("personType") || undefined,
     cnpj: formData.get("cnpj") || undefined,
     cpf: formData.get("cpf") || undefined,
@@ -177,6 +183,7 @@ const updateIdentitySchema = z.object({
   companyId: uuidLike,
   legalName: z.string().trim().min(2, "Informe a razão social."),
   tradeName: z.string().trim().optional(),
+  codigoCliente: z.string().trim().optional(),
 });
 
 export async function updateCompanyIdentity(
@@ -189,24 +196,29 @@ export async function updateCompanyIdentity(
     companyId: formData.get("companyId"),
     legalName: formData.get("legalName"),
     tradeName: formData.get("tradeName") || undefined,
+    codigoCliente: formData.get("codigoCliente") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
-  const { companyId, legalName, tradeName } = parsed.data;
+  const { companyId, legalName, tradeName, codigoCliente } = parsed.data;
 
   const supabase = await createClient();
   const { data: before } = await supabase
     .from("companies")
-    .select("legal_name, trade_name")
+    .select("legal_name, trade_name, codigo_cliente")
     .eq("id", companyId)
     .single();
 
   const { error } = await supabase
     .from("companies")
-    .update({ legal_name: legalName, trade_name: tradeName || null })
+    .update({ legal_name: legalName, trade_name: tradeName || null, codigo_cliente: codigoCliente || null })
     .eq("id", companyId);
-  if (error) return { error: "Não foi possível salvar o nome da empresa." };
+  if (error) {
+    return {
+      error: error.code === "23505" ? "Já existe uma empresa cadastrada com esse código." : "Não foi possível salvar o nome da empresa.",
+    };
+  }
 
   await logAudit({
     companyId,
@@ -214,7 +226,7 @@ export async function updateCompanyIdentity(
     entity: "company_identity",
     entityId: companyId,
     oldValue: before,
-    newValue: { legal_name: legalName, trade_name: tradeName || null },
+    newValue: { legal_name: legalName, trade_name: tradeName || null, codigo_cliente: codigoCliente || null },
   });
 
   revalidatePath(`/admin/empresas/${companyId}`);

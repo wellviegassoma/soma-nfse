@@ -14,6 +14,7 @@ type EmpresaComDocumentos = {
   id: string;
   legal_name: string;
   trade_name: string | null;
+  codigo_cliente: string | null;
   municipality_name: string | null;
   state: string | null;
   data_abertura: string | null;
@@ -43,7 +44,7 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
       supabase
         .from("companies")
         .select(
-          "id, legal_name, trade_name, municipality_name, state, data_abertura, legalizacao_documentos(tipo_id, data_vencimento)",
+          "id, legal_name, trade_name, codigo_cliente, municipality_name, state, data_abertura, legalizacao_documentos(tipo_id, data_vencimento)",
         )
         .order("legal_name", { ascending: true }),
       supabase.from("legalizacao_tipos_documento").select("id, nome, aplica_a_todas").eq("ativo", true),
@@ -155,7 +156,7 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
       </div>
 
       <BuscaRapidaEmpresa
-        empresas={empresas.map((e) => ({ id: e.id, legal_name: e.legal_name, trade_name: e.trade_name }))}
+        empresas={empresas.map((e) => ({ id: e.id, legal_name: e.legal_name, trade_name: e.trade_name, codigo_cliente: e.codigo_cliente }))}
         basePath="/legalizacao/empresas"
         placeholder="Buscar empresa e acessar os documentos..."
       />

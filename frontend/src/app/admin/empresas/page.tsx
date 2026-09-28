@@ -15,7 +15,7 @@ export default async function AdminEmpresasPage(props: PageProps<"/admin/empresa
   const supabase = await createClient();
   let query = supabase
     .from("companies")
-    .select("id, legal_name, trade_name, cnpj, cpf, created_at, ativa")
+    .select("id, legal_name, trade_name, codigo_cliente, cnpj, cpf, created_at, ativa")
     .order("legal_name", { ascending: true });
 
   if (!mostrarInativas) query = query.eq("ativa", true);
@@ -25,7 +25,11 @@ export default async function AdminEmpresasPage(props: PageProps<"/admin/empresa
     // — precisa tirar do termo de busca pra não quebrar o filtro.
     const termoSeguro = q.replace(/[,()]/g, " ").trim();
     const digits = q.replace(/\D/g, "");
-    const termos = [`legal_name.ilike.%${termoSeguro}%`, `trade_name.ilike.%${termoSeguro}%`];
+    const termos = [
+      `legal_name.ilike.%${termoSeguro}%`,
+      `trade_name.ilike.%${termoSeguro}%`,
+      `codigo_cliente.ilike.%${termoSeguro}%`,
+    ];
     if (digits) termos.push(`cnpj.ilike.%${digits}%`, `cpf.ilike.%${digits}%`);
     if (termoSeguro || digits) query = query.or(termos.join(","));
   }
@@ -57,7 +61,7 @@ export default async function AdminEmpresasPage(props: PageProps<"/admin/empresa
         <Input
           name="q"
           defaultValue={q}
-          placeholder="Buscar por nome ou CNPJ..."
+          placeholder="Buscar por nome, código ou CNPJ..."
           className="max-w-sm"
         />
         <Button type="submit" variant="secondary">
@@ -98,6 +102,11 @@ export default async function AdminEmpresasPage(props: PageProps<"/admin/empresa
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 truncate text-sm font-semibold text-foreground">
+                    {company.codigo_cliente && (
+                      <span className="shrink-0 text-xs font-normal text-foreground/40">
+                        #{company.codigo_cliente}
+                      </span>
+                    )}
                     {company.trade_name || company.legal_name}
                     {!company.ativa && (
                       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_PILL_CLASSES.neutral}`}>
