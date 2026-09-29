@@ -209,6 +209,23 @@ export function FiscalForm({ company }: { company: Company }) {
                 </span>
               </span>
             </label>
+            <label className="flex items-start gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                name="equiparacaoHospitalar"
+                defaultChecked={company.equiparacao_hospitalar}
+                className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+              />
+              <span>
+                Equiparação hospitalar
+                <span className="block text-xs text-foreground/50">
+                  Marque se a empresa presta serviço que pode se equiparar a atividade
+                  hospitalar (Lei 9.249/95, arts. 15 e 20 — presunção de 8% IRPJ / 12% CSLL em
+                  vez de 32%/32%). Com isso marcado, a tela de Fechamento passa a mostrar, nota
+                  a nota, a opção de indicar quais notas entram na equiparação.
+                </span>
+              </span>
+            </label>
             <Field
               label="Tipo de ISS"
               htmlFor="issTipo"

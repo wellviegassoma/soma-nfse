@@ -1,7 +1,7 @@
 import "server-only";
 import ExcelJS from "exceljs";
 import type { Company } from "@/lib/types";
-import { TAX_REGIME_LABELS, ISS_TIPO_LABELS } from "@/lib/types";
+import { TAX_REGIME_LABELS, ISS_TIPO_LABELS, AMBIENTE_LABELS, REGIME_ESPECIAL_LABELS } from "@/lib/types";
 import { formatarCnpj, formatarCpf, formatarPercentual, formatarMoeda } from "@/lib/formatters";
 
 const COR_MARCA_LISTA = "FF1D4ED8";
@@ -18,11 +18,35 @@ type EmpresaLista = {
   tax_regime: Company["tax_regime"];
   cnae: string | null;
   municipality_name: string | null;
+  municipality_ibge_code: string | null;
   state: string | null;
+  address_street: string | null;
+  address_number: string | null;
+  address_complement: string | null;
+  address_neighborhood: string | null;
+  address_zip: string | null;
   municipal_registration: string | null;
   data_abertura: string | null;
+  regime_especial_tributacao: number;
+  sujeito_fator_r: boolean;
+  irpj_csll_apuracao_mensal: boolean;
+  equiparacao_hospitalar: boolean;
+  iss_tipo: Company["iss_tipo"];
+  iss_aliquota_padrao: number | null;
+  iss_valor_fixo_profissional: number | null;
+  iss_quantidade_profissionais: number | null;
+  nfse_ambiente: Company["nfse_ambiente"];
+  dps_series: string;
+  dps_next_number: number;
+  allow_retroactive_emission: boolean;
   created_at: string;
+  certificates: { expires_at: string } | { expires_at: string }[] | null;
 };
+
+function situacaoCertificado(expiresAt: string | null): string {
+  if (!expiresAt) return "Sem certificado";
+  return new Date(expiresAt).getTime() < Date.now() ? "Vencido" : "Válido";
+}
 
 export async function gerarExcelListaEmpresas(empresas: EmpresaLista[]): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
@@ -41,9 +65,27 @@ export async function gerarExcelListaEmpresas(empresas: EmpresaLista[]): Promise
     { header: "Regime tributário", key: "taxRegime", width: 20 },
     { header: "CNAE", key: "cnae", width: 12 },
     { header: "Município", key: "municipio", width: 22 },
+    { header: "Código IBGE", key: "codigoIbge", width: 12 },
     { header: "UF", key: "uf", width: 6 },
+    { header: "Endereço", key: "endereco", width: 36 },
+    { header: "Bairro", key: "bairro", width: 20 },
+    { header: "CEP", key: "cep", width: 12 },
     { header: "Inscrição municipal", key: "inscricaoMunicipal", width: 18 },
     { header: "Data de abertura", key: "dataAbertura", width: 16 },
+    { header: "Regime especial de tributação", key: "regimeEspecial", width: 26 },
+    { header: "Sujeito ao Fator R", key: "fatorR", width: 14 },
+    { header: "IRPJ/CSLL mensal", key: "irpjCsllMensal", width: 14 },
+    { header: "Equiparação hospitalar", key: "equiparacaoHospitalar", width: 16 },
+    { header: "Tipo de ISS", key: "issTipo", width: 12 },
+    { header: "Alíquota de ISS", key: "issAliquota", width: 12, style: { numFmt: "0.00%" } },
+    { header: "ISS fixo por profissional", key: "issValorFixo", width: 16, style: { numFmt: "R$ #,##0.00" } },
+    { header: "Qtd. profissionais (ISS fixo)", key: "issQtdProfissionais", width: 16 },
+    { header: "Ambiente NFS-e", key: "nfseAmbiente", width: 14 },
+    { header: "Série DPS", key: "dpsSeries", width: 10 },
+    { header: "Próximo número DPS", key: "dpsNextNumber", width: 14 },
+    { header: "Emissão retroativa", key: "emissaoRetroativa", width: 14 },
+    { header: "Certificado digital", key: "certificado", width: 14 },
+    { header: "Validade do certificado", key: "certificadoValidade", width: 16 },
     { header: "Cadastrada em", key: "createdAt", width: 16 },
   ];
 
@@ -56,6 +98,7 @@ export async function gerarExcelListaEmpresas(empresas: EmpresaLista[]): Promise
   headerRow.height = 26;
 
   for (const e of empresas) {
+    const certificado = Array.isArray(e.certificates) ? e.certificates[0] : e.certificates;
     ws.addRow({
       codigo: e.codigo_cliente ?? "",
       legalName: e.legal_name,
@@ -67,14 +110,34 @@ export async function gerarExcelListaEmpresas(empresas: EmpresaLista[]): Promise
       taxRegime: e.tax_regime ? TAX_REGIME_LABELS[e.tax_regime] : "",
       cnae: e.cnae ?? "",
       municipio: e.municipality_name ?? "",
+      codigoIbge: e.municipality_ibge_code ?? "",
       uf: e.state ?? "",
+      endereco: [e.address_street, e.address_number, e.address_complement].filter(Boolean).join(", "),
+      bairro: e.address_neighborhood ?? "",
+      cep: e.address_zip ?? "",
       inscricaoMunicipal: e.municipal_registration ?? "",
       dataAbertura: e.data_abertura ?? "",
+      regimeEspecial: REGIME_ESPECIAL_LABELS[e.regime_especial_tributacao] ?? "",
+      fatorR: e.sujeito_fator_r ? "Sim" : "Não",
+      irpjCsllMensal: e.irpj_csll_apuracao_mensal ? "Sim" : "Não",
+      equiparacaoHospitalar: e.equiparacao_hospitalar ? "Sim" : "Não",
+      issTipo: ISS_TIPO_LABELS[e.iss_tipo],
+      issAliquota: e.iss_aliquota_padrao ?? null,
+      issValorFixo: e.iss_valor_fixo_profissional ?? null,
+      issQtdProfissionais: e.iss_quantidade_profissionais ?? "",
+      nfseAmbiente: AMBIENTE_LABELS[e.nfse_ambiente],
+      dpsSeries: e.dps_series,
+      dpsNextNumber: e.dps_next_number,
+      emissaoRetroativa: e.allow_retroactive_emission ? "Sim" : "Não",
+      certificado: situacaoCertificado(certificado?.expires_at ?? null),
+      certificadoValidade: certificado?.expires_at
+        ? new Date(certificado.expires_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
+        : "",
       createdAt: new Date(e.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
     });
   }
 
-  ws.autoFilter = { from: "A1", to: `N${empresas.length + 1}` };
+  ws.autoFilter = { from: "A1", to: `${ws.getColumn(ws.columns.length).letter}${empresas.length + 1}` };
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
@@ -141,6 +204,7 @@ export async function gerarExcelDadosEmpresa(company: Company): Promise<Buffer> 
   linha(ws, "Regime tributário", company.tax_regime ? TAX_REGIME_LABELS[company.tax_regime] : null);
   linha(ws, "Sujeito ao Fator R", company.sujeito_fator_r ? "Sim" : "Não");
   linha(ws, "Apuração mensal de IRPJ/CSLL", company.irpj_csll_apuracao_mensal ? "Sim" : "Não");
+  linha(ws, "Equiparação hospitalar", company.equiparacao_hospitalar ? "Sim" : "Não");
   linha(ws, "Regime especial de tributação", company.regime_especial_tributacao);
   linha(ws, "Tipo de ISS", ISS_TIPO_LABELS[company.iss_tipo]);
   if (company.iss_tipo === "PERCENTUAL") {

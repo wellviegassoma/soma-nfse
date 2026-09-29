@@ -84,6 +84,7 @@ export type Company = {
   allow_retroactive_emission: boolean;
   sujeito_fator_r: boolean;
   irpj_csll_apuracao_mensal: boolean;
+  equiparacao_hospitalar: boolean;
   iss_aliquota_padrao: number | null;
   iss_tipo: IssTipo;
   iss_valor_fixo_profissional: number | null;

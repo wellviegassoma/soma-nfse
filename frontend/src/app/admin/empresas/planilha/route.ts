@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("companies")
     .select(
-      "codigo_cliente, legal_name, trade_name, person_type, cnpj, cpf, ativa, tax_regime, cnae, municipality_name, state, municipal_registration, data_abertura, created_at",
+      "codigo_cliente, legal_name, trade_name, person_type, cnpj, cpf, ativa, tax_regime, cnae, municipality_name, municipality_ibge_code, state, address_street, address_number, address_complement, address_neighborhood, address_zip, municipal_registration, data_abertura, regime_especial_tributacao, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_tipo, iss_aliquota_padrao, iss_valor_fixo_profissional, iss_quantidade_profissionais, nfse_ambiente, dps_series, dps_next_number, allow_retroactive_emission, created_at, certificates(expires_at)",
     )
     .order("legal_name", { ascending: true });
 

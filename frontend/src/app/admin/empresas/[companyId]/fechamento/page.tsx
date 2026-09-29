@@ -62,7 +62,7 @@ export default async function AdminFechamentoPage(
     supabase
       .from("companies")
       .select(
-        "cnpj, tax_regime, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
+        "cnpj, tax_regime, equiparacao_hospitalar, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
       )
       .eq("id", companyId)
       .single(),
@@ -177,7 +177,7 @@ export default async function AdminFechamentoPage(
                   <span className="w-16 shrink-0 text-foreground/50">{n.numero || "—"}</span>
                   <span className="min-w-0 flex-1 truncate">{n.tomador_nome || "—"}</span>
                   <span className="shrink-0 font-medium">{formatMoney(n.valor_servico ?? 0)}</span>
-                  {company?.tax_regime === "LUCRO_PRESUMIDO" && (
+                  {company?.tax_regime === "LUCRO_PRESUMIDO" && company?.equiparacao_hospitalar && (
                     <EquiparacaoHospitalarToggle
                       notaId={n.id}
                       companyId={companyId}
@@ -192,7 +192,7 @@ export default async function AdminFechamentoPage(
                     PDF
                   </a>
                 </div>
-                {company?.tax_regime === "LUCRO_PRESUMIDO" && n.descricao_servico && (
+                {company?.tax_regime === "LUCRO_PRESUMIDO" && company?.equiparacao_hospitalar && n.descricao_servico && (
                   <p className="pl-16 text-xs text-foreground/50">{n.descricao_servico}</p>
                 )}
               </div>
