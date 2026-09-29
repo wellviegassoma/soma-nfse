@@ -28,7 +28,7 @@ export default async function ProspectDetailPage(
       supabase
         .from("comercial_prospects")
         .select(
-          "id, nome, tipo_onboarding, pessoa_tipo, especialidade, cidade, origem_lead, indicado_por, regime_tributario, faturamento_medio_estimado, cnpj, cpf, honorario_soma, descricao, abertura_cartorio_jucerja, abertura_capital_social, abertura_divisao_capital, abertura_administrador, abertura_cota_tipo, abertura_cnaes, abertura_opcoes_nome, legalizacao_processo_id, etapa_id, company_id, arquivado_em, etapa:comercial_etapas(id, nome, cor, tipo)",
+          "id, nome, tipo_onboarding, pessoa_tipo, especialidade, cidade, origem_lead, indicado_por, regime_tributario, faturamento_medio_estimado, cnpj, cpf, honorario_soma, descricao, abertura_cartorio_jucerja, abertura_capital_social, abertura_divisao_capital, abertura_administrador, abertura_cota_tipo, abertura_cnaes, abertura_opcoes_nome, legalizacao_processo_id, etapa_id, company_id, arquivado_em, updated_at, etapa:comercial_etapas(id, nome, cor, tipo)",
         )
         .eq("id", prospectId)
         .maybeSingle(),
@@ -100,7 +100,16 @@ export default async function ProspectDetailPage(
         </div>
       </div>
 
+      {/* key={updated_at}: depois de um submit bem-sucedido, o React reseta
+          sozinho o <form> pro estado inicial (comportamento automático de
+          formulários com Server Action) — isso zera visualmente o select de
+          Tipo do caso e os campos não controlados de "Dados para o contrato
+          social", mesmo já salvos certo no banco. Forçar o remount aqui faz
+          o formulário reaparecer com os valores recém-salvos em vez de em
+          branco, e evita que um segundo "Salvar" clicado por engano apague
+          tudo de verdade. */}
       <ProspectDadosAnexos
+        key={prospect.updated_at}
         prospect={prospect}
         anexos={anexos ?? []}
         podeEditar={podeEditar}
