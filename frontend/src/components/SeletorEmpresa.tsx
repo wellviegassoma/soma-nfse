@@ -3,7 +3,13 @@
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/Input";
 
-type Empresa = { id: string; legal_name: string; trade_name: string | null; cnpj: string | null };
+type Empresa = {
+  id: string;
+  legal_name: string;
+  trade_name: string | null;
+  cnpj: string | null;
+  codigo_cliente?: string | null;
+};
 
 function normalizar(texto: string): string {
   return texto
@@ -23,7 +29,7 @@ export function SeletorEmpresa({
 }: {
   name: string;
   empresas: Empresa[];
-  defaultValue?: { id: string; legal_name: string; trade_name: string | null } | null;
+  defaultValue?: { id: string; legal_name: string; trade_name: string | null; codigo_cliente?: string | null } | null;
   required?: boolean;
 }) {
   const [selecionada, setSelecionada] = useState(defaultValue ?? null);
@@ -34,9 +40,10 @@ export function SeletorEmpresa({
     const alvo = normalizar(termo.trim());
     if (!alvo) return empresas.slice(0, 8);
     return empresas
-      .filter(
-        (e) =>
-          normalizar(`${e.trade_name ?? ""} ${e.legal_name} ${e.cnpj ?? ""}`).includes(alvo),
+      .filter((e) =>
+        normalizar(`${e.trade_name ?? ""} ${e.legal_name} ${e.cnpj ?? ""} ${e.codigo_cliente ?? ""}`).includes(
+          alvo,
+        ),
       )
       .slice(0, 8);
   }, [empresas, termo]);
@@ -46,6 +53,9 @@ export function SeletorEmpresa({
       <div className="flex items-center gap-2">
         <input type="hidden" name={name} value={selecionada.id} />
         <div className="flex h-11 flex-1 items-center rounded-lg border border-border bg-surface-muted px-3.5 text-sm text-foreground">
+          {selecionada.codigo_cliente && (
+            <span className="mr-1.5 text-foreground/40">#{selecionada.codigo_cliente}</span>
+          )}
           {selecionada.trade_name || selecionada.legal_name}
         </div>
         <button
@@ -87,6 +97,9 @@ export function SeletorEmpresa({
                 className="flex w-full flex-col gap-0.5 px-4 py-2.5 text-left transition-colors hover:bg-surface-muted"
               >
                 <span className="text-sm font-medium text-foreground">
+                  {empresa.codigo_cliente && (
+                    <span className="mr-1.5 text-foreground/40">#{empresa.codigo_cliente}</span>
+                  )}
                   {empresa.trade_name || empresa.legal_name}
                 </span>
                 <span className="text-xs text-foreground/50">{empresa.legal_name}</span>

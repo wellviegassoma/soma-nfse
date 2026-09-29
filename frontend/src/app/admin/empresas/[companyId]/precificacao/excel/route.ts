@@ -13,10 +13,12 @@ export async function GET(
   const supabase = await createClient();
   const { data: company } = await supabase
     .from("companies")
-    .select("legal_name, trade_name")
+    .select("legal_name, trade_name, codigo_cliente")
     .eq("id", companyId)
     .single();
-  const nomeEmpresa = company?.trade_name || company?.legal_name || "Empresa";
+  const nomeEmpresa = company?.codigo_cliente
+    ? `#${company.codigo_cliente} ${company.trade_name || company.legal_name}`
+    : company?.trade_name || company?.legal_name || "Empresa";
 
   const buffer = await gerarExcelPrecificacao(supabase, companyId, nomeEmpresa);
 

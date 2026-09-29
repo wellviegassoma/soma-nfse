@@ -10,7 +10,7 @@ type ErrorRow = {
   technical_message: string;
   user_message: string;
   created_at: string;
-  company: { legal_name: string; trade_name: string | null } | null;
+  company: { legal_name: string; trade_name: string | null; codigo_cliente: string | null } | null;
   creator: { full_name: string | null } | null;
   dps: { id_dps: string; numero_dps: number } | null;
 };
@@ -22,7 +22,7 @@ export default async function AdminErrorsPage() {
   const { data } = await supabase
     .from("nfse_errors")
     .select(
-      "id, technical_message, user_message, created_at, company:companies(legal_name, trade_name), creator:profiles(full_name), dps:dps(id_dps, numero_dps)",
+      "id, technical_message, user_message, created_at, company:companies(legal_name, trade_name, codigo_cliente), creator:profiles(full_name), dps:dps(id_dps, numero_dps)",
     )
     .order("created_at", { ascending: false })
     .limit(100);
@@ -48,6 +48,7 @@ export default async function AdminErrorsPage() {
             <div key={erro.id} className="flex flex-col gap-2 px-5 py-4">
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-foreground/50">
                 <span>
+                  {erro.company?.codigo_cliente && `#${erro.company.codigo_cliente} `}
                   {erro.company?.trade_name || erro.company?.legal_name || "—"}
                   {erro.creator?.full_name ? ` · ${erro.creator.full_name}` : ""}
                   {erro.dps ? ` · DPS ${erro.dps.numero_dps}` : ""}

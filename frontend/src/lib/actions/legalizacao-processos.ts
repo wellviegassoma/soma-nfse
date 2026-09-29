@@ -101,11 +101,13 @@ export async function criarProcessoLegalizacaoCore(
   if (input.tipoProcesso !== "ABERTURA" && input.companyId) {
     const { data: empresa } = await supabase
       .from("companies")
-      .select("legal_name, trade_name")
+      .select("legal_name, trade_name, codigo_cliente")
       .eq("id", input.companyId)
       .single();
     if (!empresa) return { error: "Empresa não encontrada." };
-    nomeProcesso = empresa.trade_name || empresa.legal_name;
+    nomeProcesso = empresa.codigo_cliente
+      ? `#${empresa.codigo_cliente} ${empresa.trade_name || empresa.legal_name}`
+      : empresa.trade_name || empresa.legal_name;
   }
 
   const { data: fluxo } = await supabase

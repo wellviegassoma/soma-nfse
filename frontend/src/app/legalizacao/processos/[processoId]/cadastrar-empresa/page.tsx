@@ -26,7 +26,7 @@ export default async function CadastrarEmpresaPage(
   if (processo.cnpj) {
     const { data } = await supabase
       .from("companies")
-      .select("id, legal_name, trade_name")
+      .select("id, legal_name, trade_name, codigo_cliente")
       .eq("cnpj", processo.cnpj)
       .maybeSingle();
     empresaExistente = data;
@@ -34,7 +34,7 @@ export default async function CadastrarEmpresaPage(
 
   const { data: empresas } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name, cnpj")
+    .select("id, legal_name, trade_name, cnpj, codigo_cliente")
     .eq("ativa", true)
     .order("legal_name", { ascending: true });
 
@@ -52,7 +52,11 @@ export default async function CadastrarEmpresaPage(
       ) : empresaExistente ? (
         <Alert tone="warning">
           Já existe uma empresa cadastrada com o CNPJ desse processo:{" "}
-          <strong>{empresaExistente.trade_name || empresaExistente.legal_name}</strong> — provavelmente já
+          <strong>
+            {empresaExistente.codigo_cliente && `#${empresaExistente.codigo_cliente} `}
+            {empresaExistente.trade_name || empresaExistente.legal_name}
+          </strong>{" "}
+          — provavelmente já
           virou cliente pelo módulo Comercial. Vincule-a abaixo em vez de criar outra.
         </Alert>
       ) : (

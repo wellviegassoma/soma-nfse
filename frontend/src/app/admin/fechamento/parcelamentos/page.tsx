@@ -23,7 +23,7 @@ export default async function CentralParcelamentosPage(props: PageProps<"/admin/
   const supabase = await createClient();
   const { data: companies } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name, cnpj")
+    .select("id, legal_name, trade_name, codigo_cliente, cnpj")
     .eq("tax_regime", "SIMPLES_NACIONAL")
     .eq("ativa", true)
     .not("cnpj", "is", null)
@@ -62,7 +62,9 @@ export default async function CentralParcelamentosPage(props: PageProps<"/admin/
     return [
       {
         companyId: p.company_id,
-        nome: empresa.trade_name || empresa.legal_name,
+        nome: empresa.codigo_cliente
+          ? `#${empresa.codigo_cliente} ${empresa.trade_name || empresa.legal_name}`
+          : empresa.trade_name || empresa.legal_name,
         cnpj: empresa.cnpj!,
         numeroParcelamento: p.numero_parcelamento,
         situacao: p.situacao,
@@ -74,7 +76,10 @@ export default async function CentralParcelamentosPage(props: PageProps<"/admin/
     ];
   });
 
-  const todasAsEmpresas = (companies ?? []).map((c) => ({ id: c.id, nome: c.trade_name || c.legal_name }));
+  const todasAsEmpresas = (companies ?? []).map((c) => ({
+    id: c.id,
+    nome: c.codigo_cliente ? `#${c.codigo_cliente} ${c.trade_name || c.legal_name}` : c.trade_name || c.legal_name,
+  }));
 
   return (
     <div className="flex flex-col gap-6">

@@ -30,7 +30,7 @@ export default async function LegalizacaoEmpresaPage(
       supabase
         .from("companies")
         .select(
-          "id, legal_name, trade_name, person_type, cnpj, cpf, tax_regime, address_street, address_number, address_complement, address_neighborhood, address_zip, municipality_name, state",
+          "id, legal_name, trade_name, codigo_cliente, person_type, cnpj, cpf, tax_regime, address_street, address_number, address_complement, address_neighborhood, address_zip, municipality_name, state",
         )
         .eq("id", companyId)
         .single(),
@@ -98,6 +98,9 @@ export default async function LegalizacaoEmpresaPage(
             ← Voltar
           </Link>
           <h1 className="mt-1 text-xl font-semibold text-foreground">
+            {company.codigo_cliente && (
+              <span className="mr-1.5 text-foreground/40">#{company.codigo_cliente}</span>
+            )}
             {company.trade_name || company.legal_name}
           </h1>
           <p className="text-sm text-foreground/60">Consulta de documentos de legalização.</p>

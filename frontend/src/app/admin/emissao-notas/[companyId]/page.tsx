@@ -18,7 +18,7 @@ export default async function AdminEmitirNotaPage(
   const [{ data: company }, { data: customers }, { data: services }] = await Promise.all([
     supabase
       .from("companies")
-      .select("legal_name, trade_name, allow_retroactive_emission")
+      .select("legal_name, trade_name, codigo_cliente, allow_retroactive_emission")
       .eq("id", companyId)
       .maybeSingle(),
     supabase.from("customers").select("id, name, cpf_cnpj").eq("company_id", companyId).order("name"),
@@ -38,7 +38,8 @@ export default async function AdminEmitirNotaPage(
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground">
-            Emitir nota — {company.trade_name || company.legal_name}
+            Emitir nota — {company.codigo_cliente && `#${company.codigo_cliente} `}
+            {company.trade_name || company.legal_name}
           </h1>
           <div className="flex gap-3">
             <Link href={`${basePath}/notas`} className="text-sm font-medium text-brand hover:underline">

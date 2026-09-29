@@ -54,7 +54,7 @@ export default async function FinanceiroEmpresaPage(
     await Promise.all([
       supabase
         .from("companies")
-        .select("id, legal_name, trade_name, person_type, cnpj, cpf")
+        .select("id, legal_name, trade_name, codigo_cliente, person_type, cnpj, cpf")
         .eq("id", companyId)
         .single(),
       supabase
@@ -112,6 +112,9 @@ export default async function FinanceiroEmpresaPage(
             ← Financeiro
           </Link>
           <h1 className="mt-2 text-2xl font-semibold text-foreground">
+            {company.codigo_cliente && (
+              <span className="mr-1.5 text-foreground/40">#{company.codigo_cliente}</span>
+            )}
             {company.trade_name || company.legal_name}
           </h1>
           {documento && (
@@ -199,6 +202,9 @@ export default async function FinanceiroEmpresaPage(
           ← Financeiro
         </Link>
         <h1 className="mt-2 text-2xl font-semibold text-foreground">
+          {company.codigo_cliente && (
+            <span className="mr-1.5 text-foreground/40">#{company.codigo_cliente}</span>
+          )}
           {company.trade_name || company.legal_name}
         </h1>
         {documento && (

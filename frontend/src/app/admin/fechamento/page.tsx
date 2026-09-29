@@ -37,7 +37,7 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
       supabase
         .from("companies")
         .select(
-          "id, legal_name, trade_name, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
+          "id, legal_name, trade_name, codigo_cliente, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
         )
         .order("legal_name"),
       supabase.from("certificates").select("company_id"),
@@ -46,7 +46,7 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
       // sozinho, sem alguém precisar clicar em "Buscar todas agora".
       supabase
         .from("notas_distribuidas")
-        .select("numero, competencia, data_emissao, valor_servico, tomador_nome, prestador_nome, companies(legal_name, trade_name)", { count: "exact" })
+        .select("numero, competencia, data_emissao, valor_servico, tomador_nome, prestador_nome, companies(legal_name, trade_name, codigo_cliente)", { count: "exact" })
         .eq("bate_competencia", false)
         .eq("cancelada", false)
         .order("created_at", { ascending: false })
@@ -56,7 +56,10 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
   const idsComCertificado = new Set((certs ?? []).map((c) => c.company_id));
   const empresasComCertificado = (companies ?? [])
     .filter((c) => idsComCertificado.has(c.id))
-    .map((c) => ({ id: c.id, nome: c.trade_name || c.legal_name }));
+    .map((c) => ({
+      id: c.id,
+      nome: c.codigo_cliente ? `#${c.codigo_cliente} ${c.trade_name || c.legal_name}` : c.trade_name || c.legal_name,
+    }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -143,6 +146,7 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
                   return (
                     <tr key={i}>
                       <td className="pr-4 py-1.5">
+                        {empresa?.codigo_cliente && `#${empresa.codigo_cliente} `}
                         {empresa?.trade_name || empresa?.legal_name || "—"}
                       </td>
                       <td className="pr-4 py-1.5">{n.numero ?? "—"}</td>
@@ -181,6 +185,9 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-foreground">
+                    {company.codigo_cliente && (
+                      <span className="mr-1 text-foreground/40">#{company.codigo_cliente}</span>
+                    )}
                     {company.trade_name || company.legal_name}
                   </div>
                   <div className="text-xs text-foreground/50">

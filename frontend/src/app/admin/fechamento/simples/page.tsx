@@ -34,7 +34,7 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
   const supabase = await createClient();
   const { data: companies } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name, cnpj, data_abertura, sujeito_fator_r")
+    .select("id, legal_name, trade_name, codigo_cliente, cnpj, data_abertura, sujeito_fator_r")
     .eq("tax_regime", "SIMPLES_NACIONAL")
     .eq("ativa", true)
     .not("cnpj", "is", null)
@@ -119,7 +119,9 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
 
       return {
         id: company.id,
-        nome: company.trade_name || company.legal_name,
+        nome: company.codigo_cliente
+          ? `#${company.codigo_cliente} ${company.trade_name || company.legal_name}`
+          : company.trade_name || company.legal_name,
         receitaMes,
         rbt12,
         rbt12Estimado,

@@ -89,6 +89,7 @@ export function TicketChat({
             <span>{ticket.contato?.telefone}</span>
             {empresa && (
               <Link href={`/admin/empresas/${empresa.id}`} className="text-brand underline">
+                {empresa.codigo_cliente && `#${empresa.codigo_cliente} `}
                 {empresa.trade_name || empresa.legal_name}
               </Link>
             )}

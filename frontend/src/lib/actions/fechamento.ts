@@ -372,12 +372,12 @@ export async function iniciarExportacaoFechamento(
 
   const { data: companies } = await admin
     .from("companies")
-    .select("id, legal_name, trade_name")
+    .select("id, legal_name, trade_name, codigo_cliente")
     .in("id", idsComNota);
 
   const empresas: EmpresaExportacao[] = (companies ?? []).map((c) => ({
     id: c.id,
-    nome: c.trade_name || c.legal_name,
+    nome: c.codigo_cliente ? `#${c.codigo_cliente} ${c.trade_name || c.legal_name}` : c.trade_name || c.legal_name,
   }));
 
   const { data: exportacao, error } = await admin

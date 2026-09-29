@@ -18,7 +18,7 @@ export async function listarElegiveisFechamentoAntecipado(
 ): Promise<EmpresaElegivel[]> {
   const { data: companies, error } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name")
+    .select("id, legal_name, trade_name, codigo_cliente")
     .eq("tax_regime", "SIMPLES_NACIONAL")
     .eq("ativa", true)
     .eq("sujeito_fator_r", false)
@@ -39,5 +39,8 @@ export async function listarElegiveisFechamentoAntecipado(
 
   return companies
     .filter((c) => !fechadasSet.has(c.id))
-    .map((c) => ({ id: c.id, nome: c.trade_name || c.legal_name }));
+    .map((c) => ({
+      id: c.id,
+      nome: c.codigo_cliente ? `#${c.codigo_cliente} ${c.trade_name || c.legal_name}` : c.trade_name || c.legal_name,
+    }));
 }

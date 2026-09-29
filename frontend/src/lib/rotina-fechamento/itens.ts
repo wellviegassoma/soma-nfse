@@ -17,7 +17,7 @@ export type ItemExecucao = {
 export async function buscarItensExecucao(supabase: Supa, execucaoId: string): Promise<ItemExecucao[]> {
   const { data, error } = await supabase
     .from("rotina_fechamento_itens")
-    .select("company_id, status, detalhes, companies(legal_name, trade_name)")
+    .select("company_id, status, detalhes, companies(legal_name, trade_name, codigo_cliente)")
     .eq("execucao_id", execucaoId);
   if (error) throw error;
 
@@ -25,7 +25,9 @@ export async function buscarItensExecucao(supabase: Supa, execucaoId: string): P
     const empresa = Array.isArray(item.companies) ? item.companies[0] : item.companies;
     return {
       companyId: item.company_id,
-      nome: empresa?.trade_name || empresa?.legal_name || item.company_id,
+      nome: empresa?.codigo_cliente
+        ? `#${empresa.codigo_cliente} ${empresa.trade_name || empresa.legal_name}`
+        : empresa?.trade_name || empresa?.legal_name || item.company_id,
       status: item.status,
       detalhes: item.detalhes ?? {},
     };

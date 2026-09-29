@@ -32,7 +32,7 @@ export default async function CentralMitPage(props: PageProps<"/admin/fechamento
   const supabase = await createClient();
   const { data: companies } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name, cnpj, irpj_csll_apuracao_mensal")
+    .select("id, legal_name, trade_name, codigo_cliente, cnpj, irpj_csll_apuracao_mensal")
     .eq("tax_regime", "LUCRO_PRESUMIDO")
     .eq("ativa", true)
     .not("cnpj", "is", null)
@@ -87,7 +87,9 @@ export default async function CentralMitPage(props: PageProps<"/admin/fechamento
 
       return {
         id: company.id,
-        nome: company.trade_name || company.legal_name,
+        nome: company.codigo_cliente
+          ? `#${company.codigo_cliente} ${company.trade_name || company.legal_name}`
+          : company.trade_name || company.legal_name,
         receitaMes,
         receitaTrimestre,
         retencaoIrrf: retencaoMes.irrf,

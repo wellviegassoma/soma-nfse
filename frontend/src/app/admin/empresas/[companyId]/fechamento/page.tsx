@@ -120,6 +120,11 @@ export default async function AdminFechamentoPage(
                 </Button>
               </a>
             )}
+            <a href={`/admin/empresas/${companyId}/fechamento/planilha?competencia=${competencia}`}>
+              <Button type="button" variant="secondary">
+                Baixar planilha das notas
+              </Button>
+            </a>
           </form>
           <div className="flex items-center gap-3">
             <a href={`/admin/empresas/${companyId}/fechamento/importar`}>

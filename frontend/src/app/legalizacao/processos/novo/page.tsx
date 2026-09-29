@@ -23,7 +23,7 @@ export default async function NovoProcessoPage(
       .order("ordem", { ascending: true }),
     supabase
       .from("companies")
-      .select("id, legal_name, trade_name, cnpj")
+      .select("id, legal_name, trade_name, cnpj, codigo_cliente")
       .eq("ativa", true)
       .order("legal_name", { ascending: true }),
     listarResponsaveisLegalizacao(),

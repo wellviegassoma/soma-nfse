@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import type { Company } from "@/lib/types";
 import { FiscalForm } from "./FiscalForm";
 import { CompanyNameForm } from "./CompanyNameForm";
@@ -26,6 +27,13 @@ export default async function AdminCompanyFiscalPage(
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="max-w-2xl">
+        <a href={`/admin/empresas/${company.id}/planilha`}>
+          <Button type="button" variant="secondary">
+            Baixar dados da empresa (planilha)
+          </Button>
+        </a>
+      </div>
       <Card className="max-w-2xl p-6 sm:p-8">
         <CompanyNameForm
           companyId={company.id}

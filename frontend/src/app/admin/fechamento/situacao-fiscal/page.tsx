@@ -23,7 +23,7 @@ export default async function CentralSituacaoFiscalPage() {
   const supabase = await createClient();
   const { data: companies } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name, cnpj")
+    .select("id, legal_name, trade_name, codigo_cliente, cnpj")
     .eq("ativa", true)
     .not("cnpj", "is", null)
     .order("legal_name");
@@ -45,7 +45,9 @@ export default async function CentralSituacaoFiscalPage() {
     const cacheFresco = fetchedAt ? cacheEhFresco(fetchedAt) : false;
     return {
       id: company.id,
-      nome: company.trade_name || company.legal_name,
+      nome: company.codigo_cliente
+        ? `#${company.codigo_cliente} ${company.trade_name || company.legal_name}`
+        : company.trade_name || company.legal_name,
       cnpj: company.cnpj!,
       fetchedAt,
       cacheFresco,

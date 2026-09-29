@@ -65,7 +65,7 @@ export default async function PainelPage(
     await Promise.all([
       supabase
         .from("companies")
-        .select("id, legal_name, trade_name")
+        .select("id, legal_name, trade_name, codigo_cliente")
         .eq("id", companyId)
         .single(),
       supabase
@@ -192,7 +192,8 @@ export default async function PainelPage(
           href={`/financeiro/empresas/${companyId}`}
           className="text-sm text-foreground/55 hover:text-foreground"
         >
-          ← {company.trade_name || company.legal_name}
+          ← {company.codigo_cliente && `#${company.codigo_cliente} `}
+          {company.trade_name || company.legal_name}
         </Link>
         <h1 className="mt-2 text-2xl font-semibold text-foreground">
           Painel de acompanhamento

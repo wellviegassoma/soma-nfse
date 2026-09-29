@@ -23,7 +23,7 @@ export default async function TicketPage(props: PageProps<"/atendimento/[ticketI
     supabase
       .from("atendimento_tickets")
       .select(
-        "id, protocolo, status, departamento_id, atendente_id, nao_lida, contato:atendimento_contatos(id, nome, telefone, company_id, company:companies(id, legal_name, trade_name))",
+        "id, protocolo, status, departamento_id, atendente_id, nao_lida, contato:atendimento_contatos(id, nome, telefone, company_id, company:companies(id, legal_name, trade_name, codigo_cliente))",
       )
       .eq("id", ticketId)
       .single(),

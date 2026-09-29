@@ -19,7 +19,10 @@ export default async function TipoEmpresasPage(
       .select("id, nome, aplica_a_todas")
       .eq("id", tipoId)
       .single(),
-    supabase.from("companies").select("id, legal_name, trade_name").order("legal_name", { ascending: true }),
+    supabase
+      .from("companies")
+      .select("id, legal_name, trade_name, codigo_cliente")
+      .order("legal_name", { ascending: true }),
     supabase.from("legalizacao_tipos_empresas_excecao").select("company_id, aplicavel").eq("tipo_id", tipoId),
   ]);
 
@@ -49,7 +52,9 @@ export default async function TipoEmpresasPage(
           tipoId={tipoId}
           empresas={(empresas ?? []).map((e) => ({
             id: e.id,
-            nome: e.trade_name || e.legal_name,
+            nome: e.codigo_cliente
+              ? `#${e.codigo_cliente} ${e.trade_name || e.legal_name}`
+              : e.trade_name || e.legal_name,
           }))}
           empresasAplicaveisIds={empresasAplicaveisIds}
         />

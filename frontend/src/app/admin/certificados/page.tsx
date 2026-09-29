@@ -13,6 +13,7 @@ type EmpresaComCertificado = {
   id: string;
   legal_name: string;
   trade_name: string | null;
+  codigo_cliente: string | null;
   // company_id em `certificates` é UNIQUE (1 certificado por empresa) — o
   // PostgREST detecta a relação 1:1 e embute como objeto único, não array.
   certificates: { expires_at: string } | null;
@@ -30,7 +31,7 @@ export default async function AdminCertificadosPage(props: PageProps<"/admin/cer
   const supabase = await createClient();
   const { data } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name, certificates(expires_at)")
+    .select("id, legal_name, trade_name, codigo_cliente, certificates(expires_at)")
     .eq("ativa", true)
     .order("legal_name", { ascending: true });
 
@@ -99,6 +100,9 @@ export default async function AdminCertificadosPage(props: PageProps<"/admin/cer
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-foreground">
+                    {empresa.codigo_cliente && (
+                      <span className="mr-1 text-foreground/40">#{empresa.codigo_cliente}</span>
+                    )}
                     {empresa.trade_name || empresa.legal_name}
                   </div>
                   <div className="truncate text-xs text-foreground/50">
@@ -159,6 +163,9 @@ export default async function AdminCertificadosPage(props: PageProps<"/admin/cer
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-foreground">
+                    {empresa.codigo_cliente && (
+                      <span className="mr-1 text-foreground/40">#{empresa.codigo_cliente}</span>
+                    )}
                     {empresa.trade_name || empresa.legal_name}
                   </div>
                   <div className="truncate text-xs text-foreground/50">{empresa.legal_name}</div>

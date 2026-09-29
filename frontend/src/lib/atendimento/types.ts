@@ -33,7 +33,7 @@ export type TicketDetalhe = {
     nome: string | null;
     telefone: string;
     company_id: string | null;
-    company: { id: string; legal_name: string; trade_name: string | null } | null;
+    company: { id: string; legal_name: string; trade_name: string | null; codigo_cliente: string | null } | null;
   } | null;
 };
 

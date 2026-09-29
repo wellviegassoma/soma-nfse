@@ -44,7 +44,7 @@ export default async function ProcessoDetailPage(
     supabase
       .from("legalizacao_processos")
       .select(
-        "id, tipo_processo, nome, fluxo_nome, company_id, cnpj, data_inicio, prazo_final, data_conclusao, responsavel_id, detalhes, contato_nome, contato_email, contato_whatsapp, alteracao_itens, arquivado_em, company:companies(id, legal_name, trade_name, ativa)",
+        "id, tipo_processo, nome, fluxo_nome, company_id, cnpj, data_inicio, prazo_final, data_conclusao, responsavel_id, detalhes, contato_nome, contato_email, contato_whatsapp, alteracao_itens, arquivado_em, company:companies(id, legal_name, trade_name, codigo_cliente, ativa)",
       )
       .eq("id", processoId)
       .maybeSingle(),
@@ -76,7 +76,13 @@ export default async function ProcessoDetailPage(
 
   if (!processo) notFound();
   if (fasesError) throw fasesError;
-  const company = processo.company as unknown as { id: string; legal_name: string; trade_name: string | null; ativa: boolean } | null;
+  const company = processo.company as unknown as {
+    id: string;
+    legal_name: string;
+    trade_name: string | null;
+    codigo_cliente: string | null;
+    ativa: boolean;
+  } | null;
 
   const fasesTipadas = (fases ?? []).map((f) => ({
     id: f.id,

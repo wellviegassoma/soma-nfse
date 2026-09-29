@@ -162,7 +162,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       supabase
         .from("companies")
         .select(
-          "id, legal_name, trade_name, person_type, created_at, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
+          "id, legal_name, trade_name, codigo_cliente, person_type, created_at, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
         )
         .eq("ativa", true)
         .order("legal_name", { ascending: true }),
@@ -427,6 +427,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
                 <option value="">Todas as empresas</option>
                 {empresas.map((empresa) => (
                   <option key={empresa.id} value={empresa.id}>
+                    {empresa.codigo_cliente ? `#${empresa.codigo_cliente} ` : ""}
                     {empresa.trade_name || empresa.legal_name}
                   </option>
                 ))}
@@ -526,6 +527,9 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-foreground">
+                    {empresa.codigo_cliente && (
+                      <span className="mr-1 text-foreground/40">#{empresa.codigo_cliente}</span>
+                    )}
                     {empresa.trade_name || empresa.legal_name}
                   </div>
                   <div className="truncate text-xs text-foreground/50">
@@ -562,6 +566,9 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
                     {i + 1}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                    {empresa.codigo_cliente && (
+                      <span className="mr-1 text-foreground/40">#{empresa.codigo_cliente}</span>
+                    )}
                     {empresa.trade_name || empresa.legal_name}
                   </span>
                   <span className="shrink-0 text-sm font-semibold text-foreground">
@@ -589,6 +596,9 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
                     {i + 1}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                    {empresa.codigo_cliente && (
+                      <span className="mr-1 text-foreground/40">#{empresa.codigo_cliente}</span>
+                    )}
                     {empresa.trade_name || empresa.legal_name}
                   </span>
                   <span className="shrink-0 text-sm font-semibold text-foreground">
@@ -618,6 +628,9 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
                     {i + 1}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                    {empresa.codigo_cliente && (
+                      <span className="mr-1 text-foreground/40">#{empresa.codigo_cliente}</span>
+                    )}
                     {empresa.trade_name || empresa.legal_name}
                   </span>
                   <span className="shrink-0 text-sm font-semibold text-foreground">
@@ -645,6 +658,9 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
                     {i + 1}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                    {empresa.codigo_cliente && (
+                      <span className="mr-1 text-foreground/40">#{empresa.codigo_cliente}</span>
+                    )}
                     {empresa.trade_name || empresa.legal_name}
                   </span>
                   <span className="shrink-0 text-sm font-semibold text-foreground">
@@ -680,7 +696,10 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
                 <div key={empresa.id} className="flex items-center gap-4 px-5 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-foreground">
-                      {empresa.trade_name || empresa.legal_name}
+                      {empresa.codigo_cliente && (
+                      <span className="mr-1 text-foreground/40">#{empresa.codigo_cliente}</span>
+                    )}
+                    {empresa.trade_name || empresa.legal_name}
                     </div>
                     <div className="text-xs text-foreground/50">
                       {agr.notasCompetencia} nota(s) na competência

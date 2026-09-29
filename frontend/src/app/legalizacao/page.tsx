@@ -55,7 +55,12 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
     ]);
 
   const empresas = (data ?? []) as unknown as EmpresaComDocumentos[];
-  const nomePorEmpresa = new Map(empresas.map((e) => [e.id, e.trade_name || e.legal_name]));
+  const nomePorEmpresa = new Map(
+    empresas.map((e) => [
+      e.id,
+      e.codigo_cliente ? `#${e.codigo_cliente} ${e.trade_name || e.legal_name}` : e.trade_name || e.legal_name,
+    ]),
+  );
   const nomeTipoPorId = new Map((tipos ?? []).map((t) => [t.id, t.nome]));
 
   const excecaoPorEmpresaETipo = new Map<string, boolean>();
@@ -196,6 +201,9 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-foreground">
+                    {empresa.codigo_cliente && (
+                      <span className="mr-1 text-foreground/40">#{empresa.codigo_cliente}</span>
+                    )}
                     {empresa.trade_name || empresa.legal_name}
                   </div>
                   <div className="truncate text-xs text-foreground/50">
@@ -275,6 +283,9 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
                     >
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium text-foreground">
+                          {empresa.codigo_cliente && (
+                            <span className="mr-1 text-foreground/40">#{empresa.codigo_cliente}</span>
+                          )}
                           {empresa.trade_name || empresa.legal_name}
                         </div>
                         <div className="truncate text-xs text-foreground/50">
@@ -358,6 +369,9 @@ export default async function LegalizacaoPage(props: PageProps<"/legalizacao">) 
               >
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-foreground">
+                    {empresa.codigo_cliente && (
+                      <span className="mr-1 text-foreground/40">#{empresa.codigo_cliente}</span>
+                    )}
                     {empresa.trade_name || empresa.legal_name}
                   </div>
                   <div className="truncate text-xs text-foreground/50">{empresa.legal_name}</div>

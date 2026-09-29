@@ -12,7 +12,7 @@ type LogRow = {
   entity_id: string | null;
   created_at: string;
   user: { full_name: string | null } | null;
-  company: { legal_name: string; trade_name: string | null } | null;
+  company: { legal_name: string; trade_name: string | null; codigo_cliente: string | null } | null;
 };
 
 const ACTION_LABEL: Record<string, string> = {
@@ -32,7 +32,7 @@ export default async function AdminLogsPage() {
   const { data } = await supabase
     .from("audit_logs")
     .select(
-      "id, action, entity, entity_id, created_at, user:profiles(full_name), company:companies(legal_name, trade_name)",
+      "id, action, entity, entity_id, created_at, user:profiles(full_name), company:companies(legal_name, trade_name, codigo_cliente)",
     )
     .order("created_at", { ascending: false })
     .limit(200);
@@ -64,7 +64,8 @@ export default async function AdminLogsPage() {
                 {log.company && (
                   <span className="text-foreground/50">
                     {" "}
-                    · {log.company.trade_name || log.company.legal_name}
+                    · {log.company.codigo_cliente && `#${log.company.codigo_cliente} `}
+                    {log.company.trade_name || log.company.legal_name}
                   </span>
                 )}
               </span>

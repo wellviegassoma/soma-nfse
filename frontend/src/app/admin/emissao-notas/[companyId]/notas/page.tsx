@@ -32,7 +32,7 @@ export default async function AdminNotasPage(
 
   const supabase = await createClient();
   const [{ data: company }, { data: notas }] = await Promise.all([
-    supabase.from("companies").select("legal_name, trade_name").eq("id", companyId).maybeSingle(),
+    supabase.from("companies").select("legal_name, trade_name, codigo_cliente").eq("id", companyId).maybeSingle(),
     supabase
       .from("dps")
       .select(
@@ -51,7 +51,8 @@ export default async function AdminNotasPage(
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground">
-            Notas — {company.trade_name || company.legal_name}
+            Notas — {company.codigo_cliente && `#${company.codigo_cliente} `}
+            {company.trade_name || company.legal_name}
           </h1>
           <p className="text-sm text-foreground/60">{lista.length} nota(s)</p>
         </div>

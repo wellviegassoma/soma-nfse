@@ -18,7 +18,7 @@ export default async function LegalizacaoGerenciarPage(
 
   const [{ data: company }, { data: tipos }, { data: documentos }, { data: excecoes }] =
     await Promise.all([
-      supabase.from("companies").select("id, legal_name, trade_name").eq("id", companyId).single(),
+      supabase.from("companies").select("id, legal_name, trade_name, codigo_cliente").eq("id", companyId).single(),
       supabase
         .from("legalizacao_tipos_documento")
         .select("id, nome, aplica_a_todas")
@@ -49,6 +49,9 @@ export default async function LegalizacaoGerenciarPage(
           ← Voltar para consulta
         </Link>
         <h1 className="mt-1 text-xl font-semibold text-foreground">
+          {company.codigo_cliente && (
+            <span className="mr-1.5 text-foreground/40">#{company.codigo_cliente}</span>
+          )}
           {company.trade_name || company.legal_name}
         </h1>
         <p className="text-sm text-foreground/60">

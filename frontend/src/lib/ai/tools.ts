@@ -34,7 +34,7 @@ export const buscarEmpresa = tool({
     const digits = termo.replace(/\D/g, "");
     const query = supabase
       .from("companies")
-      .select("id, legal_name, trade_name, cnpj, tax_regime, municipality_name, state")
+      .select("id, legal_name, trade_name, codigo_cliente, cnpj, tax_regime, municipality_name, state")
       .limit(10);
     const { data } =
       digits.length >= 8
@@ -151,7 +151,7 @@ export const consultarNotasComErro = tool({
     const supabase = await createClient();
     let query = supabase
       .from("nfse_errors")
-      .select("id, user_message, created_at, companies(legal_name, trade_name)")
+      .select("id, user_message, created_at, companies(legal_name, trade_name, codigo_cliente)")
       .order("created_at", { ascending: false })
       .limit(50);
     if (companyId) query = query.eq("company_id", companyId);
@@ -193,13 +193,14 @@ export const consultarCertificados = tool({
     const supabase = await createClient();
     const { data } = await supabase
       .from("companies")
-      .select("id, legal_name, trade_name, certificates(expires_at)")
+      .select("id, legal_name, trade_name, codigo_cliente, certificates(expires_at)")
       .order("legal_name");
 
     type Empresa = {
       id: string;
       legal_name: string;
       trade_name: string | null;
+      codigo_cliente: string | null;
       certificates: { expires_at: string } | null;
     };
     const empresas = ((data ?? []) as unknown as Empresa[])
@@ -215,7 +216,7 @@ export const consultarCertificados = tool({
 
     return {
       certificados: filtradas.map((e) => ({
-        empresa: e.trade_name || e.legal_name,
+        empresa: e.codigo_cliente ? `#${e.codigo_cliente} ${e.trade_name || e.legal_name}` : e.trade_name || e.legal_name,
         expiresAt: e.certificates!.expires_at,
         dias: e.dias,
       })),
@@ -231,7 +232,7 @@ export const consultarLegalizacaoPendencias = tool({
     const supabase = await createClient();
     let empresasQuery = supabase
       .from("companies")
-      .select("id, legal_name, trade_name, legalizacao_documentos(tipo_id, data_vencimento)")
+      .select("id, legal_name, trade_name, codigo_cliente, legalizacao_documentos(tipo_id, data_vencimento)")
       .order("legal_name");
     if (companyId) empresasQuery = empresasQuery.eq("id", companyId);
 
@@ -247,6 +248,7 @@ export const consultarLegalizacaoPendencias = tool({
       id: string;
       legal_name: string;
       trade_name: string | null;
+      codigo_cliente: string | null;
       legalizacao_documentos: { tipo_id: string; data_vencimento: string | null }[] | null;
     };
     const resultado = ((empresas ?? []) as unknown as Empresa[]).map((e) => {
@@ -258,7 +260,10 @@ export const consultarLegalizacaoPendencias = tool({
         if (!doc) pendencias.push(`${tipo.nome} (sem documento)`);
         else if (doc.data_vencimento && diasAteVencer(doc.data_vencimento) < 0) pendencias.push(`${tipo.nome} (vencido)`);
       }
-      return { empresa: e.trade_name || e.legal_name, pendencias };
+      return {
+        empresa: e.codigo_cliente ? `#${e.codigo_cliente} ${e.trade_name || e.legal_name}` : e.trade_name || e.legal_name,
+        pendencias,
+      };
     });
 
     return { empresas: resultado.filter((e) => e.pendencias.length > 0) };
@@ -272,14 +277,14 @@ export const consultarExtratosPendentes = tool({
     const supabase = await createClient();
     const { data } = await supabase
       .from("extrato_contas_bancarias")
-      .select("id, banco, agencia, conta, companies(legal_name, trade_name), extratos_mensais(competencia, entregue)")
+      .select("id, banco, agencia, conta, companies(legal_name, trade_name, codigo_cliente), extratos_mensais(competencia, entregue)")
       .eq("ativo", true);
 
     type Conta = {
       banco: string;
       agencia: string;
       conta: string;
-      companies: { legal_name: string; trade_name: string | null } | null;
+      companies: { legal_name: string; trade_name: string | null; codigo_cliente: string | null } | null;
       extratos_mensais: { competencia: string; entregue: boolean }[] | null;
     };
     const pendentes = ((data ?? []) as unknown as Conta[]).filter((c) => {
@@ -290,7 +295,9 @@ export const consultarExtratosPendentes = tool({
     return {
       competencia,
       pendentes: pendentes.map((c) => ({
-        empresa: c.companies?.trade_name || c.companies?.legal_name,
+        empresa: c.companies?.codigo_cliente
+          ? `#${c.companies.codigo_cliente} ${c.companies.trade_name || c.companies.legal_name}`
+          : c.companies?.trade_name || c.companies?.legal_name,
         banco: c.banco,
         conta: `${c.agencia}/${c.conta}`,
       })),
@@ -322,7 +329,9 @@ export const listarEmpresas = tool({
   }),
   execute: async ({ regimeTributario, cidade }) => {
     const supabase = await createClient();
-    let query = supabase.from("companies").select("id, legal_name, trade_name, tax_regime, municipality_name, state");
+    let query = supabase
+      .from("companies")
+      .select("id, legal_name, trade_name, codigo_cliente, tax_regime, municipality_name, state");
     if (regimeTributario) query = query.eq("tax_regime", regimeTributario);
     if (cidade) query = query.ilike("municipality_name", `%${cidade}%`);
     const { data } = await query.order("legal_name").limit(100);

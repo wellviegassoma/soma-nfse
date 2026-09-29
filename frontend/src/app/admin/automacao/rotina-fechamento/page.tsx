@@ -47,7 +47,7 @@ export default async function RotinaFechamentoPage(
 
   const [{ data: companies }, { data: certs }, execIssRj, execConferirPetropolis, execEmitirPetropolis] =
     await Promise.all([
-      supabase.from("companies").select("id, legal_name, trade_name"),
+      supabase.from("companies").select("id, legal_name, trade_name, codigo_cliente"),
       supabase.from("certificates").select("company_id"),
       buscarUltimaExecucao(supabase, "iss_rj", competencia),
       buscarUltimaExecucao(supabase, "iss_petropolis_conferir", competencia),
@@ -57,7 +57,10 @@ export default async function RotinaFechamentoPage(
   const idsComCertificado = new Set((certs ?? []).map((c) => c.company_id));
   const empresasComCertificado = (companies ?? [])
     .filter((c) => idsComCertificado.has(c.id))
-    .map((c) => ({ id: c.id, nome: c.trade_name || c.legal_name }));
+    .map((c) => ({
+      id: c.id,
+      nome: c.codigo_cliente ? `#${c.codigo_cliente} ${c.trade_name || c.legal_name}` : c.trade_name || c.legal_name,
+    }));
 
   const itensConferenciaPetropolis = execConferirPetropolis
     ? await buscarItensExecucao(supabase, execConferirPetropolis.id)

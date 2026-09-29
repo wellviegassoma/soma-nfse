@@ -11,13 +11,13 @@ export default async function EmissaoNotasPage() {
 
   const { data: companies } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name")
+    .select("id, legal_name, trade_name, codigo_cliente")
     .eq("ativa", true)
     .order("legal_name", { ascending: true });
 
   const empresas = (companies ?? []).map((c) => ({
     id: c.id,
-    nome: c.trade_name || c.legal_name,
+    nome: c.codigo_cliente ? `#${c.codigo_cliente} ${c.trade_name || c.legal_name}` : c.trade_name || c.legal_name,
   }));
 
   return (

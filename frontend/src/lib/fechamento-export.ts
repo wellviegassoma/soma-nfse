@@ -1,5 +1,6 @@
 import "server-only";
 import JSZip from "jszip";
+import ExcelJS from "exceljs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { documentoEmpresa } from "@/lib/formatters";
@@ -161,4 +162,117 @@ export async function gerarZipDaEmpresa(
   }
 
   return zip.generateAsync({ type: "uint8array" });
+}
+
+type NotaPlanilha = {
+  numero: string | null;
+  chave_acesso: string | null;
+  direcao: "saida" | "entrada" | "indefinida";
+  cancelada: boolean;
+  motivo_cancelamento: string | null;
+  data_emissao: string | null;
+  competencia: string | null;
+  bate_competencia: boolean;
+  prestador_cnpj: string | null;
+  prestador_nome: string | null;
+  tomador_cnpj: string | null;
+  tomador_nome: string | null;
+  descricao_servico: string | null;
+  local_incidencia: string | null;
+  codigo_trib_nacional: string | null;
+  codigo_nbs: string | null;
+  aliquota_issqn: number | null;
+  valor_servico: number | null;
+  valor_issqn: number | null;
+  valor_pis: number | null;
+  valor_cofins: number | null;
+  valor_ret_cp: number | null;
+  valor_ret_irrf: number | null;
+  valor_ret_csll: number | null;
+};
+
+const DIRECAO_LABELS: Record<NotaPlanilha["direcao"], string> = {
+  saida: "Saída",
+  entrada: "Entrada",
+  indefinida: "Não classificada",
+};
+
+/**
+ * Planilha com todas as notas de UMA empresa na competência pedida — usada
+ * pelo botão "Baixar planilha" na tela de fechamento por empresa.
+ */
+export async function gerarPlanilhaNotasDaEmpresa(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any, any, any>,
+  companyId: string,
+  competencia: string,
+): Promise<Buffer> {
+  const notas = await buscarTudoPaginado<NotaPlanilha>((from, to) =>
+    supabase
+      .from("notas_distribuidas")
+      .select(
+        "numero, chave_acesso, direcao, cancelada, motivo_cancelamento, data_emissao, competencia, bate_competencia, prestador_cnpj, prestador_nome, tomador_cnpj, tomador_nome, descricao_servico, local_incidencia, codigo_trib_nacional, codigo_nbs, aliquota_issqn, valor_servico, valor_issqn, valor_pis, valor_cofins, valor_ret_cp, valor_ret_irrf, valor_ret_csll",
+      )
+      .eq("company_id", companyId)
+      .gte("competencia", `${competencia}-01`)
+      .lt("competencia", primeiroDiaMesSeguinte(competencia))
+      .order("data_emissao", { ascending: true })
+      .range(from, to),
+  );
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "SOMA Gestão";
+  workbook.created = new Date();
+
+  const ws = workbook.addWorksheet("Notas", { views: [{ state: "frozen", ySplit: 1 }] });
+  ws.columns = [
+    { header: "Número", key: "numero", width: 12 },
+    { header: "Direção", key: "direcao", width: 14 },
+    { header: "Cancelada", key: "cancelada", width: 10 },
+    { header: "Motivo cancelamento", key: "motivo_cancelamento", width: 24 },
+    { header: "Data emissão", key: "data_emissao", width: 18 },
+    { header: "Competência", key: "competencia", width: 12 },
+    { header: "Bate competência", key: "bate_competencia", width: 14 },
+    { header: "CNPJ prestador", key: "prestador_cnpj", width: 18 },
+    { header: "Prestador", key: "prestador_nome", width: 28 },
+    { header: "CNPJ/CPF tomador", key: "tomador_cnpj", width: 18 },
+    { header: "Tomador", key: "tomador_nome", width: 28 },
+    { header: "Descrição do serviço", key: "descricao_servico", width: 40 },
+    { header: "Local de incidência", key: "local_incidencia", width: 16 },
+    { header: "Código trib. nacional", key: "codigo_trib_nacional", width: 16 },
+    { header: "Código NBS", key: "codigo_nbs", width: 12 },
+    { header: "Alíquota ISSQN", key: "aliquota_issqn", width: 12, style: { numFmt: "0.00%" } },
+    { header: "Valor serviço", key: "valor_servico", width: 14, style: { numFmt: "R$ #,##0.00" } },
+    { header: "Valor ISSQN", key: "valor_issqn", width: 14, style: { numFmt: "R$ #,##0.00" } },
+    { header: "Valor PIS", key: "valor_pis", width: 12, style: { numFmt: "R$ #,##0.00" } },
+    { header: "Valor COFINS", key: "valor_cofins", width: 12, style: { numFmt: "R$ #,##0.00" } },
+    { header: "Retenção CP", key: "valor_ret_cp", width: 12, style: { numFmt: "R$ #,##0.00" } },
+    { header: "Retenção IRRF", key: "valor_ret_irrf", width: 12, style: { numFmt: "R$ #,##0.00" } },
+    { header: "Retenção CSLL", key: "valor_ret_csll", width: 12, style: { numFmt: "R$ #,##0.00" } },
+    { header: "Chave de acesso", key: "chave_acesso", width: 48 },
+  ];
+
+  const headerRow = ws.getRow(1);
+  headerRow.eachCell((cell) => {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1D4ED8" } };
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+  });
+  headerRow.height = 26;
+
+  for (const n of notas) {
+    ws.addRow({
+      ...n,
+      direcao: DIRECAO_LABELS[n.direcao],
+      cancelada: n.cancelada ? "Sim" : "Não",
+      bate_competencia: n.bate_competencia ? "Sim" : "Não",
+      data_emissao: n.data_emissao ? new Date(n.data_emissao).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
+      aliquota_issqn: n.aliquota_issqn != null ? n.aliquota_issqn / 100 : null,
+    });
+  }
+
+  ws.autoFilter = { from: "A1", to: `X${notas.length + 1}` };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }

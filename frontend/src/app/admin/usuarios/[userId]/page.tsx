@@ -31,7 +31,7 @@ export default async function EditarUsuarioPage(
 
   const { data: linhas } = await admin
     .from("usuario_permissoes")
-    .select("permissao, company_id, company:companies(id, legal_name, trade_name)")
+    .select("permissao, company_id, company:companies(id, legal_name, trade_name, codigo_cliente)")
     .eq("user_id", userId);
 
   const permissoesGlobaisIniciais: Permissao[] = [];
@@ -39,7 +39,7 @@ export default async function EditarUsuarioPage(
   for (const linha of (linhas ?? []) as unknown as {
     permissao: Permissao;
     company_id: string | null;
-    company: { id: string; legal_name: string; trade_name: string | null } | null;
+    company: { id: string; legal_name: string; trade_name: string | null; codigo_cliente: string | null } | null;
   }[]) {
     if (!linha.company_id) {
       permissoesGlobaisIniciais.push(linha.permissao);
@@ -48,7 +48,9 @@ export default async function EditarUsuarioPage(
     if (!empresasMap.has(linha.company_id)) {
       empresasMap.set(linha.company_id, {
         companyId: linha.company_id,
-        nome: linha.company?.trade_name || linha.company?.legal_name || "Empresa",
+        nome: linha.company?.codigo_cliente
+          ? `#${linha.company.codigo_cliente} ${linha.company.trade_name || linha.company.legal_name}`
+          : linha.company?.trade_name || linha.company?.legal_name || "Empresa",
         permissoes: new Set(),
       });
     }
@@ -57,11 +59,11 @@ export default async function EditarUsuarioPage(
 
   const { data: companies } = await admin
     .from("companies")
-    .select("id, legal_name, trade_name")
+    .select("id, legal_name, trade_name, codigo_cliente")
     .order("legal_name", { ascending: true });
   const empresasDisponiveis = (companies ?? []).map((c) => ({
     id: c.id,
-    nome: c.trade_name || c.legal_name,
+    nome: c.codigo_cliente ? `#${c.codigo_cliente} ${c.trade_name || c.legal_name}` : c.trade_name || c.legal_name,
   }));
 
   return (

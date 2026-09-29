@@ -14,7 +14,7 @@ export default async function LegalizacaoCofreSenhasPage(
   const supabase = await createClient();
 
   const [{ data: company }, { data: senhas }] = await Promise.all([
-    supabase.from("companies").select("id, legal_name, trade_name").eq("id", companyId).single(),
+    supabase.from("companies").select("id, legal_name, trade_name, codigo_cliente").eq("id", companyId).single(),
     supabase
       .from("senhas_cofre")
       .select("id, servico, usuario, observacoes")
@@ -31,6 +31,9 @@ export default async function LegalizacaoCofreSenhasPage(
           ← Voltar
         </Link>
         <h1 className="mt-1 text-xl font-semibold text-foreground">
+          {company.codigo_cliente && (
+            <span className="mr-1.5 text-foreground/40">#{company.codigo_cliente}</span>
+          )}
           {company.trade_name || company.legal_name}
         </h1>
         <p className="text-sm text-foreground/60">
