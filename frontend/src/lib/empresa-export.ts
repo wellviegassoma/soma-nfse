@@ -4,6 +4,82 @@ import type { Company } from "@/lib/types";
 import { TAX_REGIME_LABELS, ISS_TIPO_LABELS } from "@/lib/types";
 import { formatarCnpj, formatarCpf, formatarPercentual, formatarMoeda } from "@/lib/formatters";
 
+const COR_MARCA_LISTA = "FF1D4ED8";
+const COR_CABECALHO_TEXTO_LISTA = "FFFFFFFF";
+
+type EmpresaLista = {
+  codigo_cliente: string | null;
+  legal_name: string;
+  trade_name: string | null;
+  person_type: "PF" | "PJ";
+  cnpj: string | null;
+  cpf: string | null;
+  ativa: boolean;
+  tax_regime: Company["tax_regime"];
+  cnae: string | null;
+  municipality_name: string | null;
+  state: string | null;
+  municipal_registration: string | null;
+  data_abertura: string | null;
+  created_at: string;
+};
+
+export async function gerarExcelListaEmpresas(empresas: EmpresaLista[]): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "SOMA Gestão";
+  workbook.created = new Date();
+
+  const ws = workbook.addWorksheet("Empresas", { views: [{ state: "frozen", ySplit: 1 }] });
+  ws.columns = [
+    { header: "Código", key: "codigo", width: 10 },
+    { header: "Razão social", key: "legalName", width: 40 },
+    { header: "Nome fantasia", key: "tradeName", width: 32 },
+    { header: "Tipo", key: "personType", width: 10 },
+    { header: "CNPJ", key: "cnpj", width: 18 },
+    { header: "CPF", key: "cpf", width: 16 },
+    { header: "Situação", key: "situacao", width: 10 },
+    { header: "Regime tributário", key: "taxRegime", width: 20 },
+    { header: "CNAE", key: "cnae", width: 12 },
+    { header: "Município", key: "municipio", width: 22 },
+    { header: "UF", key: "uf", width: 6 },
+    { header: "Inscrição municipal", key: "inscricaoMunicipal", width: 18 },
+    { header: "Data de abertura", key: "dataAbertura", width: 16 },
+    { header: "Cadastrada em", key: "createdAt", width: 16 },
+  ];
+
+  const headerRow = ws.getRow(1);
+  headerRow.eachCell((cell) => {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COR_MARCA_LISTA } };
+    cell.font = { bold: true, color: { argb: COR_CABECALHO_TEXTO_LISTA } };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+  });
+  headerRow.height = 26;
+
+  for (const e of empresas) {
+    ws.addRow({
+      codigo: e.codigo_cliente ?? "",
+      legalName: e.legal_name,
+      tradeName: e.trade_name ?? "",
+      personType: e.person_type === "PF" ? "Pessoa física" : "Pessoa jurídica",
+      cnpj: formatarCnpj(e.cnpj) ?? "",
+      cpf: formatarCpf(e.cpf) ?? "",
+      situacao: e.ativa ? "Ativa" : "Inativa",
+      taxRegime: e.tax_regime ? TAX_REGIME_LABELS[e.tax_regime] : "",
+      cnae: e.cnae ?? "",
+      municipio: e.municipality_name ?? "",
+      uf: e.state ?? "",
+      inscricaoMunicipal: e.municipal_registration ?? "",
+      dataAbertura: e.data_abertura ?? "",
+      createdAt: new Date(e.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+    });
+  }
+
+  ws.autoFilter = { from: "A1", to: `N${empresas.length + 1}` };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
 const COR_MARCA = "FF1D4ED8";
 const COR_CABECALHO_TEXTO = "FFFFFFFF";
 const COR_CINZA_CLARO = "FFF3F4F6";

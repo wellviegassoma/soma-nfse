@@ -48,6 +48,14 @@ export default async function AdminEmpresasPage(props: PageProps<"/admin/empresa
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <a
+            href={`/admin/empresas/planilha?${new URLSearchParams({
+              ...(q ? { q } : {}),
+              ...(mostrarInativas ? { inativas: "1" } : {}),
+            }).toString()}`}
+          >
+            <Button variant="secondary">Baixar planilha</Button>
+          </a>
           <Link href="/admin/empresas/importar">
             <Button variant="secondary">Importar planilha</Button>
           </Link>
