@@ -50,7 +50,7 @@ export default async function ProcessosPage(
       "id, tipo_processo, nome, fluxo_nome, company_id, data_inicio, prazo_final, data_conclusao, responsavel:profiles!legalizacao_processos_responsavel_id_fkey(id, full_name)",
     )
     .is("arquivado_em", null)
-    .order("prazo_final", { ascending: true, nullsFirst: false });
+    .order("created_at", { ascending: false });
 
   if (q) query = query.ilike("nome", `%${q.replace(/[,()]/g, " ").trim()}%`);
   if (tipo) query = query.eq("tipo_processo", tipo);
