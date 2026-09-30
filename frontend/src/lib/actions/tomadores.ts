@@ -8,6 +8,7 @@ import { requireUser, getCompanyAccess, isSomaStaff } from "@/lib/auth";
 import { uuidLike } from "@/lib/zod-helpers";
 import { extrairTomadorDeXml } from "@/lib/xml-tomador";
 import { logAudit } from "@/lib/audit";
+import { buscarDadosCep, type DadosCep } from "@/lib/cep-lookup";
 import type { ActionState } from "@/lib/actions/auth";
 
 async function requireCompanyMember(companyId: string) {
@@ -15,6 +16,11 @@ async function requireCompanyMember(companyId: string) {
   if (await isSomaStaff()) return;
   const access = await getCompanyAccess(companyId);
   if (!access) throw new Error("Sem acesso a essa empresa.");
+}
+
+export async function buscarCepAction(cep: string): Promise<{ data: DadosCep } | { error: string }> {
+  await requireUser();
+  return buscarDadosCep(cep.replace(/\D/g, ""));
 }
 
 const customerSchema = z.object({

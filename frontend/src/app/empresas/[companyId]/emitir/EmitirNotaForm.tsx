@@ -115,7 +115,11 @@ export function EmitirNotaForm({
         {state?.error && <Alert tone="danger">{state.error}</Alert>}
 
         <Card className="divide-y divide-border p-0">
-          <Row label="Tomador" value={selectedCustomer?.name ?? "—"} />
+          <Row
+            label="Tomador"
+            value={selectedCustomer?.name ?? "—"}
+            editHref={customerId ? `${base}/tomadores/${customerId}` : undefined}
+          />
           <Row label="Serviço" value={selectedService?.name ?? "—"} />
           <Row label="Valor" value={formatMoney(Number(amount.replace(",", ".")) || 0)} />
           <Row label="Descrição" value={description || "—"} />
@@ -155,6 +159,15 @@ export function EmitirNotaForm({
           ))}
         </Select>
       </Field>
+
+      {customerId && (
+        <Link
+          href={`${base}/tomadores/${customerId}`}
+          className="-mt-2 text-xs font-medium text-brand hover:underline"
+        >
+          Editar cadastro deste tomador
+        </Link>
+      )}
 
       {customers.length === 0 &&
         (basePath ? (
@@ -243,11 +256,18 @@ export function EmitirNotaForm({
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, editHref }: { label: string; value: string; editHref?: string }) {
   return (
     <div className="flex items-center justify-between px-4 py-3 text-sm">
       <span className="text-foreground/50">{label}</span>
-      <span className="font-medium text-foreground">{value}</span>
+      <span className="flex items-center gap-2">
+        <span className="font-medium text-foreground">{value}</span>
+        {editHref && (
+          <Link href={editHref} className="text-xs font-medium text-brand hover:underline">
+            editar
+          </Link>
+        )}
+      </span>
     </div>
   );
 }

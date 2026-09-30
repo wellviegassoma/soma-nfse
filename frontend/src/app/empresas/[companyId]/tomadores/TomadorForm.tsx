@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
-import { saveCustomer } from "@/lib/actions/tomadores";
+import { saveCustomer, buscarCepAction } from "@/lib/actions/tomadores";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -26,6 +26,36 @@ export function TomadorForm({
 }) {
   const [state, formAction, pending] = useActionState(saveCustomer, undefined);
   const [type, setType] = useState(customer?.type ?? "PF");
+
+  const [zipCode, setZipCode] = useState(customer?.zip_code ?? "");
+  const [address, setAddress] = useState(customer?.address ?? "");
+  const [district, setDistrict] = useState(customer?.district ?? "");
+  const [city, setCity] = useState(customer?.city ?? "");
+  const [ufEndereco, setUfEndereco] = useState(customer?.state ?? "");
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [erroCep, setErroCep] = useState<string | null>(null);
+
+  const zipCodeDigits = zipCode.replace(/\D/g, "");
+
+  async function handleBuscarCep() {
+    setErroCep(null);
+    if (zipCodeDigits.length !== 8) {
+      setErroCep("Digite um CEP com 8 dígitos antes de buscar.");
+      return;
+    }
+    setBuscandoCep(true);
+    const resultado = await buscarCepAction(zipCodeDigits);
+    setBuscandoCep(false);
+    if ("error" in resultado) {
+      setErroCep(resultado.error);
+      return;
+    }
+    const dados = resultado.data;
+    if (dados.logradouro) setAddress(dados.logradouro);
+    if (dados.bairro) setDistrict(dados.bairro);
+    if (dados.cidade) setCity(dados.cidade);
+    if (dados.uf) setUfEndereco(dados.uf);
+  }
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
@@ -65,14 +95,31 @@ export function TomadorForm({
           Endereço (opcional)
         </summary>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="CEP" htmlFor="zipCode">
-            <Input id="zipCode" name="zipCode" defaultValue={customer?.zip_code ?? ""} />
+          <Field label="CEP" htmlFor="zipCode" hint="Busca cidade/bairro/endereço sozinho">
+            <div className="flex gap-2">
+              <Input
+                id="zipCode"
+                name="zipCode"
+                value={zipCode}
+                onChange={(e) => setZipCode(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                loading={buscandoCep}
+                disabled={zipCodeDigits.length !== 8}
+                onClick={handleBuscarCep}
+              >
+                Buscar
+              </Button>
+            </div>
+            {erroCep && <p className="mt-1.5 text-xs text-danger">{erroCep}</p>}
           </Field>
           <Field label="Cidade" htmlFor="city">
-            <Input id="city" name="city" defaultValue={customer?.city ?? ""} />
+            <Input id="city" name="city" value={city} onChange={(e) => setCity(e.target.value)} />
           </Field>
           <Field label="Endereço" htmlFor="address">
-            <Input id="address" name="address" defaultValue={customer?.address ?? ""} />
+            <Input id="address" name="address" value={address} onChange={(e) => setAddress(e.target.value)} />
           </Field>
           <Field label="Número" htmlFor="number">
             <Input id="number" name="number" defaultValue={customer?.number ?? ""} />
@@ -81,10 +128,21 @@ export function TomadorForm({
             <Input id="complement" name="complement" defaultValue={customer?.complement ?? ""} />
           </Field>
           <Field label="Bairro" htmlFor="district">
-            <Input id="district" name="district" defaultValue={customer?.district ?? ""} />
+            <Input
+              id="district"
+              name="district"
+              value={district}
+              onChange={(e) => setDistrict(e.target.value)}
+            />
           </Field>
           <Field label="UF" htmlFor="state">
-            <Input id="state" name="state" maxLength={2} defaultValue={customer?.state ?? ""} />
+            <Input
+              id="state"
+              name="state"
+              maxLength={2}
+              value={ufEndereco}
+              onChange={(e) => setUfEndereco(e.target.value.toUpperCase())}
+            />
           </Field>
         </div>
       </details>
