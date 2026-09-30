@@ -29,6 +29,7 @@ export async function GET(request: Request) {
     undefined,
     undefined,
     { offset, limite: TAMANHO_LOTE },
+    true, // forcarDesdeZero — ver comentário em lib/sync-notas.ts sobre a lacuna do checkpoint
   );
 
   if (temMais) {

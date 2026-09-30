@@ -36,6 +36,17 @@ const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
 // errado, sem precisar reverter esse código de novo). O dedup por
 // chave_acesso (ignoreDuplicates no upsert) torna reprocessar notas já
 // vistas seguro e barato dos dois jeitos.
+//
+// Atualização: o checkpoint em si mostrou ser a fonte de uma lacuna
+// pior que o problema que resolvia — o Sefin pode "distribuir" um
+// documento com NSU menor que outro já visto antes, e uma vez que o
+// checkpoint passa daquele ponto ele nunca mais é revisitado (achado
+// confirmado ao vivo: "Buscar últimos 12 meses" achou o dobro de notas
+// de um mês que o checkpoint já dava como sincronizado). Por isso o
+// cron diário (`syncAllCompanies` chamado por `forcarDesdeZero=true`
+// em `app/api/cron/sync-notas/route.ts`) não usa mais o checkpoint —
+// só o botão individual "Buscar agora" (sem esse parâmetro) ainda usa,
+// pra uma checagem manual rápida entre uma execução do cron e outra.
 const MAX_LOTES_BUSCA = 150;
 
 // Timeout padrão do fetch ao backend — usado por syncAllCompanies
@@ -316,6 +327,22 @@ export type ResultadoLoteSincronizacao = {
 // produção.
 const LIMITE_TEMPO_LOTE_MS = 240_000;
 
+// O checkpoint (ultimo_nsu_distribuicao) não é confiável: o Sefin
+// Nacional pode "distribuir" um documento com NSU menor do que outro já
+// visto antes (nota emitida em setembro cujo NSU só é atribuído depois
+// de notas de outubro, por exemplo) — uma vez que o checkpoint passa
+// daquele ponto, a busca incremental nunca mais volta lá. Confirmado ao
+// vivo: "Buscar últimos 12 meses" achou o dobro de notas de um mês que
+// o "Buscar agora" (incremental) já tinha dado como sincronizado. Por
+// isso o cron diário sempre zera o NSU (forcarDesdeZero) em vez de usar
+// o checkpoint — mais lento (varre o histórico inteiro de cada empresa
+// toda vez, não só o mês corrente, porque a varredura não pára cedo por
+// data), mas sem essa lacuna. Precisa do mesmo timeout generoso por
+// empresa que o botão individual usa (TIMEOUT_BUSCA_INDIVIDUAL_MS em
+// actions/fechamento.ts) — os 45s do checkpoint rápido não bastam pra
+// uma empresa com histórico grande varrer do zero.
+const TIMEOUT_LOTE_ZERO_MS = 240_000;
+
 // Paginação opcional: sem ela, processa TODAS as empresas na mesma
 // chamada (uso antigo). Com ela, processa só a fatia pedida e informa se
 // ainda sobra empresa — usado pelo cron pra se encadear em lotes, sem
@@ -327,6 +354,7 @@ export async function syncAllCompanies(
   competencia?: string, // "YYYY-MM" — se omitido, usa o mês corrente
   mesesAnteriores?: number, // >0 = busca de histórico pra todas
   paginacao?: { offset: number; limite: number },
+  forcarDesdeZero?: boolean, // true = ignora o checkpoint em toda empresa do lote — ver comentário em TIMEOUT_LOTE_ZERO_MS
 ): Promise<ResultadoLoteSincronizacao> {
   let query = admin
     .from("companies")
@@ -346,7 +374,14 @@ export async function syncAllCompanies(
   let processadas = 0;
   for (const company of companies ?? []) {
     resultados.push(
-      await syncOneCompany(admin, company as CompanyParaSincronizar, competencia, mesesAnteriores),
+      await syncOneCompany(
+        admin,
+        company as CompanyParaSincronizar,
+        competencia,
+        mesesAnteriores,
+        forcarDesdeZero,
+        forcarDesdeZero ? TIMEOUT_LOTE_ZERO_MS : undefined,
+      ),
     );
     processadas += 1;
     if (paginacao && Date.now() - inicio > LIMITE_TEMPO_LOTE_MS) break;
