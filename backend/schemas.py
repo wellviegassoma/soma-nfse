@@ -189,3 +189,7 @@ class GuiaIssPetropolisRequest(BaseModel):
     # empresa numa lista, como sempre foi.
     login: Optional[str] = None
     senha_md5: Optional[str] = None
+    # Código de CMC da empresa no site de Petrópolis (quando já
+    # descoberto) — pula a busca por CNPJ, que não filtra de verdade
+    # (ver docstring de _selecionar_empresa em petropolis_client.py).
+    cmc: Optional[str] = None

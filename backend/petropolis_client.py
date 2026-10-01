@@ -190,6 +190,29 @@ class ClientePetropolis:
                 "PETROPOLIS_LOGIN_ISS/PETROPOLIS_SENHA_MD5."
             )
 
+    def _selecionar_empresa_por_cmc(self, cmc: str, cnpj_esperado: str) -> None:
+        """
+        Troca direto pro CMC já conhecido (descoberto manualmente uma vez
+        — ver `companies.petropolis_cmc` no soma-nfse) e confere o CNPJ
+        devolvido antes de prosseguir. Essa troca só é aceita pelo site
+        enquanto a sessão ainda está no estado "lista completa" (logo
+        após o login, antes de qualquer troca) — depois da primeira troca
+        bem-sucedida a sessão "trava" no cliente ativo e uma segunda
+        troca para outro CMC é silenciosamente ignorada (confirmado ao
+        vivo em 2026-10-01). Por isso cada `ClientePetropolis` só serve
+        pra uma empresa por sessão quando usa login único do escritório.
+        """
+        resp = self._sessao.post(LOGIN_URL, data={"clientes": cmc}, timeout=30)
+        m = re.search(r"CMC\s*([\d]+)\s*-\s*([\d./-]+)", resp.text)
+        cnpj_devolvido = _somente_digitos(m.group(2)) if m else None
+        if cnpj_devolvido != _somente_digitos(cnpj_esperado):
+            raise ErroPetropolis(
+                f"CMC {cmc} não corresponde ao CNPJ esperado {cnpj_esperado} "
+                f"(o site devolveu CNPJ {cnpj_devolvido or 'nenhum'} — confira se o CMC "
+                "cadastrado em companies.petropolis_cmc ainda está correto, ou se a sessão "
+                "já estava travada noutra empresa)."
+            )
+
     def _selecionar_empresa_por_cnpj(self, cnpj: str) -> None:
         cnpj_limpo = _somente_digitos(cnpj)
         resp = self._sessao.get(
@@ -207,13 +230,23 @@ class ClientePetropolis:
         # sempre a primeira opção sem conferir arriscava selecionar a
         # empresa ERRADA e trazer o resumo/guia de outro cliente do
         # escritório, causando divergência falsa contra o faturamento do
-        # SOMA (achado real, empresa RRAD) — provavelmente pegando sempre
-        # a mesma empresa de value=1 pra qualquer CNPJ consultado. A
-        # busca de verdade nesse site parece depender de JS client-side
-        # (autocomplete "digite pra buscar"), não desse parâmetro de URL
-        # — a real correção provavelmente exige achar o endpoint/fluxo
-        # certo (pedir ajuda de quem tem acesso ao site pra inspecionar a
-        # aba Network do navegador digitando um CNPJ na busca).
+        # SOMA (achado real, empresa RRAD).
+        #
+        # Causa raiz confirmada ao vivo em 2026-10-01: o campo de busca é
+        # mesmo só JS client-side (um <select> populado inteiro no
+        # primeiro carregamento, sem busca de verdade no servidor) — não
+        # existe endpoint de busca por CNPJ pra consertar. O carregamento
+        # inicial de `iss-clientes_contador.php`, logo após o login e
+        # ANTES de qualquer troca de cliente nessa sessão, devolve a lista
+        # completa dos clientes do escritório (cada `<option>` já traz o
+        # CMC); a partir daí dá pra escolher qualquer um só uma vez — a
+        # sessão trava no cliente escolhido depois disso. Por isso a
+        # correção de verdade é `_selecionar_empresa_por_cmc`: descobrir o
+        # CMC de cada empresa manualmente uma vez (logando no site,
+        # abrindo essa página sem filtro, achando o nome na lista) e
+        # guardar em `companies.petropolis_cmc` — daí em diante nunca mais
+        # precisa desta busca quebrada pra ela. Esta função continua só
+        # como fallback pra quem ainda não teve o CMC descoberto.
         opcao_certa = next(
             (o for o in opcoes if cnpj_limpo in _somente_digitos(o.text_content())), None
         )
@@ -228,7 +261,9 @@ class ClientePetropolis:
             raise ErroPetropolis(
                 f"Não consegui encontrar a empresa de CNPJ {cnpj} na busca do ISS de "
                 "Petrópolis (a busca por CNPJ desse site não está filtrando como esperado) "
-                "— avise o suporte técnico em vez de seguir sem essa confirmação."
+                "— acesse o site com o login do escritório, logo após logar abra "
+                "iss-clientes_contador.php sem filtro nenhum (mostra a lista completa), "
+                "ache o CMC dessa empresa e cadastre em companies.petropolis_cmc."
             )
         empresa_id = opcao_certa.get("value")
         self._sessao.post(LOGIN_URL, data={"clientes": empresa_id}, timeout=30)
@@ -299,12 +334,15 @@ class ClientePetropolis:
         return {"valor_servicos": total_servicos, "valor_iss": total_iss}
 
     def buscar_guia_iss(
-        self, cnpj: str, competencia: str | None = None
+        self, cnpj: str, competencia: str | None = None, cmc: str | None = None
     ) -> tuple[bytes, dict[str, float]]:
         ano_mes_alvo = _ano_mes_da_competencia(competencia)
 
         if not self._login_proprio:
-            self._selecionar_empresa_por_cnpj(cnpj)
+            if cmc:
+                self._selecionar_empresa_por_cmc(cmc, cnpj)
+            else:
+                self._selecionar_empresa_por_cnpj(cnpj)
 
         resp = self._sessao.get(
             f"{BASE_URL}/iss-levantamento_debitos.php",
@@ -365,7 +403,7 @@ class ClientePetropolis:
         )
 
     def consolidar_e_buscar_guia(
-        self, cnpj: str, competencia: str | None = None
+        self, cnpj: str, competencia: str | None = None, cmc: str | None = None
     ) -> tuple[bytes, dict[str, float]]:
         """
         Consolida o período (ação real, ver `_consolidar_periodo`) e, na
@@ -375,6 +413,9 @@ class ClientePetropolis:
         """
         ano, mes = _ano_mes_da_competencia(competencia)
         if not self._login_proprio:
-            self._selecionar_empresa_por_cnpj(cnpj)
+            if cmc:
+                self._selecionar_empresa_por_cmc(cmc, cnpj)
+            else:
+                self._selecionar_empresa_por_cnpj(cnpj)
         self._consolidar_periodo(ano, mes)
-        return self.buscar_guia_iss(cnpj, competencia)
+        return self.buscar_guia_iss(cnpj, competencia, cmc)

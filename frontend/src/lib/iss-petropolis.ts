@@ -11,7 +11,12 @@ import type { ResultadoItem } from "@/lib/rotina-fechamento/registrar";
 export const IBGE_PETROPOLIS = "3303906";
 
 export type EmpresaPetropolis =
-  | { ok: true; cnpj: string; loginProprio: { login: string; senhaMd5: string } | null }
+  | {
+      ok: true;
+      cnpj: string;
+      loginProprio: { login: string; senhaMd5: string } | null;
+      cmc: string | null;
+    }
   | { ok: false; erro: string; status: number };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -23,7 +28,7 @@ export async function buscarEmpresaPetropolis(
 ): Promise<EmpresaPetropolis> {
   const { data: company } = await supabase
     .from("companies")
-    .select("cnpj, municipality_ibge_code")
+    .select("cnpj, municipality_ibge_code, petropolis_cmc")
     .eq("id", companyId)
     .single();
 
@@ -58,7 +63,7 @@ export async function buscarEmpresaPetropolis(
     loginProprio = { login: credencial.login, senhaMd5 };
   }
 
-  return { ok: true, cnpj: company.cnpj, loginProprio };
+  return { ok: true, cnpj: company.cnpj, loginProprio, cmc: company.petropolis_cmc };
 }
 
 export type ResumoPetropolis = { valorServicos: number; valorIss: number };
@@ -91,6 +96,7 @@ export async function conferirBaseCalculoPetropolis(
         competencia,
         login: empresa.loginProprio?.login,
         senha_md5: empresa.loginProprio?.senhaMd5,
+        cmc: empresa.cmc,
       }),
       cache: "no-store",
     });
@@ -148,6 +154,7 @@ export async function emitirGuiaIssPetropolis(
         competencia,
         login: empresa.loginProprio?.login,
         senha_md5: empresa.loginProprio?.senhaMd5,
+        cmc: empresa.cmc,
       }),
       cache: "no-store",
     });
