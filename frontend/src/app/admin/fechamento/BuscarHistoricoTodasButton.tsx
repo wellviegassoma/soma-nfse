@@ -50,7 +50,23 @@ export function BuscarHistoricoTodasButton({ empresas }: { empresas: Empresa[] }
 
       const formData = new FormData();
       formData.set("companyId", empresa.id);
-      const resposta = await buscarHistoricoAgora(undefined, formData);
+
+      // try/catch por empresa: uma falha de rede transitória (ex.: fetch
+      // falhou no meio da chamada) não pode derrubar a função inteira e
+      // travar a tela pra sempre no meio da lista — sem isso, um único
+      // erro parava o loop silenciosamente, sem nunca chegar no resumo
+      // final nem liberar o botão.
+      let resposta: Awaited<ReturnType<typeof buscarHistoricoAgora>>;
+      try {
+        resposta = await buscarHistoricoAgora(undefined, formData);
+      } catch (e) {
+        erros += 1;
+        errosDetalhe.push({
+          nome: empresa.nome,
+          erro: e instanceof Error ? e.message : "Falha de rede ao chamar o servidor.",
+        });
+        continue;
+      }
 
       if (resposta?.resultado?.status === "sucesso") {
         sucessos += 1;

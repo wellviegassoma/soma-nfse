@@ -49,7 +49,22 @@ export function BuscarTodasButton({ competencia, empresas }: { competencia: stri
       const formData = new FormData();
       formData.set("companyId", empresa.id);
       formData.set("competencia", competencia);
-      const resposta = await buscarAgora(undefined, formData);
+
+      // try/catch por empresa — ver comentário equivalente em
+      // BuscarHistoricoTodasButton.tsx: sem isso, uma falha de rede
+      // transitória numa chamada derrubava a função inteira e travava a
+      // tela pra sempre no meio da lista, sem nunca soltar o botão.
+      let resposta: Awaited<ReturnType<typeof buscarAgora>>;
+      try {
+        resposta = await buscarAgora(undefined, formData);
+      } catch (e) {
+        erros += 1;
+        errosDetalhe.push({
+          nome: empresa.nome,
+          erro: e instanceof Error ? e.message : "Falha de rede ao chamar o servidor.",
+        });
+        continue;
+      }
 
       if (resposta?.resultado?.status === "sucesso") {
         sucessos += 1;
