@@ -49,8 +49,17 @@ export function ExportarZipButton({ competencia }: { competencia: string }) {
 
       let sucesso = false;
       for (let tentativa = 1; tentativa <= TENTATIVAS_POR_EMPRESA && !sucesso; tentativa++) {
-        const resposta = await processarEmpresaExportacao(exportacaoId, empresas[i].id, competencia);
-        sucesso = !("error" in resposta);
+        // try/catch aqui — o retry da Server Action só cobre erro de
+        // negócio (ex.: falha gerando o PDF); uma falha de rede na própria
+        // chamada (fetch falhou) joga uma exceção que, sem isso, escapa do
+        // loop inteiro e trava a tela pra sempre no meio da exportação —
+        // mesmo bug já corrigido em BuscarHistoricoTodasButton.tsx.
+        try {
+          const resposta = await processarEmpresaExportacao(exportacaoId, empresas[i].id, competencia);
+          sucesso = !("error" in resposta);
+        } catch {
+          sucesso = false;
+        }
       }
       if (!sucesso) falhasNaGeracao.push(empresas[i].id);
     }
