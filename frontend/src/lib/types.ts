@@ -70,6 +70,7 @@ export type Company = {
   tax_regime: TaxRegime | null;
   cnae: string | null;
   municipality_ibge_code: string | null;
+  petropolis_cmc: string | null;
   municipality_name: string | null;
   state: string | null;
   address_street: string | null;

@@ -18,7 +18,7 @@ export default async function AdminCompanyFiscalPage(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, organization_id, person_type, cnpj, cpf, legal_name, trade_name, codigo_cliente, created_at, municipal_registration, data_abertura, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais, ativa, data_encerramento_soma",
+      "id, organization_id, person_type, cnpj, cpf, legal_name, trade_name, codigo_cliente, created_at, municipal_registration, data_abertura, tax_regime, cnae, municipality_ibge_code, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais, ativa, data_encerramento_soma",
     )
     .eq("id", companyId)
     .single();

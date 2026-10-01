@@ -18,6 +18,11 @@ import {
 } from "@/lib/types";
 import { MunicipioIbgeField } from "./MunicipioIbgeField";
 
+// Mesmo valor de IBGE_PETROPOLIS em lib/iss-petropolis.ts — não importado
+// direto porque aquele arquivo é "server-only" (não pode entrar num
+// componente client).
+const IBGE_PETROPOLIS = "3303906";
+
 export function FiscalForm({ company }: { company: Company }) {
   const [state, formAction, pending] = useActionState(
     updateCompanyFiscal,
@@ -75,6 +80,19 @@ export function FiscalForm({ company }: { company: Company }) {
             <Input id="cnae" name="cnae" defaultValue={company.cnae ?? ""} />
           </Field>
           <MunicipioIbgeField defaultValue={company.municipality_ibge_code ?? ""} />
+          {company.municipality_ibge_code === IBGE_PETROPOLIS && (
+            <Field
+              label="CMC no ISS de Petrópolis"
+              htmlFor="petropolisCmc"
+              hint="Código Municipal do Contribuinte no site da prefeitura — a busca por CNPJ de lá não funciona, então esse código precisa ser descoberto na mão uma vez (logando com o login do escritório)."
+            >
+              <Input
+                id="petropolisCmc"
+                name="petropolisCmc"
+                defaultValue={company.petropolis_cmc ?? ""}
+              />
+            </Field>
+          )}
           <Field label="Regime especial de tributação" htmlFor="regimeEspecialTributacao">
             <Select
               id="regimeEspecialTributacao"

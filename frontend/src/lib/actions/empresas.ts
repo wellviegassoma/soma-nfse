@@ -431,6 +431,7 @@ const updateFiscalSchema = z.object({
   taxRegime: z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "IMUNE_ISENTO"]).optional(),
   cnae: z.string().trim().optional(),
   municipalityIbgeCode: z.string().trim().optional(),
+  petropolisCmc: z.string().trim().optional(),
   nfseAmbiente: z.enum(["HOMOLOGACAO", "PRODUCAO"]),
   dpsSeries: z.string().trim().min(1, "Informe a série."),
   dpsNextNumber: z.coerce.number().int().min(1, "Precisa ser maior que zero."),
@@ -458,6 +459,7 @@ export async function updateCompanyFiscal(
     taxRegime: formData.get("taxRegime") || undefined,
     cnae: formData.get("cnae") || undefined,
     municipalityIbgeCode: formData.get("municipalityIbgeCode") || undefined,
+    petropolisCmc: formData.get("petropolisCmc") || undefined,
     nfseAmbiente: formData.get("nfseAmbiente"),
     dpsSeries: formData.get("dpsSeries"),
     dpsNextNumber: formData.get("dpsNextNumber"),
@@ -481,7 +483,7 @@ export async function updateCompanyFiscal(
   const { data: before } = await supabase
     .from("companies")
     .select(
-      "municipal_registration, data_abertura, tax_regime, cnae, municipality_ibge_code, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
+      "municipal_registration, data_abertura, tax_regime, cnae, municipality_ibge_code, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
     )
     .eq("id", companyId)
     .single();
@@ -492,6 +494,7 @@ export async function updateCompanyFiscal(
     tax_regime: rest.taxRegime || null,
     cnae: rest.cnae || null,
     municipality_ibge_code: rest.municipalityIbgeCode || null,
+    petropolis_cmc: rest.petropolisCmc || null,
     nfse_ambiente: rest.nfseAmbiente,
     dps_series: rest.dpsSeries,
     dps_next_number: rest.dpsNextNumber,
