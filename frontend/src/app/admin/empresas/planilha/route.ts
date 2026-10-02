@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff } from "@/lib/auth";
 import { gerarExcelListaEmpresas } from "@/lib/empresa-export";
+import { faturamentoDoMesPorEmpresa } from "@/lib/faturamento-mes-empresas";
+import { mesCorrenteBrasilia } from "@/lib/competencia";
 
 export async function GET(request: Request) {
   await requireSomaStaff();
@@ -14,7 +16,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("companies")
     .select(
-      "codigo_cliente, legal_name, trade_name, person_type, cnpj, cpf, ativa, tax_regime, cnae, municipality_name, municipality_ibge_code, state, address_street, address_number, address_complement, address_neighborhood, address_zip, municipal_registration, data_abertura, regime_especial_tributacao, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_tipo, iss_aliquota_padrao, iss_valor_fixo_profissional, iss_quantidade_profissionais, nfse_ambiente, dps_series, dps_next_number, allow_retroactive_emission, created_at, certificates(expires_at)",
+      "id, codigo_cliente, legal_name, trade_name, person_type, cnpj, cpf, ativa, tax_regime, cnae, municipality_name, municipality_ibge_code, state, address_street, address_number, address_complement, address_neighborhood, address_zip, municipal_registration, data_abertura, regime_especial_tributacao, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_tipo, iss_aliquota_padrao, iss_valor_fixo_profissional, iss_quantidade_profissionais, nfse_ambiente, dps_series, dps_next_number, allow_retroactive_emission, created_at, certificates(expires_at)",
     )
     .order("legal_name", { ascending: true });
 
@@ -35,7 +37,16 @@ export async function GET(request: Request) {
   const { data: empresas, error } = await query;
   if (error) return NextResponse.json({ error: "Não foi possível buscar as empresas." }, { status: 500 });
 
-  const buffer = await gerarExcelListaEmpresas(empresas ?? []);
+  // Mês anterior ao corrente (em Brasília) — o último fechado.
+  const [anoAtual, mesAtual] = mesCorrenteBrasilia().split("-").map(Number);
+  const competenciaAnterior =
+    mesAtual === 1 ? `${anoAtual - 1}-12` : `${anoAtual}-${String(mesAtual - 1).padStart(2, "0")}`;
+  const faturamentoPorEmpresa = await faturamentoDoMesPorEmpresa(supabase, competenciaAnterior);
+
+  const buffer = await gerarExcelListaEmpresas(empresas ?? [], {
+    competencia: competenciaAnterior,
+    faturamentoPorEmpresa,
+  });
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {

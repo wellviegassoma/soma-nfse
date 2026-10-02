@@ -2,12 +2,14 @@ import "server-only";
 import ExcelJS from "exceljs";
 import type { Company } from "@/lib/types";
 import { TAX_REGIME_LABELS, ISS_TIPO_LABELS, AMBIENTE_LABELS, REGIME_ESPECIAL_LABELS } from "@/lib/types";
+import { resolverIssMensal } from "@/lib/calculo-impostos";
 import { formatarCnpj, formatarCpf, formatarPercentual, formatarMoeda } from "@/lib/formatters";
 
 const COR_MARCA_LISTA = "FF1D4ED8";
 const COR_CABECALHO_TEXTO_LISTA = "FFFFFFFF";
 
 type EmpresaLista = {
+  id: string;
   codigo_cliente: string | null;
   legal_name: string;
   trade_name: string | null;
@@ -48,7 +50,33 @@ function situacaoCertificado(expiresAt: string | null): string {
   return new Date(expiresAt).getTime() < Date.now() ? "Vencido" : "Válido";
 }
 
-export async function gerarExcelListaEmpresas(empresas: EmpresaLista[]): Promise<Buffer> {
+export type FaturamentoMesLista = {
+  competencia: string; // "YYYY-MM"
+  faturamentoPorEmpresa: Map<string, number>;
+};
+
+// Lucro Presumido: ISS do mês pelo cadastro (percentual sobre a receita ou
+// valor fixo por profissional) — sem cadastro de alíquota/valor, a planilha
+// avisa em texto em vez de deixar vazio. Simples Nacional: 0 (ISS já vai
+// dentro do DAS). Outros regimes: vazio.
+function issPrevisto(e: EmpresaLista, receitaMes: number): number | null {
+  if (e.tax_regime === "SIMPLES_NACIONAL") return 0;
+  if (e.tax_regime !== "LUCRO_PRESUMIDO") return null;
+  return resolverIssMensal({
+    issTipo: e.iss_tipo,
+    aliquotaIss: e.iss_aliquota_padrao,
+    valorFixoProfissional: e.iss_valor_fixo_profissional,
+    quantidadeProfissionais: e.iss_quantidade_profissionais,
+    receitaMes,
+  });
+}
+
+export async function gerarExcelListaEmpresas(
+  empresas: EmpresaLista[],
+  faturamentoMes: FaturamentoMesLista,
+): Promise<Buffer> {
+  const [anoComp, mesComp] = faturamentoMes.competencia.split("-");
+  const rotuloComp = `${mesComp}/${anoComp}`;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "SOMA Gestão";
   workbook.created = new Date();
@@ -80,6 +108,8 @@ export async function gerarExcelListaEmpresas(empresas: EmpresaLista[]): Promise
     { header: "Alíquota de ISS", key: "issAliquota", width: 12, style: { numFmt: "0.00%" } },
     { header: "ISS fixo por profissional", key: "issValorFixo", width: 16, style: { numFmt: "R$ #,##0.00" } },
     { header: "Qtd. profissionais (ISS fixo)", key: "issQtdProfissionais", width: 16 },
+    { header: `Faturamento ${rotuloComp}`, key: "faturamentoMes", width: 18, style: { numFmt: "R$ #,##0.00" } },
+    { header: `ISS previsto ${rotuloComp}`, key: "issPrevisto", width: 16, style: { numFmt: "R$ #,##0.00" } },
     { header: "Ambiente NFS-e", key: "nfseAmbiente", width: 14 },
     { header: "Série DPS", key: "dpsSeries", width: 10 },
     { header: "Próximo número DPS", key: "dpsNextNumber", width: 14 },
@@ -125,6 +155,10 @@ export async function gerarExcelListaEmpresas(empresas: EmpresaLista[]): Promise
       issAliquota: e.iss_aliquota_padrao ?? null,
       issValorFixo: e.iss_valor_fixo_profissional ?? null,
       issQtdProfissionais: e.iss_quantidade_profissionais ?? "",
+      faturamentoMes: faturamentoMes.faturamentoPorEmpresa.get(e.id) ?? 0,
+      issPrevisto:
+        issPrevisto(e, faturamentoMes.faturamentoPorEmpresa.get(e.id) ?? 0) ??
+        (e.tax_regime === "LUCRO_PRESUMIDO" ? "Sem alíquota/ISS cadastrado" : ""),
       nfseAmbiente: AMBIENTE_LABELS[e.nfse_ambiente],
       dpsSeries: e.dps_series,
       dpsNextNumber: e.dps_next_number,
