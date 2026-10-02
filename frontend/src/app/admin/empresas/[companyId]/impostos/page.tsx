@@ -20,6 +20,7 @@ import {
   somarFaturamentoPorEquiparacao,
   somarRetencoes,
 } from "@/lib/faturamento";
+import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import {
   abaterRetencaoDoDas,
@@ -88,7 +89,7 @@ export default async function ImpostosPage(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, cnpj, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais, municipality_ibge_code",
+      "id, cnpj, codigo_cliente, trade_name, legal_name, data_abertura, tax_regime, sujeito_fator_r, irpj_csll_apuracao_mensal, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais, municipality_ibge_code",
     )
     .eq("id", companyId)
     .single();
@@ -428,6 +429,7 @@ export default async function ImpostosPage(
           companyId={companyId}
           competencia={competencia}
           bloqueios={declaracaoPgdas.bloqueios}
+          prefixoArquivo={prefixoArquivoEmpresa(company)}
         />
       </div>
     );

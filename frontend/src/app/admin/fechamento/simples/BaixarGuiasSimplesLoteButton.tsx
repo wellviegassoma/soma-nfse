@@ -4,19 +4,9 @@ import { useState } from "react";
 import JSZip from "jszip";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { competenciaParaArquivo } from "@/lib/nome-arquivo-empresa";
 
-type Empresa = { id: string; nome: string };
-
-function nomeArquivo(texto: string): string {
-  return (
-    texto
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .replace(/[^a-zA-Z0-9 _-]/g, "")
-      .trim()
-      .slice(0, 60) || "empresa"
-  );
-}
+type Empresa = { id: string; nome: string; prefixoArquivo: string };
 
 // Mesmo padrão de BaixarGuiasMitLoteButton.tsx, mas a rota do DAS
 // (.../simples/das/[periodoApuracao]) devolve o PDF cru
@@ -58,7 +48,7 @@ export function BaixarGuiasSimplesLoteButton({
           continue;
         }
         const blob = await resposta.blob();
-        zip.file(`${nomeArquivo(empresa.nome)}.pdf`, blob);
+        zip.file(`${empresa.prefixoArquivo} - DAS ${competenciaParaArquivo(competencia)}.pdf`, blob);
       } catch {
         falhasLocais.push(empresa.nome);
       }

@@ -10,6 +10,7 @@ import { FecharAntecipadoLoteButton } from "./FecharAntecipadoLoteButton";
 export type LinhaSimples = {
   id: string;
   nome: string;
+  prefixoArquivo: string;
   receitaMes: number;
   rbt12: number;
   rbt12Estimado: boolean;
@@ -74,7 +75,10 @@ export function SimplesLoteComSelecao({
     [linhas, selecionados],
   );
   const empresasParaBaixar = useMemo(
-    () => linhas.filter((l) => selecionados.has(l.id)).map((l) => ({ id: l.id, nome: l.nome })),
+    () =>
+      linhas
+        .filter((l) => selecionados.has(l.id))
+        .map((l) => ({ id: l.id, nome: l.nome, prefixoArquivo: l.prefixoArquivo })),
     [linhas, selecionados],
   );
   const empresasParaFechar = useMemo(

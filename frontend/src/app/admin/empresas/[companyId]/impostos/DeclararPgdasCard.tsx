@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { abrirPdfBase64 } from "@/lib/pdf-base64";
+import { competenciaParaArquivo } from "@/lib/nome-arquivo-empresa";
 
 type ValorDevido = { codigoTributo: number; valor: number };
 
@@ -44,10 +45,12 @@ export function DeclararPgdasCard({
   companyId,
   competencia,
   bloqueios,
+  prefixoArquivo,
 }: {
   companyId: string;
   competencia: string;
   bloqueios: string[];
+  prefixoArquivo: string;
 }) {
   const [carregando, setCarregando] = useState<"simular" | "transmitir" | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -59,6 +62,8 @@ export function DeclararPgdasCard({
   const [reciboConsultado, setReciboConsultado] = useState<ReciboConsultado | null>(null);
   const [retificadora, setRetificadora] = useState(false);
   const periodoApuracao = competencia.replace("-", "");
+  const nomePdf = (documento: string) =>
+    `${prefixoArquivo} - ${documento} ${competenciaParaArquivo(competencia)}.pdf`;
 
   async function buscarReciboJaTransmitido() {
     setConsultandoRecibo(true);
@@ -199,7 +204,7 @@ export function DeclararPgdasCard({
                     <Button
                       variant="secondary"
                       size="md"
-                      onClick={() => abrirPdfBase64(reciboConsultado.declaracao!.pdf, reciboConsultado.declaracao!.nomeArquivo)}
+                      onClick={() => abrirPdfBase64(reciboConsultado.declaracao!.pdf, nomePdf("Declaração PGDAS-D"))}
                     >
                       Baixar declaração
                     </Button>
@@ -208,7 +213,7 @@ export function DeclararPgdasCard({
                     <Button
                       variant="secondary"
                       size="md"
-                      onClick={() => abrirPdfBase64(reciboConsultado.recibo!.pdf, reciboConsultado.recibo!.nomeArquivo)}
+                      onClick={() => abrirPdfBase64(reciboConsultado.recibo!.pdf, nomePdf("Recibo PGDAS-D"))}
                     >
                       Baixar recibo
                     </Button>
@@ -220,7 +225,7 @@ export function DeclararPgdasCard({
                       onClick={() =>
                         abrirPdfBase64(
                           reciboConsultado.maed!.pdfNotificacao!,
-                          reciboConsultado.maed!.nomeArquivoNotificacao ?? `maed-notificacao-${competencia}.pdf`,
+                          nomePdf("Notificação MAED"),
                         )
                       }
                     >
@@ -234,7 +239,7 @@ export function DeclararPgdasCard({
                       onClick={() =>
                         abrirPdfBase64(
                           reciboConsultado.maed!.pdfDarf!,
-                          reciboConsultado.maed!.nomeArquivoDarf ?? `maed-darf-${competencia}.pdf`,
+                          nomePdf("DARF multa MAED"),
                         )
                       }
                     >
@@ -265,17 +270,17 @@ export function DeclararPgdasCard({
               )}
               <div className="flex flex-wrap gap-2">
                 {transmitido.declaracao && (
-                  <Button variant="secondary" size="md" onClick={() => abrirPdfBase64(transmitido.declaracao!, `declaracao-${competencia}.pdf`)}>
+                  <Button variant="secondary" size="md" onClick={() => abrirPdfBase64(transmitido.declaracao!, nomePdf("Declaração PGDAS-D"))}>
                     Baixar declaração
                   </Button>
                 )}
                 {transmitido.recibo && (
-                  <Button variant="secondary" size="md" onClick={() => abrirPdfBase64(transmitido.recibo!, `recibo-${competencia}.pdf`)}>
+                  <Button variant="secondary" size="md" onClick={() => abrirPdfBase64(transmitido.recibo!, nomePdf("Recibo PGDAS-D"))}>
                     Baixar recibo
                   </Button>
                 )}
                 {transmitido.darf && (
-                  <Button variant="secondary" size="md" onClick={() => abrirPdfBase64(transmitido.darf!, `darf-${competencia}.pdf`)}>
+                  <Button variant="secondary" size="md" onClick={() => abrirPdfBase64(transmitido.darf!, nomePdf("DARF"))}>
                     Baixar DARF
                   </Button>
                 )}

@@ -18,6 +18,7 @@ import {
 import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { abaterRetencaoDoDas, calcularSimplesNacional } from "@/lib/calculo-impostos";
 import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
+import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import { SimplesLoteComSelecao } from "./SimplesLoteComSelecao";
 
 export const metadata = { title: "Central Simples Nacional — Painel SOMA" };
@@ -122,6 +123,7 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
         nome: company.codigo_cliente
           ? `#${company.codigo_cliente} ${company.trade_name || company.legal_name}`
           : company.trade_name || company.legal_name,
+        prefixoArquivo: prefixoArquivoEmpresa(company),
         receitaMes,
         rbt12,
         rbt12Estimado,

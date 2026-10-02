@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff } from "@/lib/auth";
+import { contentDispositionInline, prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 
 const PERIODO_REGEX = /^\d{6}$/;
 
@@ -22,7 +23,7 @@ export async function GET(
   const supabase = await createClient();
   const { data: company } = await supabase
     .from("companies")
-    .select("cnpj")
+    .select("cnpj, codigo_cliente, trade_name, legal_name")
     .eq("id", companyId)
     .single();
   if (!company?.cnpj) {
@@ -67,7 +68,9 @@ export async function GET(
   return new NextResponse(Buffer.from(pdfBase64, "base64"), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="das-${company.cnpj}-${periodoApuracao}.pdf"`,
+      "Content-Disposition": contentDispositionInline(
+        `${prefixoArquivoEmpresa(company)} - DAS ${periodoApuracao.slice(4)}-${periodoApuracao.slice(0, 4)}.pdf`,
+      ),
     },
   });
 }
