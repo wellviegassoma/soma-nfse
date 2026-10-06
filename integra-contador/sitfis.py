@@ -69,6 +69,15 @@ def _corpo_json(resposta, etapa: str, contribuinte_cnpj: str) -> dict:
 def _solicitar_protocolo(contribuinte_cnpj: str) -> str:
     envelope = _envelope("SOLICITARPROTOCOLO91", contribuinte_cnpj, "")
     resposta = _chamar_gateway("Apoiar", envelope)
+    if resposta.status_code == 304:
+        # Já existe um relatório válido na Serpro pra esse contribuinte: ela
+        # responde 304 sem corpo e entrega o protocolo no cabeçalho ETag
+        # ("protocoloRelatorio:<protocolo>") — confirmado em produção em
+        # 06/10/2026, era a causa de ~75 empresas falhando na consulta em lote.
+        etag = resposta.headers.get("ETag", "").strip('"')
+        prefixo = "protocoloRelatorio:"
+        if etag.startswith(prefixo) and len(etag) > len(prefixo):
+            return etag[len(prefixo):]
     if not resposta.ok:
         raise ErroSitfis(
             f"Falha ao solicitar protocolo de situação fiscal de {contribuinte_cnpj} "
