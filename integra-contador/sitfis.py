@@ -52,6 +52,20 @@ def _envelope(id_servico: str, contribuinte_cnpj: str, dados_str: str) -> dict[s
     }
 
 
+def _corpo_json(resposta, etapa: str, contribuinte_cnpj: str) -> dict:
+    """resposta.json() com diagnóstico: a Serpro já respondeu 2xx/3xx com corpo
+    vazio ou não-JSON pra alguns CNPJs — sem isto o erro vira só
+    'Expecting value: line 1 column 1'."""
+    try:
+        return resposta.json()
+    except ValueError:
+        cabecalhos = {k: v for k, v in resposta.headers.items() if k.lower() in ("etag", "content-type", "location", "retry-after")}
+        raise ErroSitfis(
+            f"Serpro respondeu HTTP {resposta.status_code} sem JSON válido na etapa '{etapa}' "
+            f"({contribuinte_cnpj}); cabeçalhos: {cabecalhos}; corpo: {resposta.text[:300]!r}"
+        )
+
+
 def _solicitar_protocolo(contribuinte_cnpj: str) -> str:
     envelope = _envelope("SOLICITARPROTOCOLO91", contribuinte_cnpj, "")
     resposta = _chamar_gateway("Apoiar", envelope)
@@ -60,7 +74,7 @@ def _solicitar_protocolo(contribuinte_cnpj: str) -> str:
             f"Falha ao solicitar protocolo de situação fiscal de {contribuinte_cnpj} "
             f"(HTTP {resposta.status_code}): {resposta.text[:1000]}"
         )
-    corpo = resposta.json()
+    corpo = _corpo_json(resposta, "solicitar protocolo", contribuinte_cnpj)
     dados = json.loads(corpo["dados"]) if corpo.get("dados") else {}
     protocolo = dados.get("protocoloRelatorio")
     if not protocolo:
@@ -89,7 +103,7 @@ def _emitir_relatorio(contribuinte_cnpj: str, protocolo: str) -> dict | None:
             f"(HTTP {resposta.status_code}): {resposta.text[:1000]}"
         )
 
-    corpo = resposta.json()
+    corpo = _corpo_json(resposta, "emitir relatório", contribuinte_cnpj)
     if corpo.get("status") == 202:
         dados = json.loads(corpo["dados"]) if corpo.get("dados") else {}
         time.sleep(dados.get("tempoEspera", _TEMPO_ESPERA_PADRAO_MS) / 1000)
