@@ -29,13 +29,13 @@ export function ConsultarSituacaoFiscalLoteButton({
   const [rodando, setRodando] = useState(false);
   const [indice, setIndice] = useState(0);
   const [empresaAtual, setEmpresaAtual] = useState<string | null>(null);
-  const [resumo, setResumo] = useState<{ sucessos: number; falhas: string[] } | null>(null);
+  const [resumo, setResumo] = useState<{ sucessos: number; falhas: { nome: string; motivo: string }[] } | null>(null);
 
   async function rodar() {
     setRodando(true);
     setResumo(null);
     let sucessos = 0;
-    const falhas: string[] = [];
+    const falhas: { nome: string; motivo: string }[] = [];
 
     for (let i = 0; i < empresas.length; i++) {
       const empresa = empresas[i];
@@ -43,16 +43,22 @@ export function ConsultarSituacaoFiscalLoteButton({
       setEmpresaAtual(empresa.nome);
 
       let sucesso = false;
+      let motivo = "sem resposta do servidor";
       for (let tentativa = 1; tentativa <= TENTATIVAS_POR_EMPRESA && !sucesso; tentativa++) {
         try {
           const resposta = await fetch(`/admin/empresas/${empresa.id}/integra-contador/situacao-fiscal`);
           sucesso = resposta.ok && resposta.headers.get("Content-Type") === "application/pdf";
+          if (!sucesso) {
+            const corpo = await resposta.json().catch(() => null);
+            motivo = corpo?.error ?? `HTTP ${resposta.status}`;
+          }
         } catch {
           sucesso = false;
+          motivo = "falha de rede ao chamar o servidor";
         }
       }
       if (sucesso) sucessos += 1;
-      else falhas.push(empresa.nome);
+      else falhas.push({ nome: empresa.nome, motivo });
     }
 
     setResumo({ sucessos, falhas });
@@ -109,8 +115,17 @@ export function ConsultarSituacaoFiscalLoteButton({
           {resumo.sucessos} empresa(s) consultada(s).
           {resumo.falhas.length > 0 && (
             <span className="mt-1 block">
-              {resumo.falhas.length} com falha mesmo após {TENTATIVAS_POR_EMPRESA} tentativas:{" "}
-              {resumo.falhas.join(", ")}.
+              {resumo.falhas.length} com falha mesmo após {TENTATIVAS_POR_EMPRESA} tentativas:
+              {Object.entries(
+                resumo.falhas.reduce<Record<string, string[]>>((acc, f) => {
+                  (acc[f.motivo] ??= []).push(f.nome);
+                  return acc;
+                }, {}),
+              ).map(([motivo, nomes]) => (
+                <span key={motivo} className="mt-2 block">
+                  <strong>{motivo}</strong> ({nomes.length}): {nomes.join(", ")}.
+                </span>
+              ))}
             </span>
           )}
         </Alert>

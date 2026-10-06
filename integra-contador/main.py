@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import re
 
 from cryptography import x509
@@ -27,6 +28,8 @@ from signxml import (
     SignatureMethod,
     XMLSigner,
 )
+
+logger = logging.getLogger("integra-contador")
 
 load_dotenv()  # só facilita rodar localmente — em produção (Railway) as
 # variáveis já vêm injetadas no processo, load_dotenv() não faz nada.
@@ -495,6 +498,16 @@ def consultar_situacao_fiscal(cnpj: str):
         resposta = obter_situacao_fiscal(cnpj)
     except (ErroIntegraContador, ErroSitfis) as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # Sem isto, uma exceção inesperada (ex.: resposta da Serpro fora do
+        # formato esperado) vira "Internal Server Error" sem detalhe e a
+        # tela só mostra erro genérico — foi o que escondeu a causa de ~75
+        # empresas falhando na consulta em lote.
+        logger.exception("Erro inesperado na Situação Fiscal de %s", cnpj)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Erro inesperado ao consultar a situação fiscal ({type(e).__name__}): {str(e)[:500]}",
+        )
     return SituacaoFiscalOut(contribuinte_cnpj=cnpj, resposta=resposta)
 
 
