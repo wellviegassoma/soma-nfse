@@ -441,6 +441,7 @@ export default async function ImpostosPage(
         </Card>
 
         {company.municipality_ibge_code === "3303906" && (
+          <div className="flex flex-col gap-3">
           <ConferirPrefeituraCard
             companyId={companyId}
             competencia={competencia}
@@ -455,6 +456,8 @@ export default async function ImpostosPage(
                 : null
             }
           />
+          <PetropolisCredencialForm companyId={companyId} loginAtual={loginPetropolis} />
+          </div>
         )}
 
         <DeclararPgdasCard
