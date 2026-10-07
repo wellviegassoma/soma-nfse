@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { mesAnteriorBrasilia } from "@/lib/competencia";
 import {
   buscarFaturamentoMensal,
   buscarFaturamentoPorAtividade,
@@ -30,7 +30,7 @@ const COMPETENCIA_REGEX = /^\d{4}-\d{2}$/;
 export default async function CentralSimplesPage(props: PageProps<"/admin/fechamento/simples">) {
   const searchParams = await props.searchParams;
   const competenciaParam = typeof searchParams.competencia === "string" ? searchParams.competencia : undefined;
-  const competencia = competenciaParam && COMPETENCIA_REGEX.test(competenciaParam) ? competenciaParam : mesCorrenteBrasilia();
+  const competencia = competenciaParam && COMPETENCIA_REGEX.test(competenciaParam) ? competenciaParam : mesAnteriorBrasilia();
   const periodoApuracao = competencia.replace("-", "");
 
   const supabase = await createClient();

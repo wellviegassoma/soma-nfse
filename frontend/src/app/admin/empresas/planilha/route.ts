@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff } from "@/lib/auth";
 import { gerarExcelListaEmpresas } from "@/lib/empresa-export";
 import { faturamentoDoMesPorEmpresa } from "@/lib/faturamento-mes-empresas";
-import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { mesAnteriorBrasilia } from "@/lib/competencia";
 
 export async function GET(request: Request) {
   await requireSomaStaff();
@@ -38,9 +38,7 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ error: "Não foi possível buscar as empresas." }, { status: 500 });
 
   // Mês anterior ao corrente (em Brasília) — o último fechado.
-  const [anoAtual, mesAtual] = mesCorrenteBrasilia().split("-").map(Number);
-  const competenciaAnterior =
-    mesAtual === 1 ? `${anoAtual - 1}-12` : `${anoAtual}-${String(mesAtual - 1).padStart(2, "0")}`;
+  const competenciaAnterior = mesAnteriorBrasilia();
   const faturamentoPorEmpresa = await faturamentoDoMesPorEmpresa(supabase, competenciaAnterior);
 
   const buffer = await gerarExcelListaEmpresas(empresas ?? [], {

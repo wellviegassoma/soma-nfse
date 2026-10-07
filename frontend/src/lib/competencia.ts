@@ -12,6 +12,13 @@ export function mesCorrenteBrasilia(): string {
   return `${ano}-${mes}`;
 }
 
+// "YYYY-MM" do mês ANTERIOR ao corrente em Brasília — padrão das telas de
+// fechamento (o escritório sempre fecha o mês que acabou de terminar).
+export function mesAnteriorBrasilia(): string {
+  const [ano, mes] = mesCorrenteBrasilia().split("-").map(Number);
+  return mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, "0")}`;
+}
+
 // "YYYY-MM" do mês seguinte a `competencia` ("YYYY-MM").
 export function proximaCompetencia(competencia: string): string {
   const [ano, mes] = competencia.split("-").map(Number);

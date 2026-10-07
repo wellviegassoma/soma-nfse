@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
-import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { mesAnteriorBrasilia } from "@/lib/competencia";
 import {
   agruparPorAtividade,
   buscarFaturamentoMensal,
@@ -85,7 +85,7 @@ export default async function ImpostosPage(
   const competencia =
     competenciaParam && COMPETENCIA_REGEX.test(competenciaParam)
       ? competenciaParam
-      : mesCorrenteBrasilia();
+      : mesAnteriorBrasilia();
 
   const supabase = await createClient();
   const { data: company } = await supabase

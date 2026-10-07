@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { mesAnteriorBrasilia } from "@/lib/competencia";
 import { formatarDataHora, formatarMoeda } from "@/lib/formatters";
 import { BuscarTodasButton } from "./BuscarTodasButton";
 import { BuscarHistoricoTodasButton } from "./BuscarHistoricoTodasButton";
@@ -29,7 +29,7 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
   const competencia =
     competenciaParam && COMPETENCIA_REGEX.test(competenciaParam)
       ? competenciaParam
-      : mesCorrenteBrasilia();
+      : mesAnteriorBrasilia();
 
   const supabase = await createClient();
   const [{ data: companies }, { data: certs }, { data: notasDivergentesRaw, count: totalDivergentes }] =

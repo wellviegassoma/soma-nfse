@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { mesAnteriorBrasilia } from "@/lib/competencia";
 import {
   buscarFaturamentoMensal,
   buscarRetencoesMensal,
@@ -27,7 +27,7 @@ export default async function CentralMitPage(props: PageProps<"/admin/fechamento
   const competenciaParam =
     typeof searchParams.competencia === "string" ? searchParams.competencia : undefined;
   const competencia =
-    competenciaParam && COMPETENCIA_REGEX.test(competenciaParam) ? competenciaParam : mesCorrenteBrasilia();
+    competenciaParam && COMPETENCIA_REGEX.test(competenciaParam) ? competenciaParam : mesAnteriorBrasilia();
 
   const supabase = await createClient();
   const { data: companies } = await supabase

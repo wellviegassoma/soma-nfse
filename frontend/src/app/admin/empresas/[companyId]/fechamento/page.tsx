@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
-import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { mesAnteriorBrasilia } from "@/lib/competencia";
 import { formatarDataHora } from "@/lib/formatters";
 import { BuscarAgoraButton } from "./BuscarAgoraButton";
 import { BuscarHistoricoButton } from "./BuscarHistoricoButton";
@@ -56,7 +56,7 @@ export default async function AdminFechamentoPage(
   const competencia =
     competenciaParam && COMPETENCIA_REGEX.test(competenciaParam)
       ? competenciaParam
-      : mesCorrenteBrasilia();
+      : mesAnteriorBrasilia();
 
   const mostrarCanceladas = searchParams.canceladas === "1";
 

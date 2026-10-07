@@ -6,7 +6,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { mesAnteriorBrasilia } from "@/lib/competencia";
 import {
   buscarFaturamentoMensal,
   buscarReceitaManual,
@@ -71,7 +71,7 @@ export default async function Rbt12Page(props: PageProps<"/admin/empresas/[compa
   const mesesComDadosReal = new Set(notas.filter((n) => !n.cancelada).map((n) => n.competencia));
 
   const competenciaAlvo =
-    competenciaParam && COMPETENCIA_REGEX.test(competenciaParam) ? competenciaParam : mesCorrenteBrasilia();
+    competenciaParam && COMPETENCIA_REGEX.test(competenciaParam) ? competenciaParam : mesAnteriorBrasilia();
   const meses = competenciasRbt12(competenciaAlvo); // 12 meses anteriores à competência alvo, mais recente primeiro
 
   const { rbt12, estimado, mesesDisponiveis, mesesManuais, empresaNova } = resolverRbt12({

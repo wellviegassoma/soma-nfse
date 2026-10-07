@@ -6,7 +6,7 @@ import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { mesAnteriorBrasilia } from "@/lib/competencia";
 import { competenciasTrimestre, resolverRbt12 } from "@/lib/faturamento";
 import { resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { calcularImpostoResumo, resolverIssMensal } from "@/lib/calculo-impostos";
@@ -143,7 +143,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   const competencia =
     competenciaParam && COMPETENCIA_REGEX.test(competenciaParam)
       ? competenciaParam
-      : mesCorrenteBrasilia();
+      : mesAnteriorBrasilia();
 
   const supabase = await createClient();
 

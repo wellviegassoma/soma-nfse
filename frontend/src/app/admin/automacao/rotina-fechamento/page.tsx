@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { mesAnteriorBrasilia } from "@/lib/competencia";
 import { formatarDataHora } from "@/lib/formatters";
 import { buscarUltimaExecucao } from "@/lib/rotina-fechamento/registrar";
 import { buscarItensExecucao } from "@/lib/rotina-fechamento/itens";
@@ -41,7 +41,7 @@ export default async function RotinaFechamentoPage(
   const competenciaParam =
     typeof searchParams.competencia === "string" ? searchParams.competencia : undefined;
   const competencia =
-    competenciaParam && COMPETENCIA_REGEX.test(competenciaParam) ? competenciaParam : mesCorrenteBrasilia();
+    competenciaParam && COMPETENCIA_REGEX.test(competenciaParam) ? competenciaParam : mesAnteriorBrasilia();
 
   const supabase = await createClient();
 
