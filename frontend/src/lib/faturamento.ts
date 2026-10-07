@@ -199,7 +199,7 @@ export async function buscarFaturamentoPorAtividade(
     supabase
       .from("notas_distribuidas")
       .select(
-        "chave_acesso, valor_servico, competencia, cancelada, direcao, codigo_trib_nacional, descricao_servico",
+        "chave_acesso, valor_servico, competencia, cancelada, direcao, codigo_trib_nacional, descricao_servico, tipo_retencao_issqn",
       )
       .eq("company_id", companyId)
       .eq("direcao", "saida"),
@@ -261,6 +261,7 @@ export async function buscarFaturamentoPorAtividade(
   for (const nota of (distribuidas ?? []) as (NotaDistribuidaRow & {
     codigo_trib_nacional: string | null;
     descricao_servico: string | null;
+    tipo_retencao_issqn: number | null;
   })[]) {
     if (nota.chave_acesso && vistos.has(nota.chave_acesso)) continue;
     if (nota.chave_acesso) vistos.add(nota.chave_acesso);
@@ -273,13 +274,21 @@ export async function buscarFaturamentoPorAtividade(
       descricao: nota.descricao_servico ?? "Nota distribuída (sem serviço cadastrado)",
       atividadeId,
       viaSugestao,
-      // Sem serviço próprio ligado, não há como saber a retenção de ISS
-      // real dessa nota — assume não retido (o caso mais comum).
-      tipoRetencaoIssqn: 1,
+      // tpRetISSQN lido do XML na sincronização (1 = não retido, 2/3 =
+      // retido). Nota antiga sem o dado cai em "não retido".
+      tipoRetencaoIssqn: nota.tipo_retencao_issqn ?? 1,
     });
   }
 
   return out;
+}
+
+// Receita do mês cujo ISS foi retido pelo tomador/intermediário (tpRetISSQN
+// 2 ou 3) — no Simples Nacional essa receita não leva a parcela de ISS no DAS.
+export function somarReceitaIssRetido(notas: NotaPorAtividade[], competencia: string): number {
+  return notas
+    .filter((n) => !n.cancelada && n.competencia === competencia && n.tipoRetencaoIssqn !== 1)
+    .reduce((acc, n) => acc + n.valor, 0);
 }
 
 export type AtividadeAgrupada = {

@@ -142,6 +142,7 @@ class NotaEncontradaOut(BaseModel):
     valor_ret_cp: Optional[float] = None
     valor_ret_irrf: Optional[float] = None
     valor_ret_csll: Optional[float] = None
+    tipo_retencao_issqn: Optional[int] = None
     cancelada: bool = False
     motivo_cancelamento: Optional[str] = None
     bate_competencia: bool = True

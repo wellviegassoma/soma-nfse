@@ -130,6 +130,8 @@ class NotaEncontrada:
     valor_ret_cp: Optional[float] = None
     valor_ret_irrf: Optional[float] = None
     valor_ret_csll: Optional[float] = None  # vRetCSLL — soma de PIS+COFINS+CSLL retidos (código 5952/IN RFB 1234/2012), apesar do nome
+    # tpRetISSQN: 1 = ISS não retido, 2 = retido pelo tomador, 3 = retido pelo intermediário.
+    tipo_retencao_issqn: Optional[int] = None
     cancelada: bool = False
     motivo_cancelamento: Optional[str] = None
     # True = a competência da nota (<dCompet>) cai no (ano, mês)
@@ -741,6 +743,8 @@ class ClienteNFSeNacional:
         nota.valor_ret_cp = self._tag_numero(xml, "vRetCP")
         nota.valor_ret_irrf = self._tag_numero(xml, "vRetIRRF")
         nota.valor_ret_csll = self._tag_numero(xml, "vRetCSLL")
+        tp_ret = self._tag_numero(xml, "tpRetISSQN")
+        nota.tipo_retencao_issqn = int(tp_ret) if tp_ret is not None else None
 
         # CNPJ do prestador (quem emitiu) e do tomador (quem recebeu) —
         # essencial para separar nota de saída (empresa é a prestadora)

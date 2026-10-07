@@ -17,6 +17,7 @@ import {
   receitaComManual,
   resolverRbt12,
   somarFaturamento,
+  somarReceitaIssRetido,
   somarFaturamentoPorEquiparacao,
   somarRetencoes,
 } from "@/lib/faturamento";
@@ -246,6 +247,7 @@ export default async function ImpostosPage(
       rbt12Estimado,
       sujeitoFatorR: company.sujeito_fator_r,
       fatorRPercentual,
+      receitaIssRetido: somarReceitaIssRetido(notasPorAtividade, competencia),
     });
 
     const retencoesSimples = await buscarRetencoesMensal(supabase, companyId);
@@ -356,6 +358,12 @@ export default async function ImpostosPage(
                 <span className="font-medium text-foreground">{formatMoney(linha.valor)}</span>
               </div>
             ))}
+            {resultado.receitaIssRetido > 0 && (
+              <div className="px-5 py-2 text-xs text-foreground/50">
+                {formatMoney(resultado.receitaIssRetido)} da receita do mês teve o ISS retido pelo tomador — essa
+                parte não leva ISS no DAS (já descontado acima).
+              </div>
+            )}
             <div className="flex items-center justify-between bg-surface-muted px-5 py-3 text-sm font-semibold">
               <span>Total do DAS (bruto)</span>
               <span>{formatMoney(resultado.dasTotal)}</span>

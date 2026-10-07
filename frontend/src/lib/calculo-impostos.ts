@@ -38,6 +38,8 @@ export type ResultadoSimplesNacional = {
   aliquotaNominal: number;
   aliquotaEfetiva: number;
   receitaMes: number;
+  // Parte da receita do mês com ISS retido pelo tomador (já descontada do ISS do DAS).
+  receitaIssRetido: number;
   dasTotal: number;
   partilha: {
     irpj: number;
@@ -63,20 +65,26 @@ export function calcularSimplesNacional(params: {
   rbt12Estimado: boolean;
   sujeitoFatorR: boolean;
   fatorRPercentual: number | null;
+  // Parte de `receitaMes` cujo ISS foi retido pelo tomador — essa receita
+  // não leva a parcela de ISS no DAS (as demais parcelas continuam).
+  receitaIssRetido?: number;
 }): ResultadoSimplesNacional {
   const { receitaMes, rbt12, rbt12Estimado, sujeitoFatorR, fatorRPercentual } = params;
+  const receitaIssRetido = Math.min(Math.max(params.receitaIssRetido ?? 0, 0), receitaMes);
 
   const anexo: Anexo = decidirAnexoFatorR(sujeitoFatorR, fatorRPercentual);
 
   const faixaInfo = faixaPorRbt12(anexo, rbt12);
   const aliquotaEfetiva =
     rbt12 > 0 ? (rbt12 * faixaInfo.aliquota - faixaInfo.deduzir) / rbt12 : 0;
-  const dasTotal = receitaMes * aliquotaEfetiva;
+  const dasSemRetencaoIss = receitaMes * aliquotaEfetiva;
 
   const percentualIss =
     faixaInfo.partilha.iss === 0
       ? 0 // faixas acima de R$3,6mi: ISS sai do Simples, recolhido à parte do município — fora do escopo aqui
       : Math.min(Math.max(aliquotaEfetiva * faixaInfo.partilha.iss, ISS_MINIMO), ISS_MAXIMO);
+
+  const dasTotal = dasSemRetencaoIss - receitaIssRetido * percentualIss;
 
   return {
     anexo,
@@ -86,14 +94,15 @@ export function calcularSimplesNacional(params: {
     aliquotaNominal: faixaInfo.aliquota,
     aliquotaEfetiva,
     receitaMes,
+    receitaIssRetido,
     dasTotal,
     partilha: {
-      irpj: dasTotal * faixaInfo.partilha.irpj,
-      csll: dasTotal * faixaInfo.partilha.csll,
-      cofins: dasTotal * faixaInfo.partilha.cofins,
-      pis: dasTotal * faixaInfo.partilha.pis,
-      cpp: dasTotal * faixaInfo.partilha.cpp,
-      iss: receitaMes * percentualIss,
+      irpj: dasSemRetencaoIss * faixaInfo.partilha.irpj,
+      csll: dasSemRetencaoIss * faixaInfo.partilha.csll,
+      cofins: dasSemRetencaoIss * faixaInfo.partilha.cofins,
+      pis: dasSemRetencaoIss * faixaInfo.partilha.pis,
+      cpp: dasSemRetencaoIss * faixaInfo.partilha.cpp,
+      iss: (receitaMes - receitaIssRetido) * percentualIss,
     },
   };
 }

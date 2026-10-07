@@ -84,6 +84,7 @@ type NotaBuscada = {
   valor_ret_cp: number | null;
   valor_ret_irrf: number | null;
   valor_ret_csll: number | null;
+  tipo_retencao_issqn?: number | null;
   cancelada: boolean;
   motivo_cancelamento: string | null;
   bate_competencia: boolean;
@@ -245,6 +246,7 @@ export async function syncOneCompany(
         valor_ret_cp: n.valor_ret_cp,
         valor_ret_irrf: n.valor_ret_irrf,
         valor_ret_csll: n.valor_ret_csll,
+        tipo_retencao_issqn: n.tipo_retencao_issqn ?? null,
         xml: n.xml,
       }));
 

@@ -13,6 +13,7 @@ import {
   receitaComManual,
   resolverRbt12,
   somarFaturamento,
+  somarReceitaIssRetido,
   somarRetencoes,
 } from "@/lib/faturamento";
 import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
@@ -111,6 +112,7 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
         rbt12Estimado,
         sujeitoFatorR: company.sujeito_fator_r,
         fatorRPercentual,
+        receitaIssRetido: somarReceitaIssRetido(notasPorAtividade, competencia),
       });
 
       const retencaoMes = somarRetencoes(retencoes, [competencia]);
