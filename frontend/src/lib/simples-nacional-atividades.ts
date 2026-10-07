@@ -70,6 +70,15 @@ export const ATIVIDADES_SIMPLES_NACIONAL: AtividadeSimplesNacional[] = [
     tratamento: "ANEXO_III_FIXO",
   },
   { id: "corretagem_seguros", descricao: "Corretagem de seguros", citacao: "§5º-B, XVII", tratamento: "ANEXO_III_FIXO" },
+  // Não está nomeada na LC 123 — cai no residual do §5º-F (Anexo III, sem Fator R).
+  // Estética médica/clínica de saúde regulamentada NÃO entra aqui: usar "medicina"
+  // ou a atividade de saúde correspondente.
+  {
+    id: "estetica_beleza",
+    descricao: "Estética e cuidados com a beleza (depilação, limpeza de pele, massagem estética, manicure e pedicure, cabeleireiros)",
+    citacao: "§5º-F (residual — sem item específico na LC 123); LC 116, item 6.02",
+    tratamento: "ANEXO_III_FIXO",
+  },
 
   // --- Sujeitas ao Fator R (§5º-B incisos listados no §5º-M, I) ---
   { id: "fisioterapia", descricao: "Fisioterapia", citacao: "§5º-B, XVI c/c §5º-M, I", tratamento: "FATOR_R" },
