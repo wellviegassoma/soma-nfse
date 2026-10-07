@@ -126,6 +126,7 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
         notas: notasPorAtividade,
         receitaPorMes,
         folhaPorMes: (mes) => folhaPorMes.get(mes),
+        dataAbertura: company.data_abertura,
       });
 
       return {

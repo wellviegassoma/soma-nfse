@@ -54,8 +54,13 @@ export function montarDeclaracaoPgdasD(params: {
   notas: NotaPorAtividade[];
   receitaPorMes: (mes: string) => number;
   folhaPorMes: (mes: string) => number | undefined;
+  // "YYYY-MM-DD" — empresa aberta há menos de 12 meses só informa os meses
+  // desde a abertura (a Serpro recusa "receita bruta de um período
+  // desnecessário" pra mês anterior à abertura).
+  dataAbertura?: string | null;
 }): DeclaracaoPgdasResultado {
   const { cnpj, competencia, indicadorTransmissao, tipoDeclaracao, notas, receitaPorMes, folhaPorMes } = params;
+  const inicioAtividade = params.dataAbertura ? params.dataAbertura.slice(0, 7) : null;
   const cnpjLimpo = cnpj.replace(/\D/g, "");
   const [ano, mes] = competencia.split("-").map(Number);
   const pa = ano * 100 + mes;
@@ -86,7 +91,9 @@ export function montarDeclaracaoPgdasD(params: {
 
   const receitaTotal = notasDoMes.reduce((acc, n) => acc + n.valor, 0);
 
-  const meses12 = competenciasRbt12(competencia); // mais recente primeiro, sem incluir o mês atual
+  // mais recente primeiro, sem incluir o mês atual; só meses desde a abertura
+  // da empresa (quando ela tem menos de 12 meses).
+  const meses12 = competenciasRbt12(competencia).filter((m) => !inicioAtividade || m >= inicioAtividade);
   const receitasBrutasAnteriores = meses12.map((m) => {
     const [a, mm] = m.split("-").map(Number);
     return { pa: a * 100 + mm, valorInterno: receitaPorMes(m), valorExterno: 0 };

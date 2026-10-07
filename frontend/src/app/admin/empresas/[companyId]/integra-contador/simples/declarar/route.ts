@@ -39,7 +39,7 @@ export async function POST(
   const supabase = await createClient();
   const { data: company } = await supabase
     .from("companies")
-    .select("cnpj")
+    .select("cnpj, data_abertura")
     .eq("id", companyId)
     .single();
   if (!company?.cnpj) {
@@ -66,6 +66,7 @@ export async function POST(
     notas: notasPorAtividade,
     receitaPorMes,
     folhaPorMes: (mes) => folhaPorMesMapa.get(mes),
+    dataAbertura: company.data_abertura,
   });
 
   if (resultado.dados === null) {

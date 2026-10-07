@@ -238,6 +238,7 @@ export default async function ImpostosPage(
           notas: notasPorAtividade,
           receitaPorMes,
           folhaPorMes: (mes) => folhaPorMes.get(mes),
+          dataAbertura: company.data_abertura,
         })
       : { dados: null, bloqueios: ["Essa empresa não tem CNPJ cadastrado."] };
 
