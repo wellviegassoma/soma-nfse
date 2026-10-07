@@ -79,6 +79,20 @@ export const ATIVIDADES_SIMPLES_NACIONAL: AtividadeSimplesNacional[] = [
     citacao: "§5º-F (residual — sem item específico na LC 123); LC 116, item 6.02",
     tratamento: "ANEXO_III_FIXO",
   },
+  // Também sem item específico na LC 123 — enquadramento no residual do §5º-F
+  // (Anexo III, sem Fator R), decisão do contador.
+  {
+    id: "promocao_vendas",
+    descricao: "Promoção de vendas (demonstração e promoção em ponto de venda, distribuição de material promocional)",
+    citacao: "§5º-F (residual — sem item específico na LC 123); LC 116, item 17.06",
+    tratamento: "ANEXO_III_FIXO",
+  },
+  {
+    id: "servicos_combinados_escritorio",
+    descricao: "Serviços combinados de escritório e apoio administrativo (recepção, secretaria, digitação, arquivamento, escritório virtual)",
+    citacao: "§5º-F (residual — sem item específico na LC 123); LC 116, item 17.02",
+    tratamento: "ANEXO_III_FIXO",
+  },
 
   // --- Sujeitas ao Fator R (§5º-B incisos listados no §5º-M, I) ---
   { id: "fisioterapia", descricao: "Fisioterapia", citacao: "§5º-B, XVI c/c §5º-M, I", tratamento: "FATOR_R" },
