@@ -75,8 +75,12 @@ export function calcularSimplesNacional(params: {
   const anexo: Anexo = decidirAnexoFatorR(sujeitoFatorR, fatorRPercentual);
 
   const faixaInfo = faixaPorRbt12(anexo, rbt12);
+  // RBT12 zerado (ex.: primeiro mês com faturamento numa empresa que abriu
+  // há alguns meses e ainda não tinha receita): a fórmula divide por zero —
+  // a Receita usa a alíquota nominal da 1ª faixa. Confirmado na simulação do
+  // PGDAS-D (Clínica Aura, 09/2026: DAS = 6% do faturamento).
   const aliquotaEfetiva =
-    rbt12 > 0 ? (rbt12 * faixaInfo.aliquota - faixaInfo.deduzir) / rbt12 : 0;
+    rbt12 > 0 ? (rbt12 * faixaInfo.aliquota - faixaInfo.deduzir) / rbt12 : faixaInfo.aliquota;
   const dasSemRetencaoIss = receitaMes * aliquotaEfetiva;
 
   const percentualIss =
