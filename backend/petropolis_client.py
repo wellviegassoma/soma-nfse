@@ -213,6 +213,23 @@ class ClientePetropolis:
                 "já estava travada noutra empresa)."
             )
 
+    def listar_clientes_contador(self) -> list[dict[str, str]]:
+        """
+        SÓ LEITURA: lista completa de clientes do login único do escritório
+        (cada <option> traz o CMC em `value` e o nome/descrição em `texto`).
+        Precisa ser a PRIMEIRA ação depois do login (a sessão trava no
+        cliente escolhido) — por isso um cliente só serve pra esta chamada.
+        """
+        if self._login_proprio:
+            raise ErroPetropolis("Login próprio da empresa não tem lista de clientes.")
+        resp = self._sessao.get(f"{BASE_URL}/iss-clientes_contador.php", timeout=30)
+        tree = lxml_html.fromstring(resp.text)
+        opcoes = tree.xpath("//select[@name='clientes']/option[@value!='']")
+        return [
+            {"cmc": o.get("value", ""), "texto": " ".join(o.text_content().split())}
+            for o in opcoes
+        ]
+
     def _selecionar_empresa_por_cnpj(self, cnpj: str) -> None:
         cnpj_limpo = _somente_digitos(cnpj)
         resp = self._sessao.get(

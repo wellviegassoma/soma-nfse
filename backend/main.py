@@ -273,6 +273,17 @@ def buscar_guia_iss_petropolis(req: GuiaIssPetropolisRequest):
     return _resposta_guia_pdf(pdf_bytes, resumo)
 
 
+@app.post("/petropolis/clientes-contador", dependencies=[Depends(exigir_token_interno)])
+def listar_clientes_contador_petropolis():
+    """Só leitura — lista (CMC, nome) dos clientes do login único do escritório."""
+    try:
+        with ClientePetropolis() as cliente:
+            clientes = cliente.listar_clientes_contador()
+    except ErroPetropolis as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"clientes": clientes}
+
+
 @app.post("/petropolis/faturamento", dependencies=[Depends(exigir_token_interno)])
 def consultar_faturamento_petropolis(req: GuiaIssPetropolisRequest):
     """Só leitura — ver ClientePetropolis.consultar_faturamento."""
