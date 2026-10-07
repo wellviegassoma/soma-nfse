@@ -333,6 +333,29 @@ class ClientePetropolis:
                 continue
         return {"valor_servicos": total_servicos, "valor_iss": total_iss}
 
+    def consultar_faturamento(
+        self, cnpj: str, competencia: str, cmc: str | None = None
+    ) -> dict[str, float]:
+        """
+        SÓ LEITURA: devolve o valor de serviços/ISS que o site da Prefeitura
+        já tem pro período (iss-consulta_periodos.php), sem consolidar nada
+        e sem buscar/gerar guia. Usado pra conferir o faturamento do Simples
+        Nacional (que não tem guia de ISS) contra as notas importadas.
+
+        Exige login próprio da empresa OU CMC conhecido — nunca cai na busca
+        por CNPJ do login único, que não filtra de verdade e já devolveu os
+        dados de outra empresa uma vez (ver _selecionar_empresa_por_cnpj).
+        """
+        if not self._login_proprio:
+            if not cmc:
+                raise ErroPetropolis(
+                    "Sem acesso a esta empresa no ISS de Petrópolis — cadastre o CMC "
+                    "(Dados fiscais) ou o login próprio da empresa (aba Impostos)."
+                )
+            self._selecionar_empresa_por_cmc(cmc, cnpj)
+        ano, mes = _ano_mes_da_competencia(competencia)
+        return self._consultar_resumo_periodo(ano, mes)
+
     def buscar_guia_iss(
         self, cnpj: str, competencia: str | None = None, cmc: str | None = None
     ) -> tuple[bytes, dict[str, float]]:

@@ -32,6 +32,7 @@ import {
 import { buscarAtividade, type TratamentoAtividade } from "@/lib/simples-nacional-atividades";
 import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
 import { DeclararPgdasCard } from "./DeclararPgdasCard";
+import { ConferirPrefeituraCard } from "./ConferirPrefeituraCard";
 import { DeclararMitCard } from "./DeclararMitCard";
 import { BuscarGuiaIssButton } from "./BuscarGuiaIssButton";
 import { BuscarGuiaIssPetropolisButton } from "./BuscarGuiaIssPetropolisButton";
@@ -97,6 +98,12 @@ export default async function ImpostosPage(
 
   const notas = await buscarFaturamentoMensal(supabase, companyId);
   const receitaMes = somarFaturamento(notas, [competencia]);
+  const { data: conferenciaPrefeitura } = await supabase
+    .from("conferencia_prefeitura")
+    .select("valor_prefeitura, erro, consultado_em")
+    .eq("company_id", companyId)
+    .eq("competencia", competencia)
+    .maybeSingle();
   const notasPorAtividade = await buscarFaturamentoPorAtividade(supabase, companyId);
   const atividadesDoMes = agruparPorAtividade(notasPorAtividade, competencia);
 
@@ -424,6 +431,23 @@ export default async function ImpostosPage(
             </div>
           )}
         </Card>
+
+        {company.municipality_ibge_code === "3303906" && (
+          <ConferirPrefeituraCard
+            companyId={companyId}
+            competencia={competencia}
+            faturamentoNotas={receitaMes}
+            ultima={
+              conferenciaPrefeitura
+                ? {
+                    valor: conferenciaPrefeitura.valor_prefeitura == null ? null : Number(conferenciaPrefeitura.valor_prefeitura),
+                    erro: conferenciaPrefeitura.erro,
+                    consultadoEm: conferenciaPrefeitura.consultado_em,
+                  }
+                : null
+            }
+          />
+        )}
 
         <DeclararPgdasCard
           companyId={companyId}

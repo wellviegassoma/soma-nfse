@@ -149,6 +149,11 @@ class DiagnosticoBusca:
     documentos_sem_data_reconhecida: int = 0
     documentos_com_data_fora_do_mes: int = 0
     exemplos_datas_encontradas: list = field(default_factory=list)
+    # TODOS os cancelamentos vistos na varredura (chave_acesso -> motivo),
+    # mesmo de notas fora da janela pesquisada — quem chama precisa aplicá-los
+    # às notas já guardadas, senão uma nota cancelada depois de sincronizada
+    # continua contando como ativa.
+    cancelamentos: dict = field(default_factory=dict)
 
     def resumo_texto(self, ano: int, mes: int) -> str:
         if self.total_documentos_vistos == 0:
@@ -936,6 +941,8 @@ class ClienteNFSeNacional:
 
             if callback_progresso:
                 callback_progresso(nsu, len(encontradas))
+
+        diagnostico.cancelamentos = dict(cancelamentos)
 
         # Aplica os cancelamentos encontrados (podem ter aparecido em NSUs
         # depois da nota original, então só dá pra saber no final da varredura).

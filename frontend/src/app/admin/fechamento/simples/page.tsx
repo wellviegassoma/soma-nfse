@@ -35,7 +35,7 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
   const supabase = await createClient();
   const { data: companies } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name, codigo_cliente, cnpj, data_abertura, sujeito_fator_r")
+    .select("id, legal_name, trade_name, codigo_cliente, cnpj, data_abertura, sujeito_fator_r, municipality_ibge_code")
     .eq("tax_regime", "SIMPLES_NACIONAL")
     .eq("ativa", true)
     .not("cnpj", "is", null)
@@ -50,6 +50,14 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
     .select("company_id")
     .eq("competencia", competencia);
   const fechadasSet = new Set((fechadas ?? []).map((f) => f.company_id));
+
+  // Última conferência de faturamento com o site da Prefeitura (só
+  // Petrópolis hoje) — ver ConferirPrefeituraLoteButton.
+  const { data: conferencias } = await supabase
+    .from("conferencia_prefeitura")
+    .select("company_id, valor_prefeitura, erro, consultado_em")
+    .eq("competencia", competencia);
+  const conferenciaPorEmpresa = new Map((conferencias ?? []).map((c) => [c.company_id, c]));
 
   const linhas = await Promise.all(
     (companies ?? []).map(async (company) => {
@@ -124,6 +132,17 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
           ? `#${company.codigo_cliente} ${company.trade_name || company.legal_name}`
           : company.trade_name || company.legal_name,
         prefixoArquivo: prefixoArquivoEmpresa(company),
+        municipioIbge: company.municipality_ibge_code,
+        prefeitura: (() => {
+          const c = conferenciaPorEmpresa.get(company.id);
+          return c
+            ? {
+                valor: c.valor_prefeitura == null ? null : Number(c.valor_prefeitura),
+                erro: c.erro,
+                consultadoEm: c.consultado_em,
+              }
+            : null;
+        })(),
         receitaMes,
         rbt12,
         rbt12Estimado,

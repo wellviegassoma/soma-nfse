@@ -6,11 +6,17 @@ import { Alert } from "@/components/ui/Alert";
 import { EnviarSimplesLoteButton } from "./EnviarSimplesLoteButton";
 import { BaixarGuiasSimplesLoteButton } from "./BaixarGuiasSimplesLoteButton";
 import { FecharAntecipadoLoteButton } from "./FecharAntecipadoLoteButton";
+import { ConferirPrefeituraLoteButton } from "./ConferirPrefeituraLoteButton";
+
+const IBGE_PETROPOLIS = "3303906";
+const IBGE_RIO = "3304557";
 
 export type LinhaSimples = {
   id: string;
   nome: string;
   prefixoArquivo: string;
+  municipioIbge: string | null;
+  prefeitura: { valor: number | null; erro: string | null; consultadoEm: string } | null;
   receitaMes: number;
   rbt12: number;
   rbt12Estimado: boolean;
@@ -27,6 +33,52 @@ export type LinhaSimples = {
   podeFecharAntes: boolean;
   jaFechada: boolean;
 };
+
+function CelulaPrefeitura({
+  linha,
+  ibgeRio,
+  ibgePetropolis,
+}: {
+  linha: LinhaSimples;
+  ibgeRio: string;
+  ibgePetropolis: string;
+}) {
+  if (linha.municipioIbge === ibgeRio) {
+    return (
+      <span
+        className="text-xs text-foreground/40"
+        title="O Nota Carioca não recebe as notas do Emissor Nacional de empresas do Simples (o ISS vai no DAS) — o portal mostra zero, não dá pra conferir."
+      >
+        não confere
+      </span>
+    );
+  }
+  if (linha.municipioIbge !== ibgePetropolis) return <span className="text-xs text-foreground/30">—</span>;
+  const c = linha.prefeitura;
+  if (!c) return <span className="text-xs text-foreground/40">não consultada</span>;
+  const quando = new Date(c.consultadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  if (c.valor == null) {
+    return (
+      <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-medium text-danger" title={`${c.erro ?? "erro"} — ${quando}`}>
+        sem acesso
+      </span>
+    );
+  }
+  const diferenca = c.valor - linha.receitaMes;
+  const bate = Math.abs(diferenca) < 0.01;
+  return (
+    <span title={`Consultado em ${quando}`}>
+      {formatMoney(c.valor)}
+      {bate ? (
+        <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">bate</span>
+      ) : (
+        <span className="ml-2 rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-medium text-danger">
+          dif. {formatMoney(diferenca)}
+        </span>
+      )}
+    </span>
+  );
+}
 
 function formatMoney(value: number) {
   return value === 0 ? "-" : value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -89,6 +141,14 @@ export function SimplesLoteComSelecao({
     [linhas, selecionados],
   );
 
+  const empresasParaConferirPrefeitura = useMemo(
+    () =>
+      linhas
+        .filter((l) => selecionados.has(l.id) && l.municipioIbge === IBGE_PETROPOLIS)
+        .map((l) => ({ id: l.id, nome: l.nome })),
+    [linhas, selecionados],
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <Card className="p-6">
@@ -105,6 +165,7 @@ export function SimplesLoteComSelecao({
               empresas={empresasParaBaixar}
             />
             <FecharAntecipadoLoteButton competencia={competencia} empresas={empresasParaFechar} />
+            <ConferirPrefeituraLoteButton competencia={competencia} empresas={empresasParaConferirPrefeitura} />
           </div>
         </div>
         <p className="mt-3 text-xs text-foreground/50">
@@ -118,7 +179,7 @@ export function SimplesLoteComSelecao({
         <Alert tone="warning">Nenhuma empresa Simples Nacional com CNPJ cadastrada.</Alert>
       ) : (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[1150px] text-sm">
+          <table className="w-full min-w-[1300px] text-sm">
             <thead>
               <tr className="text-xs text-foreground/50">
                 <th rowSpan={2} className="border-b border-border px-3 py-2 text-center align-bottom">
@@ -134,6 +195,9 @@ export function SimplesLoteComSelecao({
                 </th>
                 <th rowSpan={2} className="border-b border-border px-3 py-2 text-right align-bottom">
                   Faturamento Mês
+                </th>
+                <th rowSpan={2} className="border-b border-border px-3 py-2 text-right align-bottom">
+                  Prefeitura
                 </th>
                 <th rowSpan={2} className="border-b border-border px-3 py-2 text-right align-bottom">
                   RBT12
@@ -201,6 +265,9 @@ export function SimplesLoteComSelecao({
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">{formatMoney(linha.receitaMes)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right">
+                    <CelulaPrefeitura linha={linha} ibgeRio={IBGE_RIO} ibgePetropolis={IBGE_PETROPOLIS} />
+                  </td>
                   <td className="px-3 py-2 text-right">
                     {formatMoney(linha.rbt12)}
                     {linha.rbt12Estimado && <span className="ml-1 text-[10px] text-foreground/40">(est.)</span>}

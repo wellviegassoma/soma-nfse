@@ -42,6 +42,7 @@ from petropolis_client import ClientePetropolis, ErroGuiaNaoConsolidada, ErroPet
 from schemas import (
     BuscarNotasRequest,
     BuscarNotasResponse,
+    CancelamentoOut,
     CancelarNotaRequest,
     CancelarNotaResponse,
     DanfseRequest,
@@ -186,6 +187,10 @@ def buscar_notas(req: BuscarNotasRequest):
     return BuscarNotasResponse(
         notas=[NotaEncontradaOut(**vars(n)) for n in notas],
         ultimo_nsu=ultimo_nsu,
+        cancelamentos=[
+            CancelamentoOut(chave_acesso=chave, motivo=motivo)
+            for chave, motivo in diagnostico.cancelamentos.items()
+        ],
         diagnostico=DiagnosticoBuscaOut(
             total_documentos_vistos=diagnostico.total_documentos_vistos,
             documentos_sem_xml_decodificavel=diagnostico.documentos_sem_xml_decodificavel,
@@ -266,6 +271,22 @@ def buscar_guia_iss_petropolis(req: GuiaIssPetropolisRequest):
         raise HTTPException(status_code=422, detail=str(e))
 
     return _resposta_guia_pdf(pdf_bytes, resumo)
+
+
+@app.post("/petropolis/faturamento", dependencies=[Depends(exigir_token_interno)])
+def consultar_faturamento_petropolis(req: GuiaIssPetropolisRequest):
+    """Só leitura — ver ClientePetropolis.consultar_faturamento."""
+    if not req.competencia:
+        raise HTTPException(status_code=422, detail="Informe a competência (AAAA-MM).")
+    try:
+        with ClientePetropolis(req.login, req.senha_md5) as cliente:
+            resumo = cliente.consultar_faturamento(req.cnpj, req.competencia, req.cmc)
+    except ErroPetropolis as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {
+        "valor_servicos": round(resumo["valor_servicos"], 2),
+        "valor_iss": round(resumo["valor_iss"], 2),
+    }
 
 
 @app.post("/petropolis/consolidar-e-emitir-guia", dependencies=[Depends(exigir_token_interno)])

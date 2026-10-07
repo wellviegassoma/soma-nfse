@@ -209,7 +209,11 @@ export async function syncOneCompany(
       throw new Error(`HTTP ${resp.status}: ${detalhe.slice(0, 300)}`);
     }
 
-    const body: { notas: NotaBuscada[]; ultimo_nsu: number } = await resp.json();
+    const body: {
+      notas: NotaBuscada[];
+      ultimo_nsu: number;
+      cancelamentos?: { chave_acesso: string; motivo: string | null }[];
+    } = await resp.json();
     let notasNovas = 0;
     let notasDivergentes: NotaDivergente[] = [];
 
@@ -268,6 +272,23 @@ export async function syncOneCompany(
           tomadorNome: n.tomador_nome,
           prestadorNome: n.prestador_nome,
         }));
+    }
+
+    // Cancelamentos: o upsert acima usa ignoreDuplicates (nota já guardada
+    // nunca é reescrita), então um cancelamento que chega DEPOIS de a nota
+    // ser sincronizada nunca era gravado — a nota continuava contando como
+    // ativa no faturamento e no imposto. Marca como cancelada toda nota já
+    // guardada cuja chave aparece num evento de cancelamento (de qualquer
+    // mês, não só da janela pesquisada).
+    for (const c of body.cancelamentos ?? []) {
+      if (!c.chave_acesso) continue;
+      const { error: erroCancelamento } = await admin
+        .from("notas_distribuidas")
+        .update({ cancelada: true, motivo_cancelamento: c.motivo })
+        .eq("company_id", company.id)
+        .eq("chave_acesso", c.chave_acesso)
+        .eq("cancelada", false);
+      if (erroCancelamento) throw new Error(`Falha ao marcar nota cancelada: ${erroCancelamento.message}`);
     }
 
     // ultimo_nsu_distribuicao não decide mais de onde a próxima busca

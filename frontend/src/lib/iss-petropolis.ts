@@ -130,6 +130,51 @@ export async function conferirBaseCalculoPetropolis(
   return { ok: true, consolidado: true, resumo: { valorServicos, valorIss }, pdfBytes };
 }
 
+// Só leitura (nunca consolida nem gera guia) — usada na conferência de
+// faturamento do Simples Nacional. Exige login próprio ou CMC (o backend
+// recusa o resto de propósito, ver ClientePetropolis.consultar_faturamento).
+export async function consultarFaturamentoPetropolis(
+  supabase: Supa,
+  companyId: string,
+  competencia: string,
+): Promise<{ ok: true; valorServicos: number } | { ok: false; erro: string }> {
+  const empresa = await buscarEmpresaPetropolis(supabase, companyId);
+  if (!empresa.ok) return { ok: false, erro: empresa.erro };
+
+  let response: Response;
+  try {
+    response = await fetch(`${process.env.NFSE_ENGINE_URL}/petropolis/faturamento`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Token": process.env.NFSE_ENGINE_INTERNAL_TOKEN ?? "",
+      },
+      body: JSON.stringify({
+        cnpj: empresa.cnpj,
+        competencia,
+        login: empresa.loginProprio?.login,
+        senha_md5: empresa.loginProprio?.senhaMd5,
+        cmc: empresa.cmc,
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch {
+    return { ok: false, erro: "Não foi possível acessar o ISS de Petrópolis agora." };
+  }
+
+  const corpo = await response.json().catch(() => null);
+  if (!response.ok) {
+    return {
+      ok: false,
+      erro: (corpo && typeof corpo.detail === "string" && corpo.detail) || "Falha ao consultar o ISS de Petrópolis.",
+    };
+  }
+  const valor = Number(corpo?.valor_servicos);
+  if (Number.isNaN(valor)) return { ok: false, erro: "Resposta do ISS de Petrópolis sem valor reconhecível." };
+  return { ok: true, valorServicos: valor };
+}
+
 // Etapa 5 — ação real: fecha o movimento econômico do mês na Prefeitura
 // e emite a guia. Só deve ser chamada depois de confirmação explícita
 // (nunca em lote silencioso) — ver comentário na rota que usa isso.

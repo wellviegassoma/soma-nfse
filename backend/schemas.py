@@ -155,10 +155,18 @@ class DiagnosticoBuscaOut(BaseModel):
     resumo_texto: str
 
 
+class CancelamentoOut(BaseModel):
+    chave_acesso: str
+    motivo: Optional[str] = None
+
+
 class BuscarNotasResponse(BaseModel):
     notas: list[NotaEncontradaOut]
     ultimo_nsu: int
     diagnostico: DiagnosticoBuscaOut
+    # Todos os cancelamentos vistos na varredura, inclusive de notas fora
+    # da janela pesquisada — o frontend aplica às notas já guardadas.
+    cancelamentos: list[CancelamentoOut] = []
 
 
 class DanfseRequest(BaseModel):

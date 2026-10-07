@@ -57,6 +57,11 @@ export async function buscarFaturamentoMensal(
     if (d.chave_acesso) equiparacaoPorChave.set(d.chave_acesso, d.equiparacao_hospitalar);
   }
 
+  const canceladaPorChave = new Map<string, boolean>();
+  for (const d of (distribuidas ?? []) as { chave_acesso: string | null; cancelada: boolean }[]) {
+    if (d.chave_acesso) canceladaPorChave.set(d.chave_acesso, d.cancelada);
+  }
+
   const vistos = new Set<string>();
   const unificadas: NotaFaturamento[] = [];
 
@@ -64,7 +69,11 @@ export async function buscarFaturamentoMensal(
     if (nota.status !== "ACCEPTED") continue;
     const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
     const chaveAcesso = nfseArr[0]?.access_key ?? null;
-    const cancelada = nfseArr.some((n) => n.status === "CANCELADA");
+    // Cancelada no sistema (nfse.status) OU por fora — um cancelamento feito
+    // direto no portal só chega via notas_distribuidas (mesma chave_acesso).
+    const cancelada =
+      nfseArr.some((n) => n.status === "CANCELADA") ||
+      (chaveAcesso ? canceladaPorChave.get(chaveAcesso) === true : false);
     if (chaveAcesso) vistos.add(chaveAcesso);
     unificadas.push({
       competencia: nota.data_competencia.slice(0, 7),
@@ -213,6 +222,11 @@ export async function buscarFaturamentoPorAtividade(
     }
   }
 
+  const canceladaPorChave = new Map<string, boolean>();
+  for (const d of (distribuidas ?? []) as { chave_acesso: string | null; cancelada: boolean }[]) {
+    if (d.chave_acesso) canceladaPorChave.set(d.chave_acesso, d.cancelada);
+  }
+
   const vistos = new Set<string>();
   const out: NotaPorAtividade[] = [];
 
@@ -220,7 +234,11 @@ export async function buscarFaturamentoPorAtividade(
     if (nota.status !== "ACCEPTED") continue;
     const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
     const chaveAcesso = nfseArr[0]?.access_key ?? null;
-    const cancelada = nfseArr.some((n) => n.status === "CANCELADA");
+    // Cancelada no sistema (nfse.status) OU por fora — um cancelamento feito
+    // direto no portal só chega via notas_distribuidas (mesma chave_acesso).
+    const cancelada =
+      nfseArr.some((n) => n.status === "CANCELADA") ||
+      (chaveAcesso ? canceladaPorChave.get(chaveAcesso) === true : false);
     if (chaveAcesso) vistos.add(chaveAcesso);
     const servico = Array.isArray(nota.services) ? nota.services[0] : nota.services;
     // Nota ligada a um serviço cadastrado de verdade (service_id) — usa a
