@@ -92,7 +92,10 @@ export function montarDeclaracaoPgdasD(params: {
     return { pa: a * 100 + mm, valorInterno: receitaPorMes(m), valorExterno: 0 };
   });
 
-  const folhasSalario = [...meses12, competencia]
+  // Só os 12 meses ANTERIORES ao PA (mesma janela do RBT12/Fator R) — a Serpro
+  // recusa com "Foi enviada folha de um período desnecessário" se a folha do
+  // próprio mês de apuração for junto (visto em produção, HERA, 09/2026).
+  const folhasSalario = meses12
     .map((m) => {
       const [a, mm] = m.split("-").map(Number);
       const valor = folhaPorMes(m);
