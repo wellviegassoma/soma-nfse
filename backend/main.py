@@ -286,6 +286,9 @@ def consultar_faturamento_petropolis(req: GuiaIssPetropolisRequest):
     return {
         "valor_servicos": round(resumo["valor_servicos"], 2),
         "valor_iss": round(resumo["valor_iss"], 2),
+        "normal": round(resumo["normal"], 2),
+        "retida": round(resumo["retida"], 2),
+        "cancelada": round(resumo["cancelada"], 2),
         "linhas": resumo.get("linhas", []),
     }
 

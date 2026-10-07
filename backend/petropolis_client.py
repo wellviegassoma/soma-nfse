@@ -354,9 +354,60 @@ class ClientePetropolis:
                 )
             self._selecionar_empresa_por_cmc(cmc, cnpj)
         ano, mes = _ano_mes_da_competencia(competencia)
-        resumo = self._consultar_resumo_periodo(ano, mes)
+        resumo = self._faturamento_do_periodo(ano, mes)
         resumo["linhas"] = self._linhas_brutas_periodo(ano, mes)
         return resumo
+
+    def _faturamento_do_periodo(self, ano: int, mes: int) -> dict[str, float]:
+        """
+        Faturamento do prestador no período = notas NORMAIS + notas RETIDAS
+        (ISS retido pelo tomador também é receita da empresa). Fica de fora
+        CANCELADA e TOMADOR (nota de entrada). Lê o quadro-resumo no fim da
+        tela (uma linha por tipo de tributação: TRIB.M, ISENTO, TRIB.F, IMUNE,
+        SUSP.J, SUSP.A) — total do período inteiro, não depende de paginação.
+        Colunas, em pares (valor, ISS): Normal | Cancelada | Retida | outra
+        (zerada nos casos vistos) | Tomador — confirmado ao vivo (HERA, 09/2026:
+        Normal 23.600,00 + Retida 1.433,28 = soma das notas emitidas).
+        """
+        mesano = f"{mes:02d}{ano:04d}"
+        resp = self._sessao.get(
+            f"{BASE_URL}/iss-consulta_periodos.php", params={"mesano": mesano}, timeout=30
+        )
+        tree = lxml_html.fromstring(resp.text)
+        normal = retida = cancelada = outra = 0.0
+        linhas_resumo = 0
+        for tr in tree.xpath("//tr"):
+            tds = tr.xpath("./td")
+            if len(tds) < 11:
+                continue
+            rotulo = " ".join(tds[0].text_content().split())
+            if not re.match(r"^(TRIB\.M|ISENTO|TRIB\.F|IMUNE|SUSP\.J|SUSP\.A)\s*=", rotulo):
+                continue
+            try:
+                normal += _valor_para_float(tds[1].text_content())
+                cancelada += _valor_para_float(tds[3].text_content())
+                retida += _valor_para_float(tds[5].text_content())
+                outra += _valor_para_float(tds[7].text_content())
+            except ValueError:
+                continue
+            linhas_resumo += 1
+        if linhas_resumo == 0:
+            raise ErroPetropolis(
+                "Não consegui ler o quadro-resumo do período no ISS de Petrópolis "
+                "(o layout da tela pode ter mudado)."
+            )
+        if outra > 0.005:
+            raise ErroPetropolis(
+                f"O ISS de Petrópolis mostra R$ {outra:.2f} numa coluna que esta conferência "
+                "não sabe interpretar — confira o período direto no site."
+            )
+        return {
+            "valor_servicos": normal + retida,
+            "valor_iss": 0.0,
+            "normal": normal,
+            "retida": retida,
+            "cancelada": cancelada,
+        }
 
     def _linhas_brutas_periodo(self, ano: int, mes: int) -> list[list[str]]:
         """Texto cru de toda linha (>=3 colunas) da tela de consulta do período —
