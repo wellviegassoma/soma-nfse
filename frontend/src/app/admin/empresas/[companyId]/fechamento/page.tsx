@@ -42,6 +42,8 @@ type NotaRow = {
   tomador_nome: string | null;
   descricao_servico: string | null;
   equiparacao_hospitalar: boolean;
+  motivo_cancelamento: string | null;
+  data_emissao: string | null;
 };
 
 export default async function AdminFechamentoPage(
@@ -56,6 +58,8 @@ export default async function AdminFechamentoPage(
       ? competenciaParam
       : mesCorrenteBrasilia();
 
+  const mostrarCanceladas = searchParams.canceladas === "1";
+
   const supabase = await createClient();
 
   const [{ data: company }, { data: notas }] = await Promise.all([
@@ -69,7 +73,7 @@ export default async function AdminFechamentoPage(
     supabase
       .from("notas_distribuidas")
       .select(
-        "id, numero, direcao, cancelada, valor_servico, prestador_nome, tomador_nome, descricao_servico, equiparacao_hospitalar",
+        "id, numero, direcao, cancelada, valor_servico, prestador_nome, tomador_nome, descricao_servico, equiparacao_hospitalar, motivo_cancelamento, data_emissao",
       )
       .eq("company_id", companyId)
       .gte("competencia", `${competencia}-01`)
@@ -151,17 +155,67 @@ export default async function AdminFechamentoPage(
           <div className="mt-1 text-lg font-semibold text-foreground">{entradaAtivas.length}</div>
           <div className="text-xs text-foreground/50">{formatMoney(somar(entradaAtivas))}</div>
         </Card>
-        <Card className="p-4">
-          <div className="text-xs text-foreground/50">Canceladas</div>
-          <div className="mt-1 text-lg font-semibold text-foreground">
-            {saidaCanceladas.length + entradaCanceladas.length}
-          </div>
-        </Card>
+        <a
+          href={`/admin/empresas/${companyId}/fechamento?competencia=${competencia}${mostrarCanceladas ? "" : "&canceladas=1"}`}
+          aria-label={mostrarCanceladas ? "Ocultar notas canceladas" : "Ver notas canceladas"}
+        >
+          <Card className={`h-full p-4 transition-colors hover:bg-surface-muted ${mostrarCanceladas ? "ring-2 ring-brand" : ""}`}>
+            <div className="text-xs text-foreground/50">Canceladas</div>
+            <div className="mt-1 text-lg font-semibold text-foreground">
+              {saidaCanceladas.length + entradaCanceladas.length}
+            </div>
+            <div className="text-xs text-brand">{mostrarCanceladas ? "ocultar" : "ver notas"}</div>
+          </Card>
+        </a>
         <Card className="p-4">
           <div className="text-xs text-foreground/50">Não classificadas</div>
           <div className="mt-1 text-lg font-semibold text-foreground">{indefinidas.length}</div>
         </Card>
       </div>
+
+      {mostrarCanceladas && (
+        <Card className="overflow-hidden">
+          <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
+            Notas canceladas — {formatCompetencia(competencia)}{" "}
+            <span className="font-normal text-foreground/50">
+              (não entram no faturamento nem no cálculo do imposto)
+            </span>
+          </div>
+          {saidaCanceladas.length + entradaCanceladas.length === 0 ? (
+            <div className="p-6 text-center text-sm text-foreground/50">Nenhuma nota cancelada nesta competência.</div>
+          ) : (
+            <div className="divide-y divide-border">
+              {[...saidaCanceladas, ...entradaCanceladas].map((n) => (
+                <div key={n.id} className="flex flex-col gap-1 px-5 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="w-16 shrink-0 text-foreground/50">{n.numero || "—"}</span>
+                    <span className="shrink-0 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground/60">
+                      {n.direcao === "saida" ? "saída" : "entrada"}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {(n.direcao === "saida" ? n.tomador_nome : n.prestador_nome) || "—"}
+                    </span>
+                    <span className="shrink-0 font-medium line-through decoration-foreground/40">
+                      {formatMoney(n.valor_servico ?? 0)}
+                    </span>
+                    <a
+                      href={`/admin/empresas/${companyId}/fechamento/notas/${n.id}/pdf`}
+                      target="_blank"
+                      className="shrink-0 text-xs font-medium text-brand hover:underline"
+                    >
+                      PDF
+                    </a>
+                  </div>
+                  <p className="pl-16 text-xs text-foreground/50">
+                    {n.data_emissao ? `Emitida em ${formatarDataHora(n.data_emissao)} · ` : ""}
+                    Motivo: {n.motivo_cancelamento || "não informado"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">

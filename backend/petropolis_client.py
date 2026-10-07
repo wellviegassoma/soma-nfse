@@ -354,7 +354,27 @@ class ClientePetropolis:
                 )
             self._selecionar_empresa_por_cmc(cmc, cnpj)
         ano, mes = _ano_mes_da_competencia(competencia)
-        return self._consultar_resumo_periodo(ano, mes)
+        resumo = self._consultar_resumo_periodo(ano, mes)
+        resumo["linhas"] = self._linhas_brutas_periodo(ano, mes)
+        return resumo
+
+    def _linhas_brutas_periodo(self, ano: int, mes: int) -> list[list[str]]:
+        """Texto cru de toda linha (>=3 colunas) da tela de consulta do período —
+        usado pra conferir quais colunas existem (Normal, Retido...)."""
+        mesano = f"{mes:02d}{ano:04d}"
+        resp = self._sessao.get(
+            f"{BASE_URL}/iss-consulta_periodos.php", params={"mesano": mesano}, timeout=30
+        )
+        tree = lxml_html.fromstring(resp.text)
+        linhas: list[list[str]] = []
+        for tr in tree.xpath("//tr"):
+            tds = tr.xpath("./td|./th")
+            if len(tds) < 3:
+                continue
+            textos = [" ".join(td.text_content().split()) for td in tds]
+            if any(textos):
+                linhas.append(textos)
+        return linhas[:60]
 
     def buscar_guia_iss(
         self, cnpj: str, competencia: str | None = None, cmc: str | None = None

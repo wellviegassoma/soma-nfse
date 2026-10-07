@@ -137,7 +137,7 @@ export async function consultarFaturamentoPetropolis(
   supabase: Supa,
   companyId: string,
   competencia: string,
-): Promise<{ ok: true; valorServicos: number } | { ok: false; erro: string }> {
+): Promise<{ ok: true; valorServicos: number; linhas: string[][] } | { ok: false; erro: string }> {
   const empresa = await buscarEmpresaPetropolis(supabase, companyId);
   if (!empresa.ok) return { ok: false, erro: empresa.erro };
 
@@ -172,7 +172,7 @@ export async function consultarFaturamentoPetropolis(
   }
   const valor = Number(corpo?.valor_servicos);
   if (Number.isNaN(valor)) return { ok: false, erro: "Resposta do ISS de Petrópolis sem valor reconhecível." };
-  return { ok: true, valorServicos: valor };
+  return { ok: true, valorServicos: valor, linhas: Array.isArray(corpo?.linhas) ? corpo.linhas : [] };
 }
 
 // Etapa 5 — ação real: fecha o movimento econômico do mês na Prefeitura
