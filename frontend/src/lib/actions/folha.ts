@@ -104,9 +104,10 @@ export async function importarPgdasd(
   if (!resultado) {
     return { error: "Não reconheci esse arquivo como uma declaração PGDAS-D." };
   }
-  if (resultado.folhaMensal.length === 0) {
-    return { error: "Não encontrei a seção de folha de salários anteriores nesse PDF." };
-  }
+  // Sem checar folhaMensal aqui: esta action é compartilhada com a importação
+  // de faturamento do RBT12 (aba RBT12), que só precisa da seção 2.2 — uma
+  // empresa sem Fator R não tem a seção de folha no PDF. Cada tela avisa
+  // o que faltar pra ela.
   return { resultado };
 }
 

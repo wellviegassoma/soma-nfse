@@ -26,7 +26,9 @@ export function ImportarPgdasdForm({ companyId }: { companyId: string }) {
   const [importStateVisto, setImportStateVisto] = useState(importState);
   if (importState !== importStateVisto) {
     setImportStateVisto(importState);
-    if (importState?.resultado) setLinhas(importState.resultado.folhaMensal);
+    if (importState?.resultado && importState.resultado.folhaMensal.length > 0) {
+      setLinhas(importState.resultado.folhaMensal);
+    }
   }
   const [saveStateVisto, setSaveStateVisto] = useState(saveState);
   if (saveState !== saveStateVisto) {
@@ -56,6 +58,9 @@ export function ImportarPgdasdForm({ companyId }: { companyId: string }) {
         </form>
       )}
       {importState?.error && <Alert tone="danger">{importState.error}</Alert>}
+      {resultado && resultado.folhaMensal.length === 0 && (
+        <Alert tone="danger">Não encontrei a seção de folha de salários anteriores nesse PDF.</Alert>
+      )}
 
       {linhas && (
         <form action={saveAction} className="flex flex-col gap-3">
