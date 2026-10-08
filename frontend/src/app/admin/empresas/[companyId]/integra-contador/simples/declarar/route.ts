@@ -8,7 +8,7 @@ import {
   receitaComManual,
 } from "@/lib/faturamento";
 import { buscarFolhaMensal, totalFolhaComEncargos } from "@/lib/folha";
-import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
+import { montarDeclaracaoPgdasD, removerPeriodoDesnecessario } from "@/lib/pgdas-declaracao";
 
 const COMPETENCIA_REGEX = /^\d{4}-\d{2}$/;
 
@@ -73,29 +73,42 @@ export async function POST(
     return NextResponse.json({ error: "Existem atividades não classificadas.", bloqueios: resultado.bloqueios }, { status: 400 });
   }
 
+  // A Serpro recusa mês de receita/folha "desnecessário" (depende da data de
+  // abertura da empresa). Se apontar um mês com valor ZERO, reenvia sem ele —
+  // a recusa é só de validação (nada foi transmitido); mês com valor nunca é
+  // descartado (ver removerPeriodoDesnecessario).
+  let dadosEnviados = resultado.dados;
   let response: Response;
-  try {
-    response = await fetch(
-      `${process.env.INTEGRA_CONTADOR_URL}/contribuintes/${company.cnpj}/simples/pgdas-d/declarar`,
-      {
-        method: "POST",
-        headers: {
-          "X-Internal-Token": process.env.INTEGRA_CONTADOR_INTERNAL_TOKEN ?? "",
-          "Content-Type": "application/json",
+  let body: { detail?: string; resposta?: { dados?: string } } | null = null;
+  for (let tentativa = 0; ; tentativa++) {
+    try {
+      response = await fetch(
+        `${process.env.INTEGRA_CONTADOR_URL}/contribuintes/${company.cnpj}/simples/pgdas-d/declarar`,
+        {
+          method: "POST",
+          headers: {
+            "X-Internal-Token": process.env.INTEGRA_CONTADOR_INTERNAL_TOKEN ?? "",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ dados: dadosEnviados }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(60_000),
         },
-        body: JSON.stringify({ dados: resultado.dados }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(60_000),
-      },
-    );
-  } catch {
-    return NextResponse.json(
-      { error: "Não foi possível falar com o Integra Contador agora. Tente novamente em instantes." },
-      { status: 502 },
-    );
+      );
+    } catch {
+      return NextResponse.json(
+        { error: "Não foi possível falar com o Integra Contador agora. Tente novamente em instantes." },
+        { status: 502 },
+      );
+    }
+
+    body = await response.json().catch(() => null);
+    if (response.ok || tentativa >= 12) break;
+    const corrigido = removerPeriodoDesnecessario(dadosEnviados, String(body?.detail ?? ""));
+    if (!corrigido) break;
+    dadosEnviados = corrigido;
   }
 
-  const body = await response.json().catch(() => null);
   if (!response.ok) {
     return NextResponse.json(
       { error: body?.detail ?? "A Serpro recusou a declaração." },
@@ -107,7 +120,7 @@ export async function POST(
   // situacao-fiscal/route.ts) contendo uma lista com o objeto
   // DeclaracaoTransmitida — desembrulha aqui pra o cliente já receber
   // objeto pronto.
-  const dadosParseados = body.resposta?.dados ? JSON.parse(body.resposta.dados) : null;
+  const dadosParseados = body?.resposta?.dados ? JSON.parse(body.resposta.dados) : null;
   const declaracaoTransmitida = Array.isArray(dadosParseados) ? dadosParseados[0] : dadosParseados;
 
   // Melhor esforço: a transmissão pra Serpro já aconteceu de verdade nesse
@@ -127,7 +140,7 @@ export async function POST(
         id_declaracao: declaracaoTransmitida.idDeclaracao,
         data_hora_transmissao: declaracaoTransmitida.dataHoraTransmissao ?? null,
         valor_total: valorTotal,
-        dados_enviados: resultado.dados,
+        dados_enviados: dadosEnviados,
         transmitted_by: user.id,
       })
       .then(({ error }) => {

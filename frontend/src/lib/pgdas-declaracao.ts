@@ -26,6 +26,41 @@ function resolverIdAtividade(tratamento: TratamentoAtividade, tipoRetencaoIssqn:
   return retido ? par.comRetencao : par.semRetencao;
 }
 
+type ReceitaAnterior = { pa: number; valorInterno: number; valorExterno: number };
+type FolhaSalario = { pa: number; valor: number };
+
+// A Serpro recusa (MSG_ISN_047/048) mês de receita/folha que "não é necessário"
+// pra aquele PA — a regra depende da data de abertura da empresa (ex.: aberta
+// em 24/02 recusou fevereiro; aberta em 01/04 aceitou abril). Em vez de chutar a
+// regra, quem chama reenvia SEM o mês que a Serpro apontou — mas só quando o
+// valor desse mês é zero: nunca descarta receita ou folha de verdade. Devolve
+// os dados corrigidos, ou null se a mensagem não for desse tipo / o mês tem valor.
+export function removerPeriodoDesnecessario(
+  dados: Record<string, unknown>,
+  mensagemSerpro: string,
+): Record<string, unknown> | null {
+  const m = mensagemSerpro.match(/(receita bruta|folha)[^:]{0,40}per[ií]odo desnecess[aá]rio:\s*(\d{2})\/(\d{4})/i);
+  if (!m) return null;
+  const pa = Number(m[3]) * 100 + Number(m[2]);
+  const copia = structuredClone(dados) as { declaracao?: { receitasBrutasAnteriores?: ReceitaAnterior[]; folhasSalario?: FolhaSalario[] } };
+  const decl = copia.declaracao;
+  if (!decl) return null;
+
+  if (m[1].toLowerCase().startsWith("receita")) {
+    const lista = decl.receitasBrutasAnteriores ?? [];
+    const alvo = lista.find((r) => r.pa === pa);
+    if (!alvo || alvo.valorInterno + alvo.valorExterno !== 0) return null;
+    decl.receitasBrutasAnteriores = lista.filter((r) => r.pa !== pa);
+  } else {
+    const lista = decl.folhasSalario ?? [];
+    const alvo = lista.find((f) => f.pa === pa);
+    if (!alvo || alvo.valor !== 0) return null;
+    decl.folhasSalario = lista.filter((f) => f.pa !== pa);
+    if (decl.folhasSalario.length === 0) delete decl.folhasSalario;
+  }
+  return copia as Record<string, unknown>;
+}
+
 export type DeclaracaoPgdasResultado =
   | { dados: null; bloqueios: string[] }
   | { dados: Record<string, unknown>; bloqueios: [] };
