@@ -118,7 +118,16 @@ export default async function ProcessosPage(
     contagemPorStatus.set(linha.status, (contagemPorStatus.get(linha.status) ?? 0) + 1);
   }
 
-  const linhasFiltradas = statusFiltro ? linhas.filter((l) => l.status === statusFiltro) : linhas;
+  const linhasDoStatus = statusFiltro ? linhas.filter((l) => l.status === statusFiltro) : linhas;
+  // Concluídos sempre no fim da lista (não ficam misturados com os em andamento);
+  // os em andamento mantêm a ordem de criação (mais novo primeiro) e os
+  // concluídos vêm do concluído mais recentemente pro mais antigo.
+  const linhasFiltradas = [
+    ...linhasDoStatus.filter((l) => l.status !== "CONCLUIDO"),
+    ...linhasDoStatus
+      .filter((l) => l.status === "CONCLUIDO")
+      .sort((a, b) => (b.data_conclusao ?? "").localeCompare(a.data_conclusao ?? "")),
+  ];
 
   const query2 = (extra: Record<string, string>) => {
     const params = new URLSearchParams();
