@@ -26,20 +26,22 @@
 
 import { buscarAtividade, type AtividadeSimplesNacional } from "./simples-nacional-atividades";
 
-// Chave: código LC 116 (com o ponto, ex. "04.01"). Valor: id de
-// simples-nacional-atividades.ts.
+// Chave: item.subitem da LC 116 sem ponto, 4 dígitos (ex. "0401" pra
+// 4.01) — mesmo formato de LC116_DESCRICOES em lc116-lista-servicos.ts,
+// que são os 2 primeiros dígitos do `national_tax_code` de 6 dígitos.
+// Valor: id de simples-nacional-atividades.ts.
 const MAPA_LC116_PARA_ATIVIDADE: Record<string, string> = {
-  "04.01": "medicina", // "Medicina e biomedicina" — §5º-B, XIX
-  "04.05": "psicologia_terapias", // "Acupuntura" — nomeada explicitamente no §5º-B, XXI
-  "04.06": "medicina", // "Enfermagem, inclusive serviços auxiliares" — §5º-B, XIX inclui "e enfermagem"
-  "04.08": "fisioterapia", // "Terapia ocupacional, fisioterapia e fonoaudiologia" — mistura 3 atividades, mas todas caem em Fator R (fisioterapia é §5º-B XVI; terapia ocupacional/fonoaudiologia são §5º-B XXI) — tratamento final é o mesmo, citação usa a mais específica
-  "04.09": "psicologia_terapias", // "Terapias de qualquer espécie" — "terapias" nomeado no §5º-B, XXI
-  "04.10": "psicologia_terapias", // "Nutrição" — "clínicas de nutrição" nomeado no §5º-B, XXI
-  "04.11": "medicina", // "Obstetrícia" — especialidade médica, mesma lógica de 04.01
-  "04.12": "odontologia", // "Odontologia" — §5º-B, XX
-  "04.14": "proteses_gerais", // "Próteses sob encomenda" — "serviços de prótese em geral", §5º-D, XIV
-  "04.15": "psicologia_terapias", // "Psicanálise" — nomeada explicitamente no §5º-B, XXI
-  "04.16": "psicologia_terapias", // "Psicologia" — nomeada explicitamente no §5º-B, XXI
+  "0401": "medicina", // "Medicina e biomedicina" — §5º-B, XIX
+  "0405": "psicologia_terapias", // "Acupuntura" — nomeada explicitamente no §5º-B, XXI
+  "0406": "medicina", // "Enfermagem, inclusive serviços auxiliares" — §5º-B, XIX inclui "e enfermagem"
+  "0408": "fisioterapia", // "Terapia ocupacional, fisioterapia e fonoaudiologia" — mistura 3 atividades, mas todas caem em Fator R (fisioterapia é §5º-B XVI; terapia ocupacional/fonoaudiologia são §5º-B XXI) — tratamento final é o mesmo, citação usa a mais específica
+  "0409": "psicologia_terapias", // "Terapias de qualquer espécie" — "terapias" nomeado no §5º-B, XXI
+  "0410": "psicologia_terapias", // "Nutrição" — "clínicas de nutrição" nomeado no §5º-B, XXI
+  "0411": "medicina", // "Obstetrícia" — especialidade médica, mesma lógica de 04.01
+  "0412": "odontologia", // "Odontologia" — §5º-B, XX
+  "0414": "proteses_gerais", // "Próteses sob encomenda" — "serviços de prótese em geral", §5º-D, XIV
+  "0415": "psicologia_terapias", // "Psicanálise" — nomeada explicitamente no §5º-B, XXI
+  "0416": "psicologia_terapias", // "Psicologia" — nomeada explicitamente no §5º-B, XXI
 
   // Deixados de fora de propósito (ambíguos ou sem correspondência clara):
   // 04.02 (análises clínicas/patologia = laboratório; radioterapia/quimioterapia
@@ -58,8 +60,9 @@ const MAPA_LC116_PARA_ATIVIDADE: Record<string, string> = {
   //   prestação do serviço médico).
 };
 
-export function sugerirAtividade(codigoLC116: string | null | undefined): AtividadeSimplesNacional | undefined {
-  if (!codigoLC116) return undefined;
-  const id = MAPA_LC116_PARA_ATIVIDADE[codigoLC116.trim()];
+export function sugerirAtividade(codigoNacional: string | null | undefined): AtividadeSimplesNacional | undefined {
+  if (!codigoNacional) return undefined;
+  const chave = codigoNacional.trim().slice(0, 4);
+  const id = MAPA_LC116_PARA_ATIVIDADE[chave];
   return id ? buscarAtividade(id) : undefined;
 }
