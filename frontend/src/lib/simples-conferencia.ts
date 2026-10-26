@@ -126,9 +126,12 @@ export function conferirSimples(e: EntradaConferencia): ResultadoConferencia {
     }
   }
 
-  // 4. RBT12 estimado (só conta como problema pra empresa com 12+ meses).
+  // 4. RBT12 estimado — só importa pra empresa com 12+ meses (antes disso
+  //    a proporcionalização é a regra legal) e com receita no mês (sem
+  //    receita o DAS é zero, o RBT12 não muda nada; "sem receita" já
+  //    aparece como motivo próprio logo abaixo).
   const empresaNova = e.mesesDeExistencia !== null && e.mesesDeExistencia < 12;
-  if (e.rbt12Estimado && !empresaNova) {
+  if (e.rbt12Estimado && !empresaNova && e.receitaMes > 0) {
     revisar(
       "RBT12_ESTIMADO",
       "RBT12 estimado com histórico incompleto no sistema — importe o PGDAS-D anterior na aba RBT12 ou confira o valor.",

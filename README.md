@@ -2469,7 +2469,11 @@ dá). Script em `scripts/import-nibo-planilha/`, fora do código do produto.
       disparada sem esperar e podia se perder no encerramento da function)
 - [x] Cálculo por empresa extraído pra `lib/simples-linha.ts` — a tela e a
       rota de transmissão usam exatamente os mesmos números
-- [x] Regras testadas com 23 casos (empresa limpa, cada motivo isolado,
+- [x] Aprovação em lote das empresas em Revisar (filtro "A revisar" + checkbox do
+      cabeçalho agindo só nas linhas visíveis), com resumo dos motivos antes de
+      confirmar; cada empresa é recalculada no servidor
+- [x] RBT12 estimado não pede revisão quando a receita do mês é zero (DAS zero)
+- [x] Regras testadas com 24 casos (empresa limpa, cada motivo isolado,
       empresa nova com RBT12 proporcional, aprovação vencida por número novo)
 - [ ] Aplicar a migration antes do deploy (a Central Simples consulta a
       tabela nova)

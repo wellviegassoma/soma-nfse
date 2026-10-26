@@ -8,6 +8,7 @@ import { BaixarGuiasSimplesLoteButton } from "./BaixarGuiasSimplesLoteButton";
 import { FecharAntecipadoLoteButton } from "./FecharAntecipadoLoteButton";
 import { ConferirPrefeituraLoteButton } from "./ConferirPrefeituraLoteButton";
 import { CelulaConferencia } from "./CelulaConferencia";
+import { AprovarRevisarLoteButton } from "./AprovarRevisarLoteButton";
 import type { ResultadoConferencia } from "@/lib/simples-conferencia";
 
 const IBGE_PETROPOLIS = "3303906";
@@ -147,11 +148,20 @@ export function SimplesLoteComSelecao({
     [linhas, filtro],
   );
 
-  const todosMarcados = linhas.length > 0 && linhas.every((l) => selecionados.has(l.id));
+  // O checkbox do cabeçalho age só sobre as linhas visíveis no filtro —
+  // marca/desmarca o que está na tela sem mexer no resto.
+  const todosMarcados = linhasVisiveis.length > 0 && linhasVisiveis.every((l) => selecionados.has(l.id));
   const algumMarcado = linhas.some((l) => selecionados.has(l.id));
 
   function alternarTodos() {
-    setSelecionados(todosMarcados ? new Set() : new Set(linhas.map((l) => l.id)));
+    setSelecionados((atual) => {
+      const novo = new Set(atual);
+      for (const l of linhasVisiveis) {
+        if (todosMarcados) novo.delete(l.id);
+        else novo.add(l.id);
+      }
+      return novo;
+    });
   }
   function alternarUm(id: string) {
     setSelecionados((atual) => {
@@ -168,6 +178,14 @@ export function SimplesLoteComSelecao({
         .filter((l) => selecionados.has(l.id) && !l.jaEnviado && l.bloqueios.length === 0 && l.liberado)
         .map((l) => ({ id: l.id, nome: l.nome })),
     [linhas, selecionados],
+  );
+  const empresasParaAprovar = useMemo(
+    () =>
+      // Só as visíveis no filtro atual — quem aprova está olhando pra elas.
+      linhasVisiveis
+        .filter((l) => selecionados.has(l.id) && !l.jaEnviado && !l.liberado && l.conferencia.status === "REVISAR")
+        .map((l) => ({ id: l.id, nome: l.nome, assinatura: l.assinatura, motivos: l.conferencia.motivos })),
+    [linhasVisiveis, selecionados],
   );
   const empresasParaBaixar = useMemo(
     () =>
@@ -201,6 +219,7 @@ export function SimplesLoteComSelecao({
             os checkboxes da tabela pra escolher quais empresas entram no lote.
           </p>
           <div className="flex flex-wrap items-center gap-3">
+            <AprovarRevisarLoteButton competencia={competencia} empresas={empresasParaAprovar} />
             <EnviarSimplesLoteButton competencia={competencia} empresas={empresasParaEnviar} />
             <BaixarGuiasSimplesLoteButton
               competencia={competencia}
@@ -215,7 +234,8 @@ export function SimplesLoteComSelecao({
           A coluna <strong className="text-danger">DAS líquido</strong> é o valor que de fato seria
           transmitido no PGDAS-D — já líquido de retenção sofrida. Só entram no envio as empresas{" "}
           <strong>liberadas na conferência</strong>: OK direto, ou em revisão depois de aprovadas. Bloqueadas
-          não transmitem até o problema ser corrigido.
+          não transmitem até o problema ser corrigido. Para aprovar várias de uma vez, filtre &quot;A revisar&quot;,
+          marque as que já conferiu e use &quot;Aprovar revisão das selecionadas&quot;.
         </p>
         <div className="mt-4 flex flex-wrap gap-2 text-xs">
           {(
