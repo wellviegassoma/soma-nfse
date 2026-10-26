@@ -6,19 +6,11 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { mesAnteriorBrasilia } from "@/lib/competencia";
 import {
-  buscarFaturamentoMensal,
-  buscarFaturamentoPorAtividade,
-  buscarReceitaManual,
-  buscarRetencoesMensal,
-  receitaComManual,
-  resolverRbt12,
-  somarFaturamento,
-  somarReceitaIssRetido,
-  somarRetencoes,
-} from "@/lib/faturamento";
-import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
-import { abaterRetencaoDoDas, calcularSimplesNacional } from "@/lib/calculo-impostos";
-import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
+  COLUNAS_EMPRESA_SIMPLES,
+  buscarExtrasConferencia,
+  calcularSimplesEmpresa,
+  type EmpresaSimples,
+} from "@/lib/simples-linha";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import { SimplesLoteComSelecao } from "./SimplesLoteComSelecao";
 
@@ -36,11 +28,12 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
   const supabase = await createClient();
   const { data: companies } = await supabase
     .from("companies")
-    .select("id, legal_name, trade_name, codigo_cliente, cnpj, data_abertura, sujeito_fator_r, municipality_ibge_code")
+    .select(COLUNAS_EMPRESA_SIMPLES)
     .eq("tax_regime", "SIMPLES_NACIONAL")
     .eq("ativa", true)
     .not("cnpj", "is", null)
-    .order("legal_name");
+    .order("legal_name")
+    .returns<EmpresaSimples[]>();
 
   // Etapa 6 da Rotina de Fechamento: quem já fechou essa competência
   // antecipadamente (Anexo III fixo, sem Fator R) — ver
@@ -52,13 +45,10 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
     .eq("competencia", competencia);
   const fechadasSet = new Set((fechadas ?? []).map((f) => f.company_id));
 
-  // Última conferência de faturamento com o site da Prefeitura (só
-  // Petrópolis hoje) — ver ConferirPrefeituraLoteButton.
-  const { data: conferencias } = await supabase
-    .from("conferencia_prefeitura")
-    .select("company_id, valor_prefeitura, erro, consultado_em")
-    .eq("competencia", competencia);
-  const conferenciaPorEmpresa = new Map((conferencias ?? []).map((c) => [c.company_id, c]));
+  // Última conferência com a Prefeitura (só Petrópolis hoje — ver
+  // ConferirPrefeituraLoteButton) e aprovações da conferência do Simples
+  // já dadas pra essa competência.
+  const extras = await buscarExtrasConferencia(supabase, competencia);
 
   const linhas = await Promise.all(
     (companies ?? []).map(async (company) => {
@@ -77,57 +67,9 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
         jaEnviado = false;
       }
 
-      const [notasMensais, notasPorAtividade, receitaManualPorMes, folhaMensal, retencoes] = await Promise.all([
-        buscarFaturamentoMensal(supabase, company.id),
-        buscarFaturamentoPorAtividade(supabase, company.id),
-        buscarReceitaManual(supabase, company.id),
-        buscarFolhaMensal(supabase, company.id),
-        buscarRetencoesMensal(supabase, company.id),
-      ]);
-
-      const { receitaPorMes, mesesComDados, mesesManuais } = receitaComManual(notasMensais, receitaManualPorMes);
-      const { rbt12, estimado: rbt12Estimado } = resolverRbt12({
-        competencia,
-        receitaPorMes,
-        mesesComDados,
-        mesesManuais,
-        dataAbertura: company.data_abertura,
-      });
-
-      const folhaPorMes = new Map(folhaMensal.map((f) => [f.competencia, totalFolhaComEncargos(f)]));
-      let fatorRPercentual: number | null = null;
-      if (company.sujeito_fator_r) {
-        const { fp12 } = resolverFp12({
-          competencia,
-          folhaPorMes: (mes) => folhaPorMes.get(mes),
-          mesesComDados: new Set(folhaPorMes.keys()),
-        });
-        fatorRPercentual = resolverFatorR(fp12, rbt12);
-      }
-
-      const receitaMes = somarFaturamento(notasMensais, [competencia]);
-      const resultado = calcularSimplesNacional({
-        receitaMes,
-        rbt12,
-        rbt12Estimado,
-        sujeitoFatorR: company.sujeito_fator_r,
-        fatorRPercentual,
-        receitaIssRetido: somarReceitaIssRetido(notasPorAtividade, competencia),
-      });
-
-      const retencaoMes = somarRetencoes(retencoes, [competencia]);
-      const liquido = abaterRetencaoDoDas(resultado, retencaoMes);
-
-      const declaracao = montarDeclaracaoPgdasD({
-        cnpj: company.cnpj!,
-        competencia,
-        indicadorTransmissao: false,
-        tipoDeclaracao: 1,
-        notas: notasPorAtividade,
-        receitaPorMes,
-        folhaPorMes: (mes) => folhaPorMes.get(mes),
-        dataAbertura: company.data_abertura,
-      });
+      const prefeitura = extras.prefeitura.get(company.id) ?? null;
+      const aprovacao = extras.aprovacoes.get(company.id) ?? null;
+      const calculo = await calcularSimplesEmpresa(supabase, company, competencia, { prefeitura, aprovacao });
 
       return {
         id: company.id,
@@ -136,26 +78,22 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
           : company.trade_name || company.legal_name,
         prefixoArquivo: prefixoArquivoEmpresa(company),
         municipioIbge: company.municipality_ibge_code,
-        prefeitura: (() => {
-          const c = conferenciaPorEmpresa.get(company.id);
-          return c
-            ? {
-                valor: c.valor_prefeitura == null ? null : Number(c.valor_prefeitura),
-                erro: c.erro,
-                consultadoEm: c.consultado_em,
-              }
-            : null;
-        })(),
-        receitaMes,
-        rbt12,
-        rbt12Estimado,
-        anexo: resultado.anexo,
-        aliquotaEfetiva: resultado.aliquotaEfetiva,
-        retencaoIrrf: retencaoMes.irrf,
-        retencaoFederal: retencaoMes.contribuicoesSociais,
-        dasBruto: resultado.dasTotal,
-        dasLiquido: liquido.dasTotal,
-        bloqueios: declaracao.bloqueios,
+        prefeitura,
+        receitaMes: calculo.receitaMes,
+        rbt12: calculo.rbt12,
+        rbt12Estimado: calculo.rbt12Estimado,
+        anexo: calculo.anexo,
+        aliquotaEfetiva: calculo.aliquotaEfetiva,
+        fatorR: calculo.fatorR,
+        retencaoIrrf: calculo.retencaoIrrf,
+        retencaoFederal: calculo.retencaoFederal,
+        dasBruto: calculo.dasBruto,
+        dasLiquido: calculo.dasLiquido,
+        bloqueios: calculo.bloqueios,
+        conferencia: calculo.conferencia,
+        assinatura: calculo.assinatura,
+        liberado: calculo.liberado,
+        aprovacao,
         jaEnviado,
         podeFecharAntes: !company.sujeito_fator_r,
         jaFechada: fechadasSet.has(company.id),

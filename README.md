@@ -2439,6 +2439,46 @@ dá). Script em `scripts/import-nibo-planilha/`, fora do código do produto.
       saldo inicial de cada conta, ou reconciliar via extrato OFX real pelo
       módulo Conciliação, fica para o usuário
 
+**Fase BA — Conferência do Simples Nacional antes do envio do PGDAS-D
+(implementado, aguardando validação no fechamento de 10/2026)**
+
+- [x] `lib/simples-conferencia.ts` (funções puras): cada empresa da Central
+      Simples recebe **OK**, **Revisar** ou **Bloqueada**, com o motivo:
+  - Bloqueia: atividade sem classificação; sujeita ao Fator R **sem nenhuma
+    folha** (antes o sistema assumia Anexo III em silêncio, mas o PGDAS-D ia
+    sem folha → Anexo V na Receita); receita do ano acima do sublimite de
+    R$ 3,6 mi (ISS fora do DAS, cálculo não cobre); RBT12 acima do teto
+  - Revisar: folha incompleta; Fator R entre 25% e 31% (borda) ou abaixo de
+    28% (Anexo V); RBT12 estimado em empresa com 12+ meses; mês sem receita;
+    receita acima de 2× ou abaixo de 0,5× a média dos meses anteriores;
+    Petrópolis não conferida, sem acesso ou divergente; retenção zerando o
+    DAS; receita do ano a menos de 10% do sublimite
+- [x] Aprovação de quem está em Revisar (`simples_conferencia_aprovacoes`,
+      migration `20261026120000_fase_ba_conferencia_simples.sql`) com quem,
+      quando e observação. Grava a **assinatura** dos números aprovados — se
+      entrar nota nova ou mudar folha/RBT12 depois, a aprovação perde a
+      validade sozinha e a empresa volta pra Revisar
+- [x] Trava **no servidor** (`integra-contador/simples/declarar`): transmissão
+      só sai pra empresa liberada (vale pro lote e pro card individual;
+      simulação continua livre) e nunca transmite uma declaração original
+      duas vezes pra mesma competência (409 → "já declarada")
+- [x] Envio em lote: uma tentativa por empresa (antes eram 3 — um timeout
+      depois da Serpro aceitar podia transmitir de novo), resultado com o
+      motivo de cada falha
+- [x] Gravação do histórico de declaração agora com `await` (antes era
+      disparada sem esperar e podia se perder no encerramento da function)
+- [x] Cálculo por empresa extraído pra `lib/simples-linha.ts` — a tela e a
+      rota de transmissão usam exatamente os mesmos números
+- [x] Aprovação em lote das empresas em Revisar (filtro "A revisar" + checkbox do
+      cabeçalho agindo só nas linhas visíveis), com resumo dos motivos antes de
+      confirmar; cada empresa é recalculada no servidor
+- [x] RBT12 estimado não pede revisão quando a receita do mês é zero (DAS zero)
+- [x] Regras testadas com 24 casos (empresa limpa, cada motivo isolado,
+      empresa nova com RBT12 proporcional, aprovação vencida por número novo)
+- [ ] Aplicar a migration antes do deploy (a Central Simples consulta a
+      tabela nova)
+- [ ] Validar com o fechamento real de 10/2026
+
 ## Backend (Fase C em diante)
 
 ```bash

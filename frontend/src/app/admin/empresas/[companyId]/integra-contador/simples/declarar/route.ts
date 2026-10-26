@@ -9,6 +9,12 @@ import {
 } from "@/lib/faturamento";
 import { buscarFolhaMensal, totalFolhaComEncargos } from "@/lib/folha";
 import { montarDeclaracaoPgdasD, removerPeriodoDesnecessario } from "@/lib/pgdas-declaracao";
+import {
+  COLUNAS_EMPRESA_SIMPLES,
+  buscarExtrasConferencia,
+  calcularSimplesEmpresa,
+  type EmpresaSimples,
+} from "@/lib/simples-linha";
 
 const COMPETENCIA_REGEX = /^\d{4}-\d{2}$/;
 
@@ -39,14 +45,69 @@ export async function POST(
   const supabase = await createClient();
   const { data: company } = await supabase
     .from("companies")
-    .select("cnpj, data_abertura")
+    .select(COLUNAS_EMPRESA_SIMPLES)
     .eq("id", companyId)
-    .single();
+    .single<EmpresaSimples>();
   if (!company?.cnpj) {
     return NextResponse.json(
       { error: "Essa empresa não tem CNPJ cadastrado — o PGDAS-D só se aplica a CNPJ." },
       { status: 400 },
     );
+  }
+
+  // Travas de transmissão (simulação continua livre). Checadas aqui no
+  // servidor, não só na tela — vale tanto pro lote da Central Simples
+  // quanto pro card individual da aba Impostos.
+  if (indicadorTransmissao) {
+    // 1. Nunca transmite uma declaração ORIGINAL duas vezes pra mesma
+    //    competência — protege contra clique duplo e contra repetição
+    //    depois de um timeout em que a primeira chamada chegou a passar.
+    //    Retificadora é decisão explícita e segue liberada.
+    if (tipoDeclaracao === 1) {
+      const { data: existente } = await supabase
+        .from("integra_contador_pgdas_declaracoes")
+        .select("id_declaracao")
+        .eq("company_id", companyId)
+        .eq("competencia", competencia)
+        .not("id_declaracao", "is", null)
+        .limit(1)
+        .maybeSingle();
+      if (existente?.id_declaracao) {
+        return NextResponse.json(
+          {
+            error: `Já existe declaração transmitida pra ${competencia} (${existente.id_declaracao}). Para corrigir, transmita como retificadora.`,
+            jaDeclarada: true,
+            idDeclaracao: existente.id_declaracao,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    // 2. Conferência do fechamento (lib/simples-conferencia.ts): só
+    //    transmite empresa OK ou em "Revisar" com aprovação válida.
+    const extras = await buscarExtrasConferencia(supabase, competencia, [companyId]);
+    const calculo = await calcularSimplesEmpresa(supabase, company, competencia, {
+      prefeitura: extras.prefeitura.get(companyId) ?? null,
+      aprovacao: extras.aprovacoes.get(companyId) ?? null,
+    });
+    if (!calculo.liberado) {
+      const aprovacaoVencida =
+        calculo.conferencia.status === "REVISAR" && extras.aprovacoes.has(companyId);
+      const cabecalho =
+        calculo.conferencia.status === "BLOQUEADO"
+          ? "Conferência bloqueou a transmissão"
+          : aprovacaoVencida
+            ? "Os números mudaram depois da aprovação — confira e aprove de novo na Central Simples Nacional"
+            : "Conferência pede revisão — aprove na Central Simples Nacional antes de transmitir";
+      return NextResponse.json(
+        {
+          error: `${cabecalho}: ${calculo.conferencia.motivos.map((m) => m.texto).join(" ")}`,
+          conferencia: calculo.conferencia,
+        },
+        { status: 409 },
+      );
+    }
   }
 
   const [notasPorAtividade, notasMensais, receitaManualPorMes, folhaMensal] = await Promise.all([
@@ -132,20 +193,19 @@ export async function POST(
       ? (declaracaoTransmitida.valoresDevidos as { valor: number }[])
       : [];
     const valorTotal = valoresDevidos.reduce((acc, v) => acc + Number(v.valor ?? 0), 0);
-    supabase
-      .from("integra_contador_pgdas_declaracoes")
-      .insert({
-        company_id: companyId,
-        competencia,
-        id_declaracao: declaracaoTransmitida.idDeclaracao,
-        data_hora_transmissao: declaracaoTransmitida.dataHoraTransmissao ?? null,
-        valor_total: valorTotal,
-        dados_enviados: dadosEnviados,
-        transmitted_by: user.id,
-      })
-      .then(({ error }) => {
-        if (error) console.error("Falha ao registrar histórico de declaração do PGDAS-D:", error);
-      });
+    // Com await: sem ele a função serverless pode ser encerrada logo
+    // depois da resposta e o registro se perder — e é esse registro que
+    // impede uma segunda transmissão original da mesma competência.
+    const { error: erroHistorico } = await supabase.from("integra_contador_pgdas_declaracoes").insert({
+      company_id: companyId,
+      competencia,
+      id_declaracao: declaracaoTransmitida.idDeclaracao,
+      data_hora_transmissao: declaracaoTransmitida.dataHoraTransmissao ?? null,
+      valor_total: valorTotal,
+      dados_enviados: dadosEnviados,
+      transmitted_by: user.id,
+    });
+    if (erroHistorico) console.error("Falha ao registrar histórico de declaração do PGDAS-D:", erroHistorico);
   }
 
   return NextResponse.json({ resultado: declaracaoTransmitida });
