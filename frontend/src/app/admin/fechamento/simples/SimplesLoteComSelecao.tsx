@@ -7,6 +7,8 @@ import { EnviarSimplesLoteButton } from "./EnviarSimplesLoteButton";
 import { BaixarGuiasSimplesLoteButton } from "./BaixarGuiasSimplesLoteButton";
 import { FecharAntecipadoLoteButton } from "./FecharAntecipadoLoteButton";
 import { ConferirPrefeituraLoteButton } from "./ConferirPrefeituraLoteButton";
+import { CelulaConferencia } from "./CelulaConferencia";
+import type { ResultadoConferencia } from "@/lib/simples-conferencia";
 
 const IBGE_PETROPOLIS = "3303906";
 const IBGE_RIO = "3304557";
@@ -26,7 +28,15 @@ export type LinhaSimples = {
   retencaoFederal: number;
   dasBruto: number;
   dasLiquido: number;
+  fatorR: number | null;
   bloqueios: string[];
+  // Conferência antes do envio (lib/simples-conferencia.ts). `liberado`
+  // já considera a aprovação — e a rota de transmissão confere de novo
+  // no servidor, isto aqui é só pra tela.
+  conferencia: ResultadoConferencia;
+  assinatura: string;
+  liberado: boolean;
+  aprovacao: { assinatura: string; aprovadoEm: string; aprovadoPorNome: string | null; observacao: string | null } | null;
   jaEnviado: boolean;
   // Etapa 6 da Rotina de Fechamento (Automação) — Anexo III fixo, sem
   // Fator R, não depende do resto do mês pra fechar antes.
@@ -88,11 +98,14 @@ function formatPercent(value: number) {
   return `${(value * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 }
 
+type FiltroStatus = "TODAS" | "LIBERADAS" | "REVISAR" | "BLOQUEADAS" | "ENVIADAS";
+
 // Mesmo espírito de MitLoteComSelecao.tsx — checkbox por linha decide
 // quem entra nos lotes. "Declarar e transmitir" sempre exclui quem já
-// foi enviado ou tem pendência de classificação (efeito legal real,
-// nunca ignora essas travas mesmo se a linha estiver marcada);
-// "Baixar guias" respeita a seleção como está.
+// foi enviado ou não está liberado na conferência (bloqueada, ou em
+// revisão sem aprovação válida) — efeito legal real, nunca ignora essas
+// travas mesmo se a linha estiver marcada; "Baixar guias" respeita a
+// seleção como está.
 export function SimplesLoteComSelecao({
   linhas,
   competencia,
@@ -103,6 +116,36 @@ export function SimplesLoteComSelecao({
   periodoApuracao: string;
 }) {
   const [selecionados, setSelecionados] = useState<Set<string>>(() => new Set(linhas.map((l) => l.id)));
+  const [filtro, setFiltro] = useState<FiltroStatus>("TODAS");
+
+  const contagem = useMemo(() => {
+    const pendentes = linhas.filter((l) => !l.jaEnviado);
+    return {
+      liberadas: pendentes.filter((l) => l.liberado).length,
+      revisar: pendentes.filter((l) => !l.liberado && l.conferencia.status === "REVISAR").length,
+      bloqueadas: pendentes.filter((l) => l.conferencia.status === "BLOQUEADO").length,
+      enviadas: linhas.filter((l) => l.jaEnviado).length,
+    };
+  }, [linhas]);
+
+  const linhasVisiveis = useMemo(
+    () =>
+      linhas.filter((l) => {
+        switch (filtro) {
+          case "LIBERADAS":
+            return !l.jaEnviado && l.liberado;
+          case "REVISAR":
+            return !l.jaEnviado && !l.liberado && l.conferencia.status === "REVISAR";
+          case "BLOQUEADAS":
+            return !l.jaEnviado && l.conferencia.status === "BLOQUEADO";
+          case "ENVIADAS":
+            return l.jaEnviado;
+          default:
+            return true;
+        }
+      }),
+    [linhas, filtro],
+  );
 
   const todosMarcados = linhas.length > 0 && linhas.every((l) => selecionados.has(l.id));
   const algumMarcado = linhas.some((l) => selecionados.has(l.id));
@@ -122,7 +165,7 @@ export function SimplesLoteComSelecao({
   const empresasParaEnviar = useMemo(
     () =>
       linhas
-        .filter((l) => selecionados.has(l.id) && !l.jaEnviado && l.bloqueios.length === 0)
+        .filter((l) => selecionados.has(l.id) && !l.jaEnviado && l.bloqueios.length === 0 && l.liberado)
         .map((l) => ({ id: l.id, nome: l.nome })),
     [linhas, selecionados],
   );
@@ -170,16 +213,39 @@ export function SimplesLoteComSelecao({
         </div>
         <p className="mt-3 text-xs text-foreground/50">
           A coluna <strong className="text-danger">DAS líquido</strong> é o valor que de fato seria
-          transmitido no PGDAS-D — já líquido de retenção sofrida. Empresas com pendência de
-          classificação de atividade ficam de fora do envio em lote até serem corrigidas.
+          transmitido no PGDAS-D — já líquido de retenção sofrida. Só entram no envio as empresas{" "}
+          <strong>liberadas na conferência</strong>: OK direto, ou em revisão depois de aprovadas. Bloqueadas
+          não transmitem até o problema ser corrigido.
         </p>
+        <div className="mt-4 flex flex-wrap gap-2 text-xs">
+          {(
+            [
+              ["TODAS", `Todas (${linhas.length})`],
+              ["LIBERADAS", `Liberadas para envio (${contagem.liberadas})`],
+              ["REVISAR", `A revisar (${contagem.revisar})`],
+              ["BLOQUEADAS", `Bloqueadas (${contagem.bloqueadas})`],
+              ["ENVIADAS", `Já enviadas (${contagem.enviadas})`],
+            ] as [FiltroStatus, string][]
+          ).map(([valor, rotulo]) => (
+            <button
+              key={valor}
+              type="button"
+              onClick={() => setFiltro(valor)}
+              className={`rounded-full border px-3 py-1 ${
+                filtro === valor ? "border-foreground bg-foreground text-background" : "border-border text-foreground/70"
+              }`}
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
       </Card>
 
       {linhas.length === 0 ? (
         <Alert tone="warning">Nenhuma empresa Simples Nacional com CNPJ cadastrada.</Alert>
       ) : (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[1300px] text-sm">
+          <table className="w-full min-w-[1500px] text-sm">
             <thead>
               <tr className="text-xs text-foreground/50">
                 <th rowSpan={2} className="border-b border-border px-3 py-2 text-center align-bottom">
@@ -192,6 +258,9 @@ export function SimplesLoteComSelecao({
                 </th>
                 <th rowSpan={2} className="border-b border-border px-3 py-2 text-left align-bottom">
                   Nome
+                </th>
+                <th rowSpan={2} className="border-b border-border px-3 py-2 text-left align-bottom">
+                  Conferência
                 </th>
                 <th rowSpan={2} className="border-b border-border px-3 py-2 text-right align-bottom">
                   Faturamento Mês
@@ -224,7 +293,7 @@ export function SimplesLoteComSelecao({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {linhas.map((linha) => (
+              {linhasVisiveis.map((linha) => (
                 <tr key={linha.id}>
                   <td className="px-3 py-2 text-center">
                     <input
@@ -264,6 +333,20 @@ export function SimplesLoteComSelecao({
                       </span>
                     )}
                   </td>
+                  <td className="px-3 py-2 align-top">
+                    {linha.jaEnviado ? (
+                      <span className="text-xs text-foreground/40">—</span>
+                    ) : (
+                      <CelulaConferencia
+                        companyId={linha.id}
+                        competencia={competencia}
+                        conferencia={linha.conferencia}
+                        assinatura={linha.assinatura}
+                        liberado={linha.liberado}
+                        aprovacao={linha.aprovacao}
+                      />
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right">{formatMoney(linha.receitaMes)}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right">
                     <CelulaPrefeitura linha={linha} ibgeRio={IBGE_RIO} ibgePetropolis={IBGE_PETROPOLIS} />
@@ -272,7 +355,9 @@ export function SimplesLoteComSelecao({
                     {formatMoney(linha.rbt12)}
                     {linha.rbt12Estimado && <span className="ml-1 text-[10px] text-foreground/40">(est.)</span>}
                   </td>
-                  <td className="px-3 py-2 text-center">{linha.anexo}</td>
+                  <td className="px-3 py-2 text-center" title={linha.fatorR === null ? undefined : `Fator R ${formatPercent(linha.fatorR)}`}>
+                    {linha.anexo}
+                  </td>
                   <td className="px-3 py-2 text-right">{formatPercent(linha.aliquotaEfetiva)}</td>
                   <td className="px-3 py-2 text-right">{formatMoney(linha.retencaoIrrf)}</td>
                   <td className="px-3 py-2 text-right">{formatMoney(linha.retencaoFederal)}</td>
