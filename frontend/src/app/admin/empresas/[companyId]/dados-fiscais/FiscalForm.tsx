@@ -15,6 +15,7 @@ import {
   ISS_TIPO_LABELS,
   type Company,
   type IssTipo,
+  type NfseAmbiente,
 } from "@/lib/types";
 import { MunicipioIbgeField } from "./MunicipioIbgeField";
 
@@ -30,6 +31,14 @@ export function FiscalForm({ company }: { company: Company }) {
   );
   const isPF = company.person_type === "PF";
   const [issTipo, setIssTipo] = useState<IssTipo>(company.iss_tipo);
+  // Selects controlados: o reset automático do form após a action (React 19)
+  // devolve <select> não controlado ao valor do primeiro render, e a tela
+  // voltava a mostrar o valor antigo mesmo com o novo já salvo.
+  const [taxRegime, setTaxRegime] = useState(company.tax_regime ?? "");
+  const [regimeEspecial, setRegimeEspecial] = useState(
+    String(company.regime_especial_tributacao ?? 0),
+  );
+  const [nfseAmbiente, setNfseAmbiente] = useState<NfseAmbiente>(company.nfse_ambiente);
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
@@ -65,7 +74,8 @@ export function FiscalForm({ company }: { company: Company }) {
               <Select
                 id="taxRegime"
                 name="taxRegime"
-                defaultValue={company.tax_regime ?? ""}
+                value={taxRegime}
+                onChange={(e) => setTaxRegime(e.target.value as typeof taxRegime)}
               >
                 <option value="">Selecione</option>
                 {Object.entries(TAX_REGIME_LABELS).map(([value, label]) => (
@@ -97,7 +107,8 @@ export function FiscalForm({ company }: { company: Company }) {
             <Select
               id="regimeEspecialTributacao"
               name="regimeEspecialTributacao"
-              defaultValue={String(company.regime_especial_tributacao ?? 0)}
+              value={regimeEspecial}
+              onChange={(e) => setRegimeEspecial(e.target.value)}
             >
               {Object.entries(REGIME_ESPECIAL_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -118,7 +129,8 @@ export function FiscalForm({ company }: { company: Company }) {
             <Select
               id="nfseAmbiente"
               name="nfseAmbiente"
-              defaultValue={company.nfse_ambiente}
+              value={nfseAmbiente}
+              onChange={(e) => setNfseAmbiente(e.target.value as NfseAmbiente)}
             >
               {Object.entries(AMBIENTE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -141,7 +153,7 @@ export function FiscalForm({ company }: { company: Company }) {
             />
           </Field>
         </div>
-        {company.nfse_ambiente === "PRODUCAO" && (
+        {nfseAmbiente === "PRODUCAO" && (
           <Alert tone="warning">
             Ambiente de produção — notas emitidas aqui valem fiscalmente.
           </Alert>
