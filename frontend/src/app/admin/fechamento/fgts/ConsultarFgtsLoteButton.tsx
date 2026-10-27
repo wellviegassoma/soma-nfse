@@ -69,7 +69,7 @@ export function ConsultarFgtsLoteButton({ empresas }: { empresas: Empresa[] }) {
           onClick={() => setConfirmando(true)}
           disabled={empresas.length === 0}
         >
-          Consultar FGTS de todas ({empresas.length})
+          Consultar FGTS das selecionadas ({empresas.length})
         </Button>
       )}
 
@@ -86,7 +86,7 @@ export function ConsultarFgtsLoteButton({ empresas }: { empresas: Empresa[] }) {
             </span>
             <div className="flex gap-2">
               <Button variant="primary" loading={rodando} onClick={rodar}>
-                Sim, consultar todas
+                Sim, consultar
               </Button>
               <Button variant="ghost" onClick={() => setConfirmando(false)}>
                 Cancelar
