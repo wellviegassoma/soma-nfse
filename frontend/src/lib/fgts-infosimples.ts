@@ -48,17 +48,6 @@ function criptogramaInfosimples(texto: string, chave: string): string {
     .replace(/=+$/, "");
 }
 
-// Competência das guias consultadas: o mês anterior ao corrente (horário de
-// Brasília) — é a guia que vence no dia 20 do mês corrente, e também o
-// padrão da própria Infosimples quando `periodo` não é informado.
-export function periodoFgtsPadrao(agora = new Date()): string {
-  const [ano, mes] = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" })
-    .format(agora)
-    .split("-")
-    .map(Number);
-  const anterior = mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 };
-  return `${anterior.ano}${String(anterior.mes).padStart(2, "0")}`;
-}
 
 export type GuiaFgts = {
   numero: string | null;
@@ -160,6 +149,7 @@ export async function consultarGuiasFgts(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: SupabaseClient<any, any, any>,
   cnpjRepresentado: string,
+  periodo: string, // AAAAMM — a Infosimples traz as guias de um período por chamada
 ): Promise<ResultadoConsultaFgts> {
   const token = process.env.INFOSIMPLES_TOKEN;
   if (!token) return { status: "erro", erro: "INFOSIMPLES_TOKEN não configurado.", resposta: null };
@@ -179,7 +169,6 @@ export async function consultarGuiasFgts(
     cnpjRepresentado === cnpjProcurador ? {} : { representado: cnpjRepresentado };
   const pkcs12Cert = criptogramaInfosimples(cert.pfxBase64, chave);
   const pkcs12Pass = criptogramaInfosimples(cert.senha, chave);
-  const periodo = periodoFgtsPadrao();
 
   type Pagina = {
     code?: number;
@@ -301,16 +290,19 @@ export async function testarCertificadoProcurador(
   }
 }
 
-// Consulta e grava o resultado da empresa (substitui a consulta anterior).
+// Consulta e grava o resultado da empresa naquela competência (substitui a
+// consulta anterior da mesma empresa e competência; as outras ficam).
 export async function consultarESalvarGuiasFgts(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: SupabaseClient<any, any, any>,
   companyId: string,
   cnpj: string,
+  periodo: string,
 ): Promise<ResultadoConsultaFgts> {
-  const resultado = await consultarGuiasFgts(admin, cnpj);
+  const resultado = await consultarGuiasFgts(admin, cnpj, periodo);
   const { error } = await admin.from("fgts_guias_consultas").upsert({
     company_id: companyId,
+    periodo,
     consultado_em: new Date().toISOString(),
     status: resultado.status,
     erro: resultado.status === "erro" ? resultado.erro.slice(0, 500) : null,
@@ -318,7 +310,7 @@ export async function consultarESalvarGuiasFgts(
     qtd_em_aberto: resultado.status === "sucesso" ? resultado.qtdEmAberto : 0,
     valor_em_aberto: resultado.status === "sucesso" ? resultado.valorEmAberto : 0,
     resposta: resultado.resposta,
-  });
+  }, { onConflict: "company_id,periodo" });
   if (error) throw new Error(`Falha ao salvar consulta de FGTS: ${error.message}`);
   return resultado;
 }
