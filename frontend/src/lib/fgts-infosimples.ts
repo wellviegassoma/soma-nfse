@@ -76,12 +76,41 @@ export type ResultadoConsultaFgts =
   | { status: "erro"; erro: string; resposta: unknown };
 
 // A documentação pública não lista os valores possíveis de `situacao`.
-// Uma guia conta como em aberto quando não foi arrecadada (sem
-// data_arrecadacao) e a situação não indica pagamento/cancelamento —
-// conferir contra as primeiras respostas reais e ajustar se precisar.
-export function guiaEmAberto(guia: GuiaFgts): boolean {
+// Uma guia não foi paga quando não tem data_arrecadacao e a situação não
+// indica pagamento/cancelamento. No primeiro lote real (10/2026) as
+// situações vistas foram "Paga Individualizada" e "Expirada".
+function guiaNaoPaga(guia: GuiaFgts): boolean {
   if (guia.data_arrecadacao) return false;
   return !/pag|quit|liquid|arrecad|cancel/i.test(guia.situacao ?? "");
+}
+
+function dataBr(texto: string | null): number {
+  const m = texto?.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return m ? Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1])) : 0;
+}
+
+// Guias em aberto de UMA consulta (um período). Visto no primeiro lote
+// real: quem perde o prazo emite a guia de novo (vencimento seguinte, com
+// encargos) e a antiga fica "Expirada" — a mesma dívida aparecia 2x e era
+// somada 2x. Então, por tipo (MENSAL, RESCISORIA...): se alguma guia foi
+// paga, nada daquele tipo fica em aberto; senão, só a mais recente conta.
+export function guiasEmAberto(guias: GuiaFgts[]): GuiaFgts[] {
+  const porTipo = new Map<string, GuiaFgts[]>();
+  for (const g of guias) {
+    const tipo = g.tipo ?? "";
+    porTipo.set(tipo, [...(porTipo.get(tipo) ?? []), g]);
+  }
+  const abertas: GuiaFgts[] = [];
+  for (const doTipo of porTipo.values()) {
+    if (doTipo.some((g) => !guiaNaoPaga(g))) continue;
+    const maisRecente = [...doTipo].sort(
+      (a, b) =>
+        dataBr(b.data_limite_pagamento) - dataBr(a.data_limite_pagamento) ||
+        dataBr(b.data_emissao) - dataBr(a.data_emissao),
+    )[0];
+    if (maisRecente) abertas.push(maisRecente);
+  }
+  return abertas;
 }
 
 // Valores da Infosimples costumam vir como string "1.234,56" — normaliza
@@ -177,7 +206,19 @@ export async function consultarGuiasFgts(
         cache: "no-store",
         signal: AbortSignal.timeout((TIMEOUT_INFOSIMPLES_S + 15) * 1000),
       });
-      body = await resp.json();
+      // Em instabilidade a Infosimples já devolveu uma página HTML de erro
+      // em vez do JSON de sempre — vira um erro legível, sem o "Unexpected
+      // token '<'" do JSON.parse.
+      const texto = await resp.text();
+      try {
+        body = JSON.parse(texto);
+      } catch {
+        return {
+          status: "erro",
+          erro: `Infosimples fora do ar (HTTP ${resp.status}, resposta não é JSON) — tente de novo.`,
+          resposta: paginas,
+        };
+      }
       // O `header` ecoa os parâmetros enviados (hoje só o MD5 do
       // certificado e da senha) — não guarda nem isso no banco.
       const header = (body as { header?: Record<string, unknown> }).header;
@@ -217,7 +258,7 @@ export async function consultarGuiasFgts(
       })),
     ),
   );
-  const emAberto = guias.filter(guiaEmAberto);
+  const emAberto = guiasEmAberto(guias);
   return {
     status: "sucesso",
     guias,

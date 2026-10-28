@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Alert } from "@/components/ui/Alert";
 import { formatarCnpj } from "@/lib/formatters";
-import { guiaEmAberto, type GuiaFgts } from "@/lib/fgts-infosimples";
+import { guiasEmAberto, type GuiaFgts } from "@/lib/fgts-infosimples";
 import { FgtsLoteComSelecao, type LinhaFgts } from "./FgtsLoteComSelecao";
 
 export const metadata = { title: "Central FGTS — Painel SOMA" };
@@ -42,6 +42,11 @@ export default async function CentralFgtsPage() {
   const linhas: LinhaFgts[] = (companies ?? []).map((company) => {
     const consulta = consultaPorEmpresa.get(company.id) ?? null;
     const validade = validadePorEmpresa.get(company.id) ?? null;
+    // Recalcula a partir das guias guardadas em vez de usar
+    // qtd_em_aberto/valor_em_aberto gravados na consulta — assim uma
+    // correção na regra (ver guiasEmAberto) vale pras consultas já feitas
+    // sem precisar pagar de novo.
+    const abertas = consulta ? guiasEmAberto(consulta.guias) : [];
     return {
       id: company.id,
       nome: company.codigo_cliente
@@ -54,10 +59,10 @@ export default async function CentralFgtsPage() {
         consultadoEm: consulta.consultado_em,
         status: consulta.status,
         erro: consulta.erro,
-        qtdEmAberto: consulta.qtd_em_aberto,
-        valorEmAberto: Number(consulta.valor_em_aberto),
-        guiasEmAberto: consulta.guias.filter(guiaEmAberto),
-        guiasQuitadas: consulta.guias.filter((g) => !guiaEmAberto(g)),
+        qtdEmAberto: abertas.length,
+        valorEmAberto: abertas.reduce((s, g) => s + (g.valor_total ?? 0), 0),
+        guiasEmAberto: abertas,
+        guiasQuitadas: consulta.guias.filter((g) => !abertas.includes(g)),
       },
     };
   });
