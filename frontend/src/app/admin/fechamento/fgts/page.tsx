@@ -3,18 +3,18 @@ import { createClient } from "@/lib/supabase/server";
 import { Alert } from "@/components/ui/Alert";
 import { formatarCnpj } from "@/lib/formatters";
 import { guiasEmAberto, type GuiaFgts } from "@/lib/fgts-infosimples";
+import { periodoFgtsPadrao } from "@/lib/fgts-periodo";
 import { FgtsLoteComSelecao, type LinhaFgts } from "./FgtsLoteComSelecao";
 
 export const metadata = { title: "Central FGTS — Painel SOMA" };
 
 type Consulta = {
   company_id: string;
+  periodo: string;
   consultado_em: string;
   status: "sucesso" | "erro";
   erro: string | null;
   guias: GuiaFgts[];
-  qtd_em_aberto: number;
-  valor_em_aberto: number;
 };
 
 function statusCertificado(validade: string | null): LinhaFgts["certificado"] {
@@ -31,22 +31,25 @@ export default async function CentralFgtsPage() {
       .eq("ativa", true)
       .not("cnpj", "is", null)
       .order("legal_name"),
-    supabase
-      .from("fgts_guias_consultas")
-      .select("company_id, consultado_em, status, erro, guias, qtd_em_aberto, valor_em_aberto"),
+    supabase.from("fgts_guias_consultas").select("company_id, periodo, consultado_em, status, erro, guias"),
     supabase.from("certificates").select("company_id, expires_at"),
   ]);
-  const consultaPorEmpresa = new Map(((consultas ?? []) as Consulta[]).map((c) => [c.company_id, c]));
+  const consultasPorEmpresa = new Map<string, Consulta[]>();
+  for (const c of (consultas ?? []) as Consulta[]) {
+    consultasPorEmpresa.set(c.company_id, [...(consultasPorEmpresa.get(c.company_id) ?? []), c]);
+  }
   const validadePorEmpresa = new Map((certificados ?? []).map((c) => [c.company_id as string, c.expires_at as string]));
 
   const linhas: LinhaFgts[] = (companies ?? []).map((company) => {
-    const consulta = consultaPorEmpresa.get(company.id) ?? null;
+    // Uma consulta por competência — a mais recente primeiro. A regra de
+    // "em aberto" (guiasEmAberto) roda dentro de cada competência e é
+    // recalculada aqui a partir das guias guardadas, então uma correção na
+    // regra vale pras consultas já feitas sem precisar pagar de novo.
+    const doEmpresa = (consultasPorEmpresa.get(company.id) ?? []).sort((a, b) => b.periodo.localeCompare(a.periodo));
+    const abertas = doEmpresa.flatMap((c) =>
+      c.status === "sucesso" ? guiasEmAberto(c.guias).map((g) => ({ ...g, periodo: c.periodo })) : [],
+    );
     const validade = validadePorEmpresa.get(company.id) ?? null;
-    // Recalcula a partir das guias guardadas em vez de usar
-    // qtd_em_aberto/valor_em_aberto gravados na consulta — assim uma
-    // correção na regra (ver guiasEmAberto) vale pras consultas já feitas
-    // sem precisar pagar de novo.
-    const abertas = consulta ? guiasEmAberto(consulta.guias) : [];
     return {
       id: company.id,
       nome: company.codigo_cliente
@@ -55,21 +58,24 @@ export default async function CentralFgtsPage() {
       cnpj: formatarCnpj(company.cnpj) ?? company.cnpj!,
       certificado: statusCertificado(validade),
       certificadoValidade: validade,
-      consulta: consulta && {
-        consultadoEm: consulta.consultado_em,
-        status: consulta.status,
-        erro: consulta.erro,
-        qtdEmAberto: abertas.length,
-        valorEmAberto: abertas.reduce((s, g) => s + (g.valor_total ?? 0), 0),
-        guiasEmAberto: abertas,
-        guiasQuitadas: consulta.guias.filter((g) => !abertas.includes(g)),
-      },
+      ultimaConsulta: doEmpresa.reduce<string | null>(
+        (max, c) => (!max || c.consultado_em > max ? c.consultado_em : max),
+        null,
+      ),
+      periodosConsultados: doEmpresa.map((c) => c.periodo),
+      erros: doEmpresa.filter((c) => c.status === "erro").map((c) => ({ periodo: c.periodo, erro: c.erro ?? "erro" })),
+      guiasEmAberto: abertas,
+      guiasQuitadas: doEmpresa.flatMap((c) =>
+        c.status === "sucesso"
+          ? c.guias.filter((g) => !abertas.some((a) => a.periodo === c.periodo && a.numero === g.numero)).map((g) => ({ ...g, periodo: c.periodo }))
+          : [],
+      ),
+      valorEmAberto: abertas.reduce((s, g) => s + (g.valor_total ?? 0), 0),
     };
   });
 
   // Em aberto primeiro, depois erros, depois o resto — é o que precisa de ação.
-  const ordem = (l: LinhaFgts) =>
-    l.consulta?.status === "sucesso" && l.consulta.qtdEmAberto > 0 ? 0 : l.consulta?.status === "erro" ? 1 : 2;
+  const ordem = (l: LinhaFgts) => (l.guiasEmAberto.length > 0 ? 0 : l.erros.length > 0 ? 1 : 2);
   linhas.sort((a, b) => ordem(a) - ordem(b));
 
   return (
@@ -88,7 +94,7 @@ export default async function CentralFgtsPage() {
       {linhas.length === 0 ? (
         <Alert tone="warning">Nenhuma empresa com CNPJ cadastrado.</Alert>
       ) : (
-        <FgtsLoteComSelecao linhas={linhas} />
+        <FgtsLoteComSelecao linhas={linhas} periodoPadrao={periodoFgtsPadrao()} />
       )}
     </div>
   );

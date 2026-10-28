@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { periodoLegivel } from "@/lib/fgts-periodo";
 
 // Custo aproximado por consulta na Infosimples (base R$ 0,20 + adicional
 // R$ 0,08) — só pra estimativa no aviso de confirmação.
@@ -11,22 +12,33 @@ const CUSTO_POR_CONSULTA = 0.28;
 
 type Empresa = { id: string; nome: string };
 
-// Mesmo padrão de ConsultarSituacaoFiscalLoteButton.tsx (uma empresa por
-// chamada), mas SEM retry automático: cada tentativa é uma consulta paga
-// na Infosimples, e erro aqui costuma ser falta de procuração — repetir
-// não resolve e só cobra de novo.
-export function ConsultarFgtsLoteButton({ empresas }: { empresas: Empresa[] }) {
+function moeda(valor: number) {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+// Mesmo padrão de ConsultarSituacaoFiscalLoteButton.tsx (uma chamada por
+// vez), mas SEM retry automático: cada tentativa é uma consulta paga na
+// Infosimples. Cada empresa é consultada em cada competência pedida — a
+// Infosimples só traz um período por chamada, então N meses = N chamadas
+// por empresa.
+export function ConsultarFgtsLoteButton({ empresas, periodos }: { empresas: Empresa[]; periodos: string[] }) {
   const router = useRouter();
   const [confirmando, setConfirmando] = useState(false);
   const [rodando, setRodando] = useState(false);
   const [indice, setIndice] = useState(0);
-  const [empresaAtual, setEmpresaAtual] = useState<string | null>(null);
+  const [atual, setAtual] = useState<string | null>(null);
   const [resumo, setResumo] = useState<{
     sucessos: number;
     comAberto: number;
     falhas: { nome: string; motivo: string }[];
     interrompido: { motivo: string; restantes: number } | null;
   } | null>(null);
+
+  const total = empresas.length * periodos.length;
+  const descricaoPeriodos =
+    periodos.length === 1
+      ? `a competência ${periodoLegivel(periodos[0])}`
+      : `${periodos.length} competências (${periodoLegivel(periodos[periodos.length - 1])} a ${periodoLegivel(periodos[0])})`;
 
   async function rodar() {
     setRodando(true);
@@ -36,34 +48,38 @@ export function ConsultarFgtsLoteButton({ empresas }: { empresas: Empresa[] }) {
     const falhas: { nome: string; motivo: string }[] = [];
     let interrompido: { motivo: string; restantes: number } | null = null;
 
-    for (let i = 0; i < empresas.length; i++) {
-      const empresa = empresas[i];
-      setIndice(i + 1);
-      setEmpresaAtual(empresa.nome);
-      try {
-        const resposta = await fetch(`/admin/empresas/${empresa.id}/fgts`, { method: "POST" });
-        const corpo = await resposta.json().catch(() => null);
-        if (resposta.ok) {
-          sucessos += 1;
-          if (corpo?.qtdEmAberto > 0) comAberto += 1;
-        } else {
-          const motivo: string = corpo?.error ?? `HTTP ${resposta.status}`;
-          // 603 = a conta não pode usar a consulta (saldo acabou ou serviço
-          // não habilitado) — vale pra todas as empresas seguintes também,
-          // então para o lote em vez de repetir o mesmo erro em cada uma.
-          if (motivo.startsWith("Infosimples 603")) {
-            interrompido = { motivo, restantes: empresas.length - i };
-            break;
+    let feitas = 0;
+    lote: for (const empresa of empresas) {
+      for (const periodo of periodos) {
+        feitas += 1;
+        setIndice(feitas);
+        setAtual(`${empresa.nome} — ${periodoLegivel(periodo)}`);
+        const rotulo = periodos.length > 1 ? `${empresa.nome} (${periodoLegivel(periodo)})` : empresa.nome;
+        try {
+          const resposta = await fetch(`/admin/empresas/${empresa.id}/fgts?periodo=${periodo}`, { method: "POST" });
+          const corpo = await resposta.json().catch(() => null);
+          if (resposta.ok) {
+            sucessos += 1;
+            if (corpo?.qtdEmAberto > 0) comAberto += 1;
+          } else {
+            const motivo: string = corpo?.error ?? `HTTP ${resposta.status}`;
+            // 603 = a conta não pode usar a consulta (saldo acabou ou serviço
+            // não habilitado) — vale pra todas as consultas seguintes também,
+            // então para o lote em vez de repetir o mesmo erro em cada uma.
+            if (motivo.startsWith("Infosimples 603")) {
+              interrompido = { motivo, restantes: total - feitas + 1 };
+              break lote;
+            }
+            falhas.push({ nome: rotulo, motivo });
           }
-          falhas.push({ nome: empresa.nome, motivo });
+        } catch {
+          falhas.push({ nome: rotulo, motivo: "falha de rede ao chamar o servidor" });
         }
-      } catch {
-        falhas.push({ nome: empresa.nome, motivo: "falha de rede ao chamar o servidor" });
       }
     }
 
     setResumo({ sucessos, comAberto, falhas, interrompido });
-    setEmpresaAtual(null);
+    setAtual(null);
     setRodando(false);
     setConfirmando(false);
     router.refresh();
@@ -77,9 +93,10 @@ export function ConsultarFgtsLoteButton({ empresas }: { empresas: Empresa[] }) {
           variant="primary"
           loading={rodando}
           onClick={() => setConfirmando(true)}
-          disabled={empresas.length === 0}
+          disabled={total === 0}
         >
-          Consultar FGTS das selecionadas ({empresas.length})
+          Consultar FGTS das selecionadas ({empresas.length}
+          {periodos.length > 1 ? ` × ${periodos.length} meses` : ""})
         </Button>
       )}
 
@@ -87,12 +104,10 @@ export function ConsultarFgtsLoteButton({ empresas }: { empresas: Empresa[] }) {
         <Alert tone="warning">
           <div className="flex flex-col gap-3">
             <span>
-              Isso vai consultar as guias de FGTS de <strong>{empresas.length} empresa(s)</strong> na
-              Infosimples — custo estimado de{" "}
-              <strong>
-                {(empresas.length * CUSTO_POR_CONSULTA).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-              </strong>{" "}
-              (dentro da franquia mínima de R$ 100/mês). Confirma?
+              Isso vai consultar as guias de FGTS de <strong>{empresas.length} empresa(s)</strong> em{" "}
+              {descricaoPeriodos} — <strong>{total} consulta(s)</strong> na Infosimples, custo estimado de{" "}
+              <strong>{moeda(total * CUSTO_POR_CONSULTA)}</strong> (franquia mínima de R$ 100/mês)
+              {total > 200 && <>. Cada consulta leva de 10 a 20 segundos — deixe a aba aberta</>}. Confirma?
             </span>
             <div className="flex gap-2">
               <Button variant="primary" loading={rodando} onClick={rodar}>
@@ -108,17 +123,17 @@ export function ConsultarFgtsLoteButton({ empresas }: { empresas: Empresa[] }) {
 
       {rodando && (
         <p className="text-xs text-foreground/60">
-          {indice}/{empresas.length} — {empresaAtual}
+          {indice}/{total} — {atual}
         </p>
       )}
 
       {resumo && (
         <Alert tone={resumo.falhas.length === 0 && !resumo.interrompido ? "success" : "warning"}>
-          {resumo.sucessos} empresa(s) consultada(s), {resumo.comAberto} com guia em aberto.
+          {resumo.sucessos} consulta(s) feita(s), {resumo.comAberto} com guia em aberto.
           {resumo.interrompido && (
             <span className="mt-1 block">
-              <strong>Lote interrompido</strong> — {resumo.interrompido.restantes} empresa(s) não foram consultadas porque a Infosimples recusou a
-              conta: <strong>{resumo.interrompido.motivo}</strong>
+              <strong>Lote interrompido</strong> — {resumo.interrompido.restantes} consulta(s) não foram feitas porque a
+              Infosimples recusou a conta: <strong>{resumo.interrompido.motivo}</strong>
             </span>
           )}
           {resumo.falhas.length > 0 && (

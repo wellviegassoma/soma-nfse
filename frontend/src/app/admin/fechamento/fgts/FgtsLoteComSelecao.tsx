@@ -5,7 +5,10 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { formatarDataHora, formatarMoeda } from "@/lib/formatters";
 import type { GuiaFgts } from "@/lib/fgts-infosimples";
+import { periodoLegivel, periodosAte, periodoValido } from "@/lib/fgts-periodo";
 import { ConsultarFgtsLoteButton } from "./ConsultarFgtsLoteButton";
+
+type GuiaComPeriodo = GuiaFgts & { periodo: string };
 
 export type LinhaFgts = {
   id: string;
@@ -13,21 +16,30 @@ export type LinhaFgts = {
   cnpj: string;
   certificado: "VALIDO" | "VENCIDO" | "SEM";
   certificadoValidade: string | null;
-  consulta: {
-    consultadoEm: string;
-    status: "sucesso" | "erro";
-    erro: string | null;
-    qtdEmAberto: number;
-    valorEmAberto: number;
-    guiasEmAberto: GuiaFgts[];
-    guiasQuitadas: GuiaFgts[];
-  } | null;
+  ultimaConsulta: string | null;
+  // Competências já consultadas (AAAAMM), da mais recente pra mais antiga.
+  periodosConsultados: string[];
+  // Competências cuja última consulta deu erro.
+  erros: { periodo: string; erro: string }[];
+  guiasEmAberto: GuiaComPeriodo[];
+  guiasQuitadas: GuiaComPeriodo[];
+  valorEmAberto: number;
 };
 
 type Filtro = "TODAS" | "CERT_VALIDO" | "CERT_INVALIDO" | "EM_ABERTO" | "ERRO";
 
+const OPCOES_MESES = [1, 3, 6, 12];
+
 function dataCurta(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
+// "202609" ↔ "2026-09" (valor do <input type="month">)
+function periodoParaMes(periodo: string) {
+  return `${periodo.slice(0, 4)}-${periodo.slice(4, 6)}`;
+}
+function mesParaPeriodo(mes: string) {
+  return mes.replace("-", "");
 }
 
 function CelulaCertificado({ linha }: { linha: LinhaFgts }) {
@@ -47,44 +59,50 @@ function CelulaCertificado({ linha }: { linha: LinhaFgts }) {
 }
 
 function CelulaGuias({ linha }: { linha: LinhaFgts }) {
-  const c = linha.consulta;
-  if (!c) return null;
-  if (c.status === "erro") return <span className="text-danger">{c.erro}</span>;
-  if (c.qtdEmAberto === 0) {
-    return (
-      <span className="text-foreground/40">
-        nenhuma
-        {c.guiasQuitadas.length > 0 &&
-          ` — ${c.guiasQuitadas
-            .map(
-              (g) =>
-                `${g.situacao ?? "sem situação"}${g.data_arrecadacao ? ` em ${g.data_arrecadacao}` : ""}${
-                  g.valor_total !== null ? ` (${formatarMoeda(g.valor_total)})` : ""
-                }`,
-            )
-            .join("; ")}`}
-      </span>
-    );
-  }
+  if (linha.periodosConsultados.length === 0) return null;
   return (
-    <ul className="flex flex-col gap-1">
-      {c.guiasEmAberto.map((g, i) => (
-        <li key={g.numero ?? i}>
-          <strong>{g.valor_total !== null ? formatarMoeda(g.valor_total) : "valor ?"}</strong>
-          {g.data_limite_pagamento && <> · vence {g.data_limite_pagamento}</>}
-          {g.tipo && <> · {g.tipo}</>}
-          {g.situacao && <span className="text-foreground/50"> ({g.situacao})</span>}
-          {g.guia_pdf_url && (
-            <>
-              {" "}
-              <a href={g.guia_pdf_url} target="_blank" className="font-medium text-brand hover:underline">
-                PDF
-              </a>
-            </>
-          )}
-        </li>
+    <div className="flex flex-col gap-1">
+      {linha.guiasEmAberto.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {linha.guiasEmAberto.map((g, i) => (
+            <li key={`${g.periodo}-${g.numero ?? i}`}>
+              <span className="text-foreground/50">{periodoLegivel(g.periodo)}:</span>{" "}
+              <strong>{g.valor_total !== null ? formatarMoeda(g.valor_total) : "valor ?"}</strong>
+              {g.data_limite_pagamento && <> · vence {g.data_limite_pagamento}</>}
+              {g.tipo && <> · {g.tipo}</>}
+              {g.situacao && <span className="text-foreground/50"> ({g.situacao})</span>}
+              {g.guia_pdf_url && (
+                <>
+                  {" "}
+                  <a href={g.guia_pdf_url} target="_blank" className="font-medium text-brand hover:underline">
+                    PDF
+                  </a>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {linha.erros.map((e) => (
+        <span key={e.periodo} className="text-danger">
+          {periodoLegivel(e.periodo)}: {e.erro}
+        </span>
       ))}
-    </ul>
+      {linha.guiasEmAberto.length === 0 && linha.erros.length === 0 && (
+        <span className="text-foreground/40">
+          nenhuma
+          {linha.guiasQuitadas.length > 0 &&
+            ` — ${linha.guiasQuitadas
+              .map(
+                (g) =>
+                  `${periodoLegivel(g.periodo)} ${g.situacao ?? "sem situação"}${g.data_arrecadacao ? ` em ${g.data_arrecadacao}` : ""}${
+                    g.valor_total !== null ? ` (${formatarMoeda(g.valor_total)})` : ""
+                  }`,
+              )
+              .join("; ")}`}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -94,25 +112,33 @@ function CelulaGuias({ linha }: { linha: LinhaFgts }) {
 // procuradora, mas cliente sem certificado próprio válido é quase sempre
 // cliente sem procuração ativa no FGTS Digital — e consultar esses só
 // gasta tempo (até ~4,5 min de timeout cada) sem trazer guia.
-export function FgtsLoteComSelecao({ linhas }: { linhas: LinhaFgts[] }) {
+//
+// Competência: por padrão só o mês anterior (a rotina mensal, barata).
+// "Últimos N meses" multiplica as chamadas — pensado pra varrer o
+// histórico de poucas empresas selecionadas (cliente novo, por exemplo).
+export function FgtsLoteComSelecao({ linhas, periodoPadrao }: { linhas: LinhaFgts[]; periodoPadrao: string }) {
   const [selecionados, setSelecionados] = useState<Set<string>>(
     () => new Set(linhas.filter((l) => l.certificado === "VALIDO").map((l) => l.id)),
   );
   const [filtro, setFiltro] = useState<Filtro>("TODAS");
+  const [periodoFinal, setPeriodoFinal] = useState(periodoPadrao);
+  const [meses, setMeses] = useState(1);
+
+  const periodos = useMemo(
+    () => (periodoValido(periodoFinal) ? periodosAte(periodoFinal, meses) : []),
+    [periodoFinal, meses],
+  );
 
   const contagem = useMemo(
     () => ({
       certValido: linhas.filter((l) => l.certificado === "VALIDO").length,
       certInvalido: linhas.filter((l) => l.certificado !== "VALIDO").length,
-      emAberto: linhas.filter((l) => l.consulta?.status === "sucesso" && l.consulta.qtdEmAberto > 0).length,
-      erro: linhas.filter((l) => l.consulta?.status === "erro").length,
+      emAberto: linhas.filter((l) => l.guiasEmAberto.length > 0).length,
+      erro: linhas.filter((l) => l.erros.length > 0).length,
     }),
     [linhas],
   );
-  const totalEmAberto = useMemo(
-    () => linhas.reduce((s, l) => s + (l.consulta?.status === "sucesso" ? l.consulta.valorEmAberto : 0), 0),
-    [linhas],
-  );
+  const totalEmAberto = useMemo(() => linhas.reduce((s, l) => s + l.valorEmAberto, 0), [linhas]);
 
   const linhasVisiveis = useMemo(
     () =>
@@ -123,9 +149,9 @@ export function FgtsLoteComSelecao({ linhas }: { linhas: LinhaFgts[] }) {
           case "CERT_INVALIDO":
             return l.certificado !== "VALIDO";
           case "EM_ABERTO":
-            return l.consulta?.status === "sucesso" && l.consulta.qtdEmAberto > 0;
+            return l.guiasEmAberto.length > 0;
           case "ERRO":
-            return l.consulta?.status === "erro";
+            return l.erros.length > 0;
           default:
             return true;
         }
@@ -159,7 +185,7 @@ export function FgtsLoteComSelecao({ linhas }: { linhas: LinhaFgts[] }) {
   // Infosimples, saldo que acabou no meio do lote) — troca a seleção
   // inteira, não soma à atual.
   function selecionarSoComErro() {
-    setSelecionados(new Set(linhas.filter((l) => l.consulta?.status === "erro").map((l) => l.id)));
+    setSelecionados(new Set(linhas.filter((l) => l.erros.length > 0).map((l) => l.id)));
     setFiltro("ERRO");
   }
 
@@ -171,14 +197,32 @@ export function FgtsLoteComSelecao({ linhas }: { linhas: LinhaFgts[] }) {
   return (
     <div className="flex flex-col gap-6">
       <Card className="p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <p className="text-xs text-foreground/50">
-            {empresasParaConsultar.length} de {linhas.length} selecionada(s) — use os checkboxes pra escolher
-            quem entra na consulta. Começa marcado só quem tem certificado digital válido. Cada consulta é paga
-            (cerca de R$ 0,28) e só traz guia de cliente com procuração pra SOMA no FGTS Digital.
-          </p>
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="flex flex-col gap-1 text-xs text-foreground/60">
+            Competência
+            <input
+              type="month"
+              value={periodoParaMes(periodoFinal)}
+              onChange={(e) => setPeriodoFinal(mesParaPeriodo(e.target.value))}
+              className="rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-foreground/60">
+            Meses
+            <select
+              value={meses}
+              onChange={(e) => setMeses(Number(e.target.value))}
+              className="rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
+            >
+              {OPCOES_MESES.map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? "Só essa competência" : `Últimos ${n} meses`}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="flex flex-wrap items-start gap-3">
-            <ConsultarFgtsLoteButton empresas={empresasParaConsultar} />
+            <ConsultarFgtsLoteButton empresas={empresasParaConsultar} periodos={periodos} />
             {/* Só lê o resultado já salvo das consultas — não gasta chamada paga. */}
             <a href="/admin/fechamento/fgts/planilha">
               <Button type="button" variant="secondary">
@@ -187,11 +231,17 @@ export function FgtsLoteComSelecao({ linhas }: { linhas: LinhaFgts[] }) {
             </a>
           </div>
         </div>
+        <p className="mt-3 text-xs text-foreground/50">
+          {empresasParaConsultar.length} de {linhas.length} selecionada(s) — começa marcado só quem tem certificado
+          digital válido. Cada empresa é consultada em cada competência ({periodos.length} chamada(s) por empresa, cerca
+          de R$ 0,28 cada). A Infosimples só traz guia de cliente com procuração pra SOMA no FGTS Digital. Use
+          &quot;Últimos N meses&quot; com poucas empresas selecionadas — pra rotina mensal basta a competência anterior.
+        </p>
         {(contagem.emAberto > 0 || contagem.erro > 0) && (
           <p className="mt-3 text-sm">
             <strong>{contagem.emAberto}</strong> empresa(s) com guia em aberto, total{" "}
             <strong>{formatarMoeda(totalEmAberto)}</strong>
-            {contagem.erro > 0 && <> · {contagem.erro} com erro na última consulta</>}.
+            {contagem.erro > 0 && <> · {contagem.erro} com erro na última consulta de alguma competência</>}.
           </p>
         )}
         <div className="mt-4 flex flex-wrap gap-2 text-xs">
@@ -258,8 +308,17 @@ export function FgtsLoteComSelecao({ linhas }: { linhas: LinhaFgts[] }) {
                   <CelulaCertificado linha={linha} />
                 </td>
                 <td className="whitespace-nowrap px-3 py-2">
-                  {linha.consulta ? (
-                    formatarDataHora(linha.consulta.consultadoEm)
+                  {linha.ultimaConsulta ? (
+                    <>
+                      {formatarDataHora(linha.ultimaConsulta)}
+                      <span className="block text-xs text-foreground/40">
+                        {linha.periodosConsultados.length === 1
+                          ? `competência ${periodoLegivel(linha.periodosConsultados[0])}`
+                          : `${linha.periodosConsultados.length} competências (${periodoLegivel(
+                              linha.periodosConsultados[linha.periodosConsultados.length - 1],
+                            )} a ${periodoLegivel(linha.periodosConsultados[0])})`}
+                      </span>
+                    </>
                   ) : (
                     <span className="text-foreground/40">nunca consultada</span>
                   )}
