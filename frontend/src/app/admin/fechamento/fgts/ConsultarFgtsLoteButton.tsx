@@ -25,6 +25,7 @@ export function ConsultarFgtsLoteButton({ empresas }: { empresas: Empresa[] }) {
     sucessos: number;
     comAberto: number;
     falhas: { nome: string; motivo: string }[];
+    interrompido: { motivo: string; restantes: number } | null;
   } | null>(null);
 
   async function rodar() {
@@ -33,6 +34,7 @@ export function ConsultarFgtsLoteButton({ empresas }: { empresas: Empresa[] }) {
     let sucessos = 0;
     let comAberto = 0;
     const falhas: { nome: string; motivo: string }[] = [];
+    let interrompido: { motivo: string; restantes: number } | null = null;
 
     for (let i = 0; i < empresas.length; i++) {
       const empresa = empresas[i];
@@ -45,14 +47,22 @@ export function ConsultarFgtsLoteButton({ empresas }: { empresas: Empresa[] }) {
           sucessos += 1;
           if (corpo?.qtdEmAberto > 0) comAberto += 1;
         } else {
-          falhas.push({ nome: empresa.nome, motivo: corpo?.error ?? `HTTP ${resposta.status}` });
+          const motivo: string = corpo?.error ?? `HTTP ${resposta.status}`;
+          // 603 = a conta não pode usar a consulta (saldo acabou ou serviço
+          // não habilitado) — vale pra todas as empresas seguintes também,
+          // então para o lote em vez de repetir o mesmo erro em cada uma.
+          if (motivo.startsWith("Infosimples 603")) {
+            interrompido = { motivo, restantes: empresas.length - i };
+            break;
+          }
+          falhas.push({ nome: empresa.nome, motivo });
         }
       } catch {
         falhas.push({ nome: empresa.nome, motivo: "falha de rede ao chamar o servidor" });
       }
     }
 
-    setResumo({ sucessos, comAberto, falhas });
+    setResumo({ sucessos, comAberto, falhas, interrompido });
     setEmpresaAtual(null);
     setRodando(false);
     setConfirmando(false);
@@ -103,8 +113,14 @@ export function ConsultarFgtsLoteButton({ empresas }: { empresas: Empresa[] }) {
       )}
 
       {resumo && (
-        <Alert tone={resumo.falhas.length === 0 ? "success" : "warning"}>
+        <Alert tone={resumo.falhas.length === 0 && !resumo.interrompido ? "success" : "warning"}>
           {resumo.sucessos} empresa(s) consultada(s), {resumo.comAberto} com guia em aberto.
+          {resumo.interrompido && (
+            <span className="mt-1 block">
+              <strong>Lote interrompido</strong> — {resumo.interrompido.restantes} empresa(s) não foram consultadas porque a Infosimples recusou a
+              conta: <strong>{resumo.interrompido.motivo}</strong>
+            </span>
+          )}
           {resumo.falhas.length > 0 && (
             <span className="mt-1 block">
               {resumo.falhas.length} com erro:

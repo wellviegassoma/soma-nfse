@@ -154,6 +154,14 @@ export function FgtsLoteComSelecao({ linhas }: { linhas: LinhaFgts[] }) {
     });
   }
 
+  // Pra refazer só quem falhou na última consulta (instabilidade da
+  // Infosimples, saldo que acabou no meio do lote) — troca a seleção
+  // inteira, não soma à atual.
+  function selecionarSoComErro() {
+    setSelecionados(new Set(linhas.filter((l) => l.consulta?.status === "erro").map((l) => l.id)));
+    setFiltro("ERRO");
+  }
+
   const empresasParaConsultar = useMemo(
     () => linhas.filter((l) => selecionados.has(l.id)).map((l) => ({ id: l.id, nome: l.nome })),
     [linhas, selecionados],
@@ -198,6 +206,15 @@ export function FgtsLoteComSelecao({ linhas }: { linhas: LinhaFgts[] }) {
               {rotulo}
             </button>
           ))}
+          {contagem.erro > 0 && (
+            <button
+              type="button"
+              onClick={selecionarSoComErro}
+              className="rounded-full border border-danger px-3 py-1 text-danger"
+            >
+              Selecionar só as com erro ({contagem.erro})
+            </button>
+          )}
         </div>
       </Card>
 
