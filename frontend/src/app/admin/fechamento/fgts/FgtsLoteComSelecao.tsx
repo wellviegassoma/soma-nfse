@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { formatarDataHora, formatarMoeda } from "@/lib/formatters";
 import type { GuiaFgts } from "@/lib/fgts-infosimples";
@@ -176,7 +177,15 @@ export function FgtsLoteComSelecao({ linhas }: { linhas: LinhaFgts[] }) {
             quem entra na consulta. Começa marcado só quem tem certificado digital válido. Cada consulta é paga
             (cerca de R$ 0,28) e só traz guia de cliente com procuração pra SOMA no FGTS Digital.
           </p>
-          <ConsultarFgtsLoteButton empresas={empresasParaConsultar} />
+          <div className="flex flex-wrap items-start gap-3">
+            <ConsultarFgtsLoteButton empresas={empresasParaConsultar} />
+            {/* Só lê o resultado já salvo das consultas — não gasta chamada paga. */}
+            <a href="/admin/fechamento/fgts/planilha">
+              <Button type="button" variant="secondary">
+                Baixar planilha de pendências
+              </Button>
+            </a>
+          </div>
         </div>
         {(contagem.emAberto > 0 || contagem.erro > 0) && (
           <p className="mt-3 text-sm">
