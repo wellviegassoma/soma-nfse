@@ -95,7 +95,7 @@ export function BuscarHistoricoTodasButton({ empresas }: { empresas: Empresa[] }
         Buscar últimos 12 meses (todas)
       </Button>
       <p className="max-w-[240px] text-right text-xs text-foreground/50">
-        Escaneia o histórico completo de cada empresa com certificado, uma de cada vez. Pode
+        Escaneia o histórico completo de cada empresa (as sem certificado válido pela procuração da SOMA), uma de cada vez. Pode
         demorar vários minutos — dá pra deixar a aba aberta em segundo plano.
       </p>
       {rodando && (

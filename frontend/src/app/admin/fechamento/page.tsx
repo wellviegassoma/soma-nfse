@@ -32,15 +32,14 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
       : mesAnteriorBrasilia();
 
   const supabase = await createClient();
-  const [{ data: companies }, { data: certs }, { data: notasDivergentesRaw, count: totalDivergentes }] =
+  const [{ data: companies }, { data: notasDivergentesRaw, count: totalDivergentes }] =
     await Promise.all([
       supabase
         .from("companies")
         .select(
-          "id, legal_name, trade_name, codigo_cliente, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
+          "id, legal_name, trade_name, codigo_cliente, cnpj, cpf, ativa, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
         )
         .order("legal_name"),
-      supabase.from("certificates").select("company_id"),
       // Pega da tabela em vez de guardar só o resultado do último clique —
       // assim cobre também o que o agendamento automático diário trouxe
       // sozinho, sem alguém precisar clicar em "Buscar todas agora".
@@ -53,9 +52,10 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
         .limit(200),
     ]);
 
-  const idsComCertificado = new Set((certs ?? []).map((c) => c.company_id));
-  const empresasComCertificado = (companies ?? [])
-    .filter((c) => idsComCertificado.has(c.id))
+  // Empresa sem certificado próprio válido também entra: a busca usa o
+  // certificado da SOMA como procuradora (ver syncOneCompany).
+  const empresasParaBuscar = (companies ?? [])
+    .filter((c) => c.ativa && (c.cnpj || c.cpf))
     .map((c) => ({
       id: c.id,
       nome: c.codigo_cliente ? `#${c.codigo_cliente} ${c.trade_name || c.legal_name}` : c.trade_name || c.legal_name,
@@ -111,14 +111,14 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
               </Button>
             </a>
           </form>
-          <BuscarTodasButton competencia={competencia} empresas={empresasComCertificado} />
+          <BuscarTodasButton competencia={competencia} empresas={empresasParaBuscar} />
         </div>
         <p className="mt-3 text-xs text-foreground/50">
           O ZIP traz, por empresa: XML e PDF (DANFSe) de cada nota da competência, mais o
           relatório mensal consolidado. Pode demorar um pouco dependendo do volume.
         </p>
         <div className="mt-4 flex justify-end border-t border-border pt-4">
-          <BuscarHistoricoTodasButton empresas={empresasComCertificado} />
+          <BuscarHistoricoTodasButton empresas={empresasParaBuscar} />
         </div>
       </Card>
 

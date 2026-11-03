@@ -1,7 +1,7 @@
 import "server-only";
 import crypto from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { decryptSecret, fromBytea } from "@/lib/certificate";
+import { certificadoProcurador, cnpjProcurador as cnpjDoProcurador } from "@/lib/certificado-procurador";
 
 // Consulta de guias do FGTS Digital via Infosimples (consulta "FGTS / Guia
 // de Arrecadação"). Autentica sempre com o certificado da SOMA, como
@@ -18,10 +18,6 @@ const URL_CONSULTA = "https://api.infosimples.com/api/v2/consultas/fgts/guia";
 // cobra); fica logo abaixo do maxDuration=300 da rota, com folga pro
 // fetch abortar antes de a plataforma matar a função.
 const TIMEOUT_INFOSIMPLES_S = 270;
-
-// CNPJ da SOMA Contabilidade Integrada — dona do certificado usado como
-// procuradora. Sobrescrevível por env caso o certificado mude de empresa.
-const CNPJ_PROCURADOR_PADRAO = "43852255000195";
 
 // A resposta vem paginada (no máximo 10 guias por página) e cada página
 // é uma chamada paga — um mês normal tem 1 ou 2 guias, então o teto só
@@ -117,34 +113,6 @@ function paraTexto(valor: unknown): string | null {
   return valor === null || valor === undefined || valor === "" ? null : String(valor);
 }
 
-async function certificadoProcurador(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  admin: SupabaseClient<any, any, any>,
-): Promise<{ pfxBase64: string; senha: string }> {
-  const cnpj = process.env.FGTS_CNPJ_PROCURADOR || CNPJ_PROCURADOR_PADRAO;
-  const { data: company } = await admin
-    .from("companies")
-    .select("certificates(encrypted_file, encrypted_password, expires_at)")
-    .eq("cnpj", cnpj)
-    .limit(1)
-    .maybeSingle();
-
-  const certs = company?.certificates as
-    | { encrypted_file: string; encrypted_password: string; expires_at: string }
-    | { encrypted_file: string; encrypted_password: string; expires_at: string }[]
-    | null
-    | undefined;
-  const cert = Array.isArray(certs) ? certs[0] : certs;
-  if (!cert) throw new Error(`Certificado da SOMA (CNPJ ${cnpj}) não está cadastrado no sistema.`);
-  if (new Date(cert.expires_at).getTime() < Date.now()) {
-    throw new Error("Certificado digital da SOMA está vencido.");
-  }
-  return {
-    pfxBase64: decryptSecret(fromBytea(cert.encrypted_file)).toString("base64"),
-    senha: decryptSecret(fromBytea(cert.encrypted_password)).toString("utf8"),
-  };
-}
-
 export async function consultarGuiasFgts(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: SupabaseClient<any, any, any>,
@@ -164,7 +132,7 @@ export async function consultarGuiasFgts(
   }
   // A própria SOMA é consultada como titular, não como procuradora de si
   // mesma — `representado` só vai quando o CNPJ é de outra empresa.
-  const cnpjProcurador = process.env.FGTS_CNPJ_PROCURADOR || CNPJ_PROCURADOR_PADRAO;
+  const cnpjProcurador = cnpjDoProcurador();
   const paramsRepresentado: Record<string, string> =
     cnpjRepresentado === cnpjProcurador ? {} : { representado: cnpjRepresentado };
   const pkcs12Cert = criptogramaInfosimples(cert.pfxBase64, chave);

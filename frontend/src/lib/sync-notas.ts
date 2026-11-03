@@ -4,6 +4,7 @@ import { decryptSecret, fromBytea } from "@/lib/certificate";
 import { classificarDirecao } from "@/lib/notas-distribuidas";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { documentoEmpresa } from "@/lib/formatters";
+import { certificadoProcurador } from "@/lib/certificado-procurador";
 import type { NfseAmbiente } from "@/lib/types";
 
 const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
@@ -138,24 +139,23 @@ export async function syncOneCompany(
     : company.certificates;
 
   const documentoConsulta = documentoEmpresa(company);
-  if (!documentoConsulta || !certificado) {
-    return { companyId: company.id, status: "pulado", erro: "sem certificado cadastrado" };
+  if (!documentoConsulta) {
+    return { companyId: company.id, status: "pulado", erro: "sem CNPJ/CPF cadastrado" };
   }
-  if (new Date(certificado.expires_at).getTime() < Date.now()) {
-    await admin
-      .from("companies")
-      .update({
-        ultima_sincronizacao_em: new Date().toISOString(),
-        ultima_sincronizacao_status: "erro",
-        ultima_sincronizacao_erro: "Certificado digital vencido.",
-      })
-      .eq("id", company.id);
-    return { companyId: company.id, status: "erro", erro: "certificado vencido" };
-  }
+  // Sem certificado próprio válido, consulta com o certificado da SOMA
+  // como procuradora — o ADN aceita desde 11/2026 (o documento da empresa
+  // vai em cnpjConsulta/cpfConsulta, igual à consulta com o certificado
+  // dela). Testado: 90 das 97 empresas sem certificado válido tinham
+  // procuração pra SOMA; as outras voltam E2245.
+  const usaProcuracao = !certificado || new Date(certificado.expires_at).getTime() < Date.now();
 
   try {
-    const pfxBase64 = decryptSecret(fromBytea(certificado.encrypted_file)).toString("base64");
-    const senha = decryptSecret(fromBytea(certificado.encrypted_password)).toString("utf8");
+    const { pfxBase64, senha } = usaProcuracao
+      ? await certificadoProcurador(admin)
+      : {
+          pfxBase64: decryptSecret(fromBytea(certificado.encrypted_file)).toString("base64"),
+          senha: decryptSecret(fromBytea(certificado.encrypted_password)).toString("utf8"),
+        };
     const ambiente = AMBIENTE_MAP[company.nfse_ambiente as NfseAmbiente];
 
     const mesCorrente = mesCorrenteBrasilia();
@@ -314,7 +314,12 @@ export async function syncOneCompany(
       notasDivergentes,
     };
   } catch (e) {
-    const mensagem = e instanceof Error ? e.message : "Erro desconhecido na sincronização.";
+    let mensagem = e instanceof Error ? e.message : "Erro desconhecido na sincronização.";
+    if (usaProcuracao) {
+      mensagem = mensagem.includes("E2245")
+        ? "Sem certificado digital válido e sem procuração eletrônica da empresa para a SOMA no ADN (E2245). Cadastre a procuração no Portal de Serviços da Receita ou um certificado válido."
+        : `Busca pela procuração da SOMA (empresa sem certificado válido): ${mensagem}`;
+    }
     await admin
       .from("companies")
       .update({

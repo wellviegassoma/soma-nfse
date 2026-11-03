@@ -46,6 +46,12 @@ type NotaRow = {
   data_emissao: string | null;
 };
 
+// Fora do componente (react-hooks/purity não aceita Date.now() no render).
+function certificadoValido(certificates: unknown): boolean {
+  const cert = (Array.isArray(certificates) ? certificates[0] : certificates) as { expires_at: string } | null;
+  return !!cert && new Date(cert.expires_at).getTime() >= Date.now();
+}
+
 export default async function AdminFechamentoPage(
   props: PageProps<"/admin/empresas/[companyId]/fechamento">,
 ) {
@@ -66,7 +72,7 @@ export default async function AdminFechamentoPage(
     supabase
       .from("companies")
       .select(
-        "cnpj, tax_regime, equiparacao_hospitalar, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro",
+        "cnpj, tax_regime, equiparacao_hospitalar, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro, certificates(expires_at)",
       )
       .eq("id", companyId)
       .single(),
@@ -87,6 +93,7 @@ export default async function AdminFechamentoPage(
   const entradaCanceladas = linhas.filter((n) => n.direcao === "entrada" && n.cancelada);
   const indefinidas = linhas.filter((n) => n.direcao === "indefinida");
 
+  const buscaPorProcuracao = !!company && !certificadoValido(company.certificates);
   const somar = (arr: NotaRow[]) => arr.reduce((acc, n) => acc + (n.valor_servico ?? 0), 0);
 
   return (
@@ -103,6 +110,13 @@ export default async function AdminFechamentoPage(
       {company?.ultima_sincronizacao_status === "sucesso" && (
         <p className="text-xs text-foreground/50">
           Última sincronização: {formatarDataHora(company.ultima_sincronizacao_em!)}
+          {buscaPorProcuracao && " · pela procuração da SOMA"}
+        </p>
+      )}
+      {buscaPorProcuracao && (
+        <p className="text-xs text-foreground/60">
+          Empresa sem certificado digital válido — a busca de notas usa o certificado da SOMA como
+          procuradora (procuração eletrônica no ADN).
         </p>
       )}
 

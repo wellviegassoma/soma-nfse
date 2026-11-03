@@ -537,6 +537,14 @@ class ClienteNFSeNacional:
             )
         if resp.status_code == 404:
             return {"LoteDFe": []}
+        if resp.status_code == 400:
+            # Rejeições do ADN (E2245 sem procuração, E2213 certificado
+            # expirado etc.) vêm com HTTP 400 e o código em "Erros" —
+            # mostra o código/descrição em vez do JSON cru.
+            try:
+                self._checar_erros_do_payload(resp.json())
+            except ValueError:
+                pass
         if not resp.ok:
             raise ErroAPI(f"Erro HTTP {resp.status_code} em {url}: {resp.text[:500]}")
 
