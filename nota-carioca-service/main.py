@@ -66,7 +66,7 @@ def buscar_guia_iss(req: GuiaIssNotaCariocaRequest):
                 ano = int(req.competencia.split("-")[0]) if req.competencia else None
                 raise HTTPException(
                     status_code=422,
-                    detail=f"DIAGNOSTICO {cliente.diagnosticar_guias(ano, req.diagnostico_pagina, req.filial)}",
+                    detail=f"DIAGNOSTICO {cliente.diagnosticar_guias(ano, req.diagnostico_pagina, req.filial, req.diagnostico_cliques)}",
                 )
             pdf_bytes, valores = cliente.buscar_guia_iss(
                 req.competencia,

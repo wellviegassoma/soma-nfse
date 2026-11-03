@@ -89,6 +89,7 @@ export async function GET(
         // Só leitura — investigação de onde o site guarda guias emitidas.
         diagnostico: searchParams.get("diagnostico") === "1",
         diagnostico_pagina: searchParams.get("pagina"),
+        diagnostico_cliques: searchParams.get("cliques")?.split(",").filter(Boolean) ?? null,
       }),
       cache: "no-store",
     });

@@ -28,3 +28,5 @@ class GuiaIssNotaCariocaRequest(BaseModel):
     # `diagnostico_pagina`, relativa a /contribuinte/) em vez do PDF.
     diagnostico: bool = False
     diagnostico_pagina: Optional[str] = None
+    # Ids a marcar/clicar na página antes de descrevê-la (nunca emitir).
+    diagnostico_cliques: Optional[list[str]] = None

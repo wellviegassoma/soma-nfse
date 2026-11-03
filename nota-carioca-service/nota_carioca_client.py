@@ -59,6 +59,7 @@ não é só leitura. Quem decide emitir é o usuário do SOMA clicando o botão
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -366,14 +367,32 @@ class ClienteNotaCarioca:
         return self._page.content()
 
     def diagnosticar_guias(
-        self, ano: int | None, extra: str | None = None, filial: bool | None = None
+        self,
+        ano: int | None,
+        extra: str | None = None,
+        filial: bool | None = None,
+        cliques: list[str] | None = None,
     ) -> str:
         """Só leitura: descreve a tela de guias (filtros, botões, tabelas e
-        links) pra achar onde ficam guias já emitidas."""
+        links) pra achar onde ficam guias já emitidas. `cliques` marca
+        checkboxes / aperta botões por id antes de descrever (ex.: a lista
+        de notas da guia nacional atrás de "SELECIONAR NOTAS") — nunca um
+        botão de emitir/gerar."""
         if extra:
             self._page.goto(f"{BASE_URL}/contribuinte/{extra}", timeout=45_000, wait_until="load")
         else:
             self._abrir_grade_guias(ano, filial)
+        for id_ in cliques or []:
+            if not re.fullmatch(r"[\w$]+", id_) or re.search(r"gerar|emitir|confirmar", id_, re.I):
+                raise ErroNotaCarioca(f"Clique não permitido no diagnóstico: {id_}")
+            alvo = self._page.locator(f"#{id_}")
+            if alvo.get_attribute("type") == "checkbox":
+                alvo.check()
+            else:
+                alvo.click()
+                self._page.wait_for_load_state("load", timeout=60_000)
+        # Com cliques o alvo costuma ser uma lista longa (notas da guia).
+        max_linhas, max_celula, max_total = (500, 60, 60_000) if cliques else (15, 25, 6000)
         tree = lxml_html.fromstring(self._page.content())
         partes = [f"URL={self._page.url.replace(BASE_URL, '')}"]
         for sel in tree.xpath("//select[@id]"):
@@ -387,12 +406,12 @@ class ClienteNotaCarioca:
             )
         for tabela in tree.xpath("//table[@id]"):
             linhas = [
-                " | ".join(c.text_content().strip()[:25] for c in tr.xpath("./td|./th"))
+                " | ".join(c.text_content().strip()[:max_celula] for c in tr.xpath("./td|./th"))
                 for tr in tabela.xpath(".//tr")
             ]
             links = [a.get("href") for a in tabela.xpath(".//a[@href]")][:15]
-            partes.append(f"TABLE {tabela.get('id')}: {' // '.join(linhas[:15])} LINKS={links}")
-        return " ;; ".join(partes)[:6000]
+            partes.append(f"TABLE {tabela.get('id')}: {' // '.join(linhas[:max_linhas])} LINKS={links}")
+        return " ;; ".join(partes)[:max_total]
 
     def buscar_guia_iss(
         self,
