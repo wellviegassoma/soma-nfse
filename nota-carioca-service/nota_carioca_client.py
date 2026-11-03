@@ -217,6 +217,18 @@ class ClienteNotaCarioca:
             raise ErroNotaCarioca(f"Não foi possível abrir o certificado: {e}")
 
         self._playwright = sync_playwright().start()
+        # Exceção dentro do __enter__ não chama __exit__: sem fechar aqui, o
+        # Playwright ficava rodando e TODA chamada seguinte do processo
+        # quebrava com HTTP 500 (visto em produção 03/11/2026 depois de um
+        # "Login não completou").
+        try:
+            self._abrir_sessao(pfx_moderno)
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
+        return self
+
+    def _abrir_sessao(self, pfx_moderno: bytes) -> None:
         try:
             self._browser = self._playwright.chromium.launch(headless=True)
             self._context = self._browser.new_context(
@@ -227,7 +239,6 @@ class ClienteNotaCarioca:
                 }]
             )
         except PlaywrightError as e:
-            self._playwright.stop()
             raise ErroNotaCarioca(f"Não foi possível carregar o certificado no navegador: {e}")
 
         self._page = self._context.new_page()
@@ -244,15 +255,20 @@ class ClienteNotaCarioca:
 
         self._page.on("dialog", _aceitar_dialogo)
         self._login()
-        return self
 
     def __exit__(self, *exc_info):
-        if self._context is not None:
-            self._context.close()
-        if self._browser is not None:
-            self._browser.close()
-        if self._playwright is not None:
-            self._playwright.stop()
+        for fechar in (
+            self._context.close if self._context is not None else None,
+            self._browser.close if self._browser is not None else None,
+            self._playwright.stop if self._playwright is not None else None,
+        ):
+            if fechar is None:
+                continue
+            try:
+                fechar()
+            except Exception:
+                pass
+        self._context = self._browser = self._playwright = self._page = None
 
     def _login(self) -> None:
         self._page.goto(LOGIN_URL, timeout=_TIMEOUT_PADRAO_MS)
