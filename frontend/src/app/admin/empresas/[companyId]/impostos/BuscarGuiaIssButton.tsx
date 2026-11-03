@@ -49,12 +49,15 @@ export function BuscarGuiaIssButton({
   companyId,
   competencia,
   faturamentoSoma,
+  prefixoArquivo,
 }: {
   companyId: string;
   competencia: string;
   // Só usado quando a guia vier no regime PERCENTUAL — no FIXO (sociedade
   // uniprofissional) o ISS não depende da receita, não há o que conferir.
   faturamentoSoma: number;
+  // "093 - CHRISORTO" — vira "093 - CHRISORTO - ISS - 202610.pdf".
+  prefixoArquivo: string;
 }) {
   const [pending, setPending] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -78,7 +81,7 @@ export function BuscarGuiaIssButton({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `guia-iss-${competencia}.pdf`;
+      a.download = `${prefixoArquivo} - ISS - ${competencia.replace("-", "")}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       if (resumoLido) setResumo(resumoLido);

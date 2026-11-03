@@ -141,6 +141,7 @@ export default async function ImpostosPage(
           companyId={companyId}
           competencia={competencia}
           faturamentoSoma={receitaMes}
+          prefixoArquivo={prefixoArquivoEmpresa(company)}
         />
       )}
       {company.municipality_ibge_code === IBGE_PETROPOLIS && (
