@@ -196,7 +196,8 @@ export async function GET(request: Request, props: { params: Promise<{ companyId
   }
 
   const resultado = (await response.json()) as ConferenciaIss;
-  if (listarNotas) {
+  // Lista do Nota Carioca incompleta (erro) daria toda nota como "só na SOMA".
+  if (listarNotas && !resultado.linhas.some((l) => l.notas_erro)) {
     const notasCarioca = resultado.linhas.flatMap((l) => l.notas ?? []);
     resultado.diferencaNotas = compararNotas(await notasSomaDoMes(supabase, companyId, competencia), notasCarioca);
   }

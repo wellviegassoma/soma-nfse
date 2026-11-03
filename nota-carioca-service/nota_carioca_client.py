@@ -517,9 +517,16 @@ class ClienteNotaCarioca:
         nota nova (o "próxima" às vezes não avança de primeira)."""
         if not self._page.locator("#ctl00_cphCabMenu_btSelecionarNotas").count():
             return []
+        tabela = "#ctl00_cphCabMenu_dgNotasEmitidas"
         self._page.locator("#ctl00_cphCabMenu_ckEmitidas").check()
-        with self._page.expect_navigation(timeout=60_000):
-            self._page.locator("#ctl00_cphCabMenu_btSelecionarNotas").click()
+        # "SELECIONAR NOTAS" (guia a emitir) recarrega a página; "VISUALIZAR
+        # NOTAS" (guia já emitida) atualiza só um pedaço dela — espera a
+        # tabela aparecer em vez de esperar navegação.
+        self._page.locator("#ctl00_cphCabMenu_btSelecionarNotas").click()
+        try:
+            self._page.wait_for_selector(tabela, timeout=60_000)
+        except PlaywrightTimeoutError:
+            return []  # guia sem nota emitida (só retenções)
         notas: dict[str, dict] = {}
         sem_novas = 0
         for _ in range(60):
@@ -543,8 +550,21 @@ class ClienteNotaCarioca:
             proxima = self._page.locator("#ctl00_cphCabMenu_btnProximaEm")
             if sem_novas >= 2 or not proxima.count():
                 break
-            with self._page.expect_navigation(timeout=60_000):
-                proxima.click()
+            primeira = self._page.locator(f"{tabela} tr").nth(1).inner_text()
+            proxima.click()
+            try:
+                # Página trocou quando a primeira linha muda (postback
+                # parcial ou completo, o site usa os dois).
+                self._page.wait_for_function(
+                    """([sel, antes]) => {
+                        const tr = document.querySelectorAll(sel + ' tr')[1];
+                        return tr && tr.innerText !== antes;
+                    }""",
+                    arg=[tabela, primeira],
+                    timeout=30_000,
+                )
+            except PlaywrightTimeoutError:
+                pass  # conta como página sem nota nova
         return list(notas.values())
 
     def buscar_guia_iss(
