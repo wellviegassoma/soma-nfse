@@ -99,6 +99,28 @@ def _modernizar_pfx(pfx_bytes: bytes, senha: str) -> bytes:
 _XPATH_LINHAS_GUIAS = "//table[@id='ctl00_cphCabMenu_dgGuias']//tr[td]"
 
 
+def _inscricao_do_estabelecimento(html: str, filial: bool | None) -> str | None:
+    """Certificado de matriz com filial no Rio entra com as duas inscrições
+    (mais "TODOS OS CONTRIBUINTES") e a grade mostra só uma delas — escolhe
+    pelo rótulo "(Filial)" do ddlInscricao. None = só há uma inscrição."""
+    opcoes = [
+        (o.get("value"), o.text_content().strip())
+        for o in lxml_html.fromstring(html).xpath(
+            "//select[@id='ctl00_cphCabMenu_ddlInscricao']/option"
+        )
+        if o.get("value") and o.get("value") != "-1"
+    ]
+    if len(opcoes) < 2 or filial is None:
+        return None
+    candidatas = [v for v, rotulo in opcoes if ("(filial)" in rotulo.lower()) == filial]
+    if len(candidatas) != 1:
+        raise ErroNotaCarioca(
+            f"Não deu pra escolher a inscrição {'da filial' if filial else 'da matriz'} "
+            f"no Nota Carioca. Inscrições do certificado: {'; '.join(r for _, r in opcoes)}"
+        )
+    return candidatas[0]
+
+
 def _extrair_link_guia(html: str, mes_alvo: int | None) -> str | None:
     """
     Acha, na grid de "Guias de Recolhimento", a linha da competência
@@ -332,13 +354,26 @@ class ClienteNotaCarioca:
         if "encerrar" not in self._page.inner_text("body", timeout=15_000).lower():
             raise ErroNotaCarioca("Login não completou — sessão autenticada não foi criada.")
 
-    def diagnosticar_guias(self, ano: int | None, extra: str | None = None) -> str:
+    def _abrir_grade_guias(self, ano: int | None, filial: bool | None) -> str:
+        url = GUIAS_URL if ano is None else f"{GUIAS_URL}?exercicio={ano}"
+        self._page.goto(url, timeout=45_000, wait_until="load")
+        html = self._page.content()
+        inscricao = _inscricao_do_estabelecimento(html, filial)
+        if inscricao is None:
+            return html
+        url = f"{GUIAS_URL}?inscricao={inscricao}" + ("" if ano is None else f"&exercicio={ano}")
+        self._page.goto(url, timeout=45_000, wait_until="load", referer=self._page.url)
+        return self._page.content()
+
+    def diagnosticar_guias(
+        self, ano: int | None, extra: str | None = None, filial: bool | None = None
+    ) -> str:
         """Só leitura: descreve a tela de guias (filtros, botões, tabelas e
         links) pra achar onde ficam guias já emitidas."""
-        url = GUIAS_URL if ano is None else f"{GUIAS_URL}?exercicio={ano}"
         if extra:
-            url = f"{BASE_URL}/contribuinte/{extra}"
-        self._page.goto(url, timeout=45_000, wait_until="load")
+            self._page.goto(f"{BASE_URL}/contribuinte/{extra}", timeout=45_000, wait_until="load")
+        else:
+            self._abrir_grade_guias(ano, filial)
         tree = lxml_html.fromstring(self._page.content())
         partes = [f"URL={self._page.url.replace(BASE_URL, '')}"]
         for sel in tree.xpath("//select[@id]"):
@@ -364,6 +399,7 @@ class ClienteNotaCarioca:
         competencia: str | None = None,
         quantidade_profissionais: int | None = None,
         uniprofissional_existente: bool = False,
+        filial: bool | None = None,
     ) -> tuple[bytes, dict]:
         mes_alvo: int | None = None
         ano_alvo: int | None = None
@@ -371,9 +407,7 @@ class ClienteNotaCarioca:
             ano_str, mes_str = competencia.split("-")
             ano_alvo, mes_alvo = int(ano_str), int(mes_str)
 
-        guias_url = GUIAS_URL if ano_alvo is None else f"{GUIAS_URL}?exercicio={ano_alvo}"
-        self._page.goto(guias_url, timeout=45_000, wait_until="load")
-        html = self._page.content()
+        html = self._abrir_grade_guias(ano_alvo, filial)
 
         if uniprofissional_existente:
             # Guia de sociedade uniprofissional já emitida some da grade de

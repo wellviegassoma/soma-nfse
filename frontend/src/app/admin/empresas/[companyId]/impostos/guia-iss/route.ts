@@ -83,6 +83,9 @@ export async function GET(
             ? company.iss_quantidade_profissionais
             : null,
         uniprofissional_existente: uniprofissionalExistente,
+        // Ordem do CNPJ ≠ 0001 = filial; o certificado da matriz enxerga as
+        // duas inscrições no Nota Carioca.
+        filial: company.cnpj ? company.cnpj.replace(/\D/g, "").slice(8, 12) !== "0001" : null,
         // Só leitura — investigação de onde o site guarda guias emitidas.
         diagnostico: searchParams.get("diagnostico") === "1",
         diagnostico_pagina: searchParams.get("pagina"),
