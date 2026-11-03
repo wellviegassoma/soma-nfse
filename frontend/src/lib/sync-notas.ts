@@ -147,14 +147,14 @@ export async function syncOneCompany(
   // vai em cnpjConsulta/cpfConsulta, igual à consulta com o certificado
   // dela). Testado: 90 das 97 empresas sem certificado válido tinham
   // procuração pra SOMA; as outras voltam E2245.
-  const usaProcuracao = !certificado || new Date(certificado.expires_at).getTime() < Date.now();
+  const certificadoValido = !!certificado && new Date(certificado.expires_at).getTime() >= Date.now();
 
-  try {
-    const { pfxBase64, senha } = usaProcuracao
+  const sincronizar = async (viaProcuracao: boolean): Promise<ResultadoSincronizacao> => {
+    const { pfxBase64, senha } = viaProcuracao
       ? await certificadoProcurador(admin)
       : {
-          pfxBase64: decryptSecret(fromBytea(certificado.encrypted_file)).toString("base64"),
-          senha: decryptSecret(fromBytea(certificado.encrypted_password)).toString("utf8"),
+          pfxBase64: decryptSecret(fromBytea(certificado!.encrypted_file)).toString("base64"),
+          senha: decryptSecret(fromBytea(certificado!.encrypted_password)).toString("utf8"),
         };
     const ambiente = AMBIENTE_MAP[company.nfse_ambiente as NfseAmbiente];
 
@@ -313,12 +313,28 @@ export async function syncOneCompany(
       notasNovas,
       notasDivergentes,
     };
+  };
+
+  let usaProcuracao = !certificadoValido;
+  try {
+    try {
+      return await sincronizar(usaProcuracao);
+    } catch (e) {
+      // Certificado próprio válido mas de outra inscrição (ex.: e-CPF do
+      // sócio cadastrado na empresa) sem procuração da empresa pra ele:
+      // o ADN devolve E2245 — tenta de novo pela procuração da SOMA.
+      if (usaProcuracao || !(e instanceof Error) || !e.message.includes("E2245")) throw e;
+      usaProcuracao = true;
+      return await sincronizar(true);
+    }
   } catch (e) {
     let mensagem = e instanceof Error ? e.message : "Erro desconhecido na sincronização.";
     if (usaProcuracao) {
-      mensagem = mensagem.includes("E2245")
-        ? "Sem certificado digital válido e sem procuração eletrônica da empresa para a SOMA no ADN (E2245). Cadastre a procuração no Portal de Serviços da Receita ou um certificado válido."
-        : `Busca pela procuração da SOMA (empresa sem certificado válido): ${mensagem}`;
+      mensagem = !mensagem.includes("E2245")
+        ? `Busca pela procuração da SOMA${certificadoValido ? "" : " (empresa sem certificado válido)"}: ${mensagem}`
+        : certificadoValido
+          ? "O certificado cadastrado é de outra inscrição, sem procuração da empresa para ele, e a empresa também não tem procuração para a SOMA no ADN (E2245). Cadastre o certificado da própria empresa ou a procuração no Portal de Serviços da Receita."
+          : "Sem certificado digital válido e sem procuração eletrônica da empresa para a SOMA no ADN (E2245). Cadastre a procuração no Portal de Serviços da Receita ou um certificado válido.";
     }
     await admin
       .from("companies")
