@@ -300,6 +300,33 @@ class ClienteNotaCarioca:
         if "encerrar" not in self._page.inner_text("body", timeout=15_000).lower():
             raise ErroNotaCarioca("Login não completou — sessão autenticada não foi criada.")
 
+    def diagnosticar_guias(self, ano: int | None, extra: str | None = None) -> str:
+        """Só leitura: descreve a tela de guias (filtros, botões, tabelas e
+        links) pra achar onde ficam guias já emitidas."""
+        url = GUIAS_URL if ano is None else f"{GUIAS_URL}?exercicio={ano}"
+        if extra:
+            url = f"{BASE_URL}/contribuinte/{extra}"
+        self._page.goto(url, timeout=45_000, wait_until="load")
+        tree = lxml_html.fromstring(self._page.content())
+        partes = [f"URL={self._page.url.replace(BASE_URL, '')}"]
+        for sel in tree.xpath("//select[@id]"):
+            opcoes = [f"{o.get('value')}:{o.text_content().strip()}" for o in sel.xpath(".//option")]
+            partes.append(f"SELECT {sel.get('id')}=[{', '.join(opcoes[:15])}]")
+        for inp in tree.xpath("//input[@id][not(@type='hidden')] | //a[contains(@href,'__doPostBack')]"):
+            partes.append(
+                f"CTRL {inp.get('id') or ''}[{inp.get('type', inp.tag)}]="
+                f"{(inp.get('value') or inp.text_content() or '').strip()[:30]}"
+                + (f" href={inp.get('href')[:80]}" if inp.tag == "a" else "")
+            )
+        for tabela in tree.xpath("//table[@id]"):
+            linhas = [
+                " | ".join(c.text_content().strip()[:25] for c in tr.xpath("./td|./th"))
+                for tr in tabela.xpath(".//tr")
+            ]
+            links = [a.get("href") for a in tabela.xpath(".//a[@href]")][:15]
+            partes.append(f"TABLE {tabela.get('id')}: {' // '.join(linhas[:15])} LINKS={links}")
+        return " ;; ".join(partes)[:6000]
+
     def buscar_guia_iss(
         self,
         competencia: str | None = None,

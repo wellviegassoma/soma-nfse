@@ -22,3 +22,7 @@ class GuiaIssNotaCariocaRequest(BaseModel):
     quantidade_profissionais: Optional[int] = None
     # Reabre a guia uniprofissional já emitida do mês (nunca emite).
     uniprofissional_existente: bool = False
+    # Só leitura: devolve a estrutura da tela de guias (ou da página
+    # `diagnostico_pagina`, relativa a /contribuinte/) em vez do PDF.
+    diagnostico: bool = False
+    diagnostico_pagina: Optional[str] = None

@@ -83,6 +83,9 @@ export async function GET(
             ? company.iss_quantidade_profissionais
             : null,
         uniprofissional_existente: uniprofissionalExistente,
+        // Só leitura — investigação de onde o site guarda guias emitidas.
+        diagnostico: searchParams.get("diagnostico") === "1",
+        diagnostico_pagina: searchParams.get("pagina"),
       }),
       cache: "no-store",
     });

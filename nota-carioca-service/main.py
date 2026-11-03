@@ -62,6 +62,12 @@ def buscar_guia_iss(req: GuiaIssNotaCariocaRequest):
     pfx_bytes = base64.b64decode(req.certificado.pfx_base64)
     try:
         with ClienteNotaCarioca(pfx_bytes, req.certificado.senha) as cliente:
+            if req.diagnostico:
+                ano = int(req.competencia.split("-")[0]) if req.competencia else None
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"DIAGNOSTICO {cliente.diagnosticar_guias(ano, req.diagnostico_pagina)}",
+                )
             pdf_bytes, valores = cliente.buscar_guia_iss(
                 req.competencia, req.quantidade_profissionais, req.uniprofissional_existente
             )
