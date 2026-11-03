@@ -509,11 +509,17 @@ class ClienteNFSeNacional:
         url = f"{self.base_url}/contribuintes/DFe/{nsu}"
         params = {}
         if self.cnpj_consulta:
-            # Segundo o manual, é possível informar um CNPJ de consulta
-            # diferente do CNPJ do certificado, desde que a raiz (8
-            # primeiros dígitos) seja a mesma. O nome exato do parâmetro
-            # de query pode variar — ajuste aqui se a API rejeitar.
-            params["cnpj"] = self.cnpj_consulta
+            # CONFIRMADO no swagger do ADN (/contribuintes/swagger/v1/
+            # swagger.json) e em produção: os parâmetros são cnpjConsulta
+            # (14 dígitos) e cpfConsulta (11). Desde 02/11/2026 a consulta
+            # SEM eles (TipoConsulta "InscricaoCertificado") volta HTTP 400
+            # REJEICAO com Erros vazio pra todas as empresas; com
+            # cnpjConsulta (TipoConsulta "CnpjBase") volta 200 normal. O
+            # nome antigo ("cnpj") era ignorado pela API.
+            if len(self.cnpj_consulta) == 11:
+                params["cpfConsulta"] = self.cnpj_consulta
+            else:
+                params["cnpjConsulta"] = self.cnpj_consulta
 
         resp = self._get_com_retry(url, params=params, callback_status=callback_status)
 
