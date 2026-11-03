@@ -557,8 +557,7 @@ class ClienteNotaCarioca:
         # reabre a via já existente (só leitura) pra conferir o ISS.
         if guia_fixa_nova:
             try:
-                self._page.goto(guias_url, timeout=45_000, wait_until="load")
-                href_emitida = _extrair_link_guia(self._page.content(), mes_alvo)
+                href_emitida = _extrair_link_guia(self._abrir_grade_guias(ano_alvo, filial), mes_alvo)
                 if href_emitida:
                     self._page.goto(
                         f"{BASE_URL}/contribuinte/{href_emitida.replace('&amp;', '&')}",
