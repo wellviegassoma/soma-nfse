@@ -329,9 +329,12 @@ class ClienteNotaCarioca:
             inscricao = re.search(r"inscricao=(\d+)", html)
             if inscricao is None:
                 raise ErroNotaCarioca("Inscrição municipal não encontrada na tela de guias do Nota Carioca.")
+            # Sem o returnurl e o Referer da grade, o site responde
+            # "ACESSO NEGADO" (visto ao vivo 03/11/2026).
             href = (
                 f"GuiaSociedadeProfissionais.aspx?inscricao={inscricao.group(1)}"
                 f"&exercicio={ano_alvo}&mes={mes_alvo}"
+                f"&returnurl=guias.aspx%3Finscricao%3D{inscricao.group(1)}%26exercicio%3D{ano_alvo}"
             )
             quantidade_profissionais = None
         else:
@@ -349,7 +352,12 @@ class ClienteNotaCarioca:
             )
         href = href.replace("&amp;", "&")
 
-        self._page.goto(f"{BASE_URL}/contribuinte/{href}", timeout=45_000, wait_until="load")
+        self._page.goto(
+            f"{BASE_URL}/contribuinte/{href}",
+            timeout=45_000,
+            wait_until="load",
+            referer=self._page.url,
+        )
 
         # Guia de sociedade uniprofissional AINDA NÃO emitida: a tela não
         # mostra valores, pede a quantidade de profissionais (e a data de
@@ -393,7 +401,17 @@ class ClienteNotaCarioca:
                 except ErroNotaCarioca:
                     pass
         else:
-            valores = _extrair_valores_guia(self._page.content())
+            try:
+                valores = _extrair_valores_guia(self._page.content())
+            except ErroNotaCarioca as e:
+                if not uniprofissional_existente:
+                    raise
+                links = sorted({
+                    (a.get("href") or "").split("?")[0]
+                    for a in lxml_html.fromstring(html).xpath("//a[@href]")
+                    if ".aspx" in (a.get("href") or "")
+                })
+                raise ErroNotaCarioca(f"{e} Links em guias.aspx: {', '.join(links[:30])}")
 
         # Tela de confirmação em guianacional.aspx — o botão muda conforme
         # a guia já existe ou não:
