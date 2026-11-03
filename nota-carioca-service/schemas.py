@@ -15,6 +15,15 @@ class CertificadoIn(BaseModel):
     senha: str
 
 
+class ConferenciaIssRequest(BaseModel):
+    """Central ISS Rio — só leitura."""
+
+    certificado: CertificadoIn
+    competencia: str  # "YYYY-MM"
+    filial: Optional[bool] = None
+    listar_notas: bool = False
+
+
 class GuiaIssNotaCariocaRequest(BaseModel):
     certificado: CertificadoIn
     competencia: Optional[str] = None  # "YYYY-MM" — None = guia mais recente pendente

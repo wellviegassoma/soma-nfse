@@ -110,6 +110,11 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
                 Central FGTS
               </Button>
             </a>
+            <a href="/admin/fechamento/iss-rio">
+              <Button type="button" variant="secondary">
+                Central ISS Rio
+              </Button>
+            </a>
           </form>
           <BuscarTodasButton competencia={competencia} empresas={empresasParaBuscar} />
         </div>

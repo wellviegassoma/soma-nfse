@@ -190,6 +190,41 @@ def _para_decimal(texto_valor: str | None) -> float | None:
     return float(texto_valor.replace(".", "").replace(",", "."))
 
 
+_MESES = {
+    "JAN": 1, "FEV": 2, "MAR": 3, "ABR": 4, "MAI": 5, "JUN": 6,
+    "JUL": 7, "AGO": 8, "SET": 9, "OUT": 10, "NOV": 11, "DEZ": 12,
+}
+
+
+def _para_decimal_ou_none(texto: str | None) -> float | None:
+    """Como _para_decimal, mas "A Declarar" e afins viram None em vez de erro."""
+    try:
+        return _para_decimal(texto)
+    except ValueError:
+        return None
+
+
+def _extrair_resumo_receitas(html: str) -> list[dict]:
+    """Tabela gvResumoReceitas da guia nacional, ex.:
+    "1015 - Movimento Econômico | 160.948,41 | 8.047,42" e
+    "1287 - Retenção dos Optantes | 300,00 | 6,03" (ao vivo 03/11/2026)."""
+    receitas = []
+    for tr in lxml_html.fromstring(html).xpath(
+        "//table[@id='ctl00_cphCabMenu_gvResumoReceitas']//tr[td]"
+    ):
+        celulas = [td.text_content().strip() for td in tr.xpath("./td")]
+        if len(celulas) < 3:
+            continue
+        codigo, _, descricao = celulas[0].partition(" - ")
+        receitas.append({
+            "codigo": codigo.strip(),
+            "descricao": descricao.strip(),
+            "base": _para_decimal_ou_none(celulas[1]),
+            "principal": _para_decimal_ou_none(celulas[2]),
+        })
+    return receitas
+
+
 def _texto_por_id(tree: Any, id_: str) -> str | None:
     elementos = tree.xpath(f"//*[@id='{id_}']")
     return elementos[0].text_content().strip() if elementos else None
@@ -419,6 +454,98 @@ class ClienteNotaCarioca:
             links = [a.get("href") for a in tabela.xpath(".//a[@href]")][:15]
             partes.append(f"TABLE {tabela.get('id')}: {' // '.join(linhas[:max_linhas])} LINKS={links}")
         return " ;; ".join(partes)[:max_total]
+
+    def conferir_guias(
+        self, competencia: str, filial: bool | None = None, listar_notas: bool = False
+    ) -> dict:
+        """Só leitura (Central ISS Rio): linhas da grade no mês, o resumo por
+        receita da guia nacional (movimento econômico × retenções) e, se
+        pedido, as notas que o Nota Carioca usa na guia. Nunca emite."""
+        ano, mes = (int(p) for p in competencia.split("-"))
+        html = self._abrir_grade_guias(ano, filial)
+        if "relogin" in self._page.url.lower():
+            raise ErroNotaCarioca(
+                "O certificado entra no Nota Carioca como tomador (pessoa física), "
+                "sem acesso às guias da empresa — cadastre o e-CNPJ."
+            )
+
+        linhas, pendentes_anteriores = [], []
+        for tr in lxml_html.fromstring(html).xpath(_XPATH_LINHAS_GUIAS):
+            celulas = tr.xpath("./td")
+            if len(celulas) < 6:
+                continue
+            comp = celulas[0].text_content().strip()  # "OUT / 2026"
+            partes = [p.strip().upper() for p in comp.split("/")]
+            if len(partes) != 2 or partes[0] not in _MESES:
+                continue
+            links = celulas[5].xpath(".//a[@href]")
+            linha = {
+                "competencia": f"{partes[1]}-{_MESES[partes[0]]:02d}",
+                "valor": _para_decimal_ou_none(celulas[3].text_content()),
+                "valor_texto": celulas[3].text_content().strip(),
+                "origem": celulas[4].text_content().strip(),
+                "documento": celulas[5].text_content().strip(),
+                "href": links[0].get("href").replace("&amp;", "&") if links else None,
+            }
+            if linha["competencia"] == competencia:
+                linhas.append(linha)
+            elif linha["documento"].upper() == "EMITIR GUIA":
+                pendentes_anteriores.append({k: linha[k] for k in ("competencia", "valor_texto", "origem")})
+
+        grade_url = self._page.url
+        for linha in linhas:
+            if "NFS-e" not in linha["origem"] or not linha["href"]:
+                continue
+            self._page.goto(
+                f"{BASE_URL}/contribuinte/{linha['href']}",
+                timeout=45_000,
+                wait_until="load",
+                referer=grade_url,
+            )
+            linha["receitas"] = _extrair_resumo_receitas(self._page.content())
+            if listar_notas:
+                try:
+                    linha["notas"] = self._listar_notas_da_guia()
+                except PlaywrightError as e:
+                    linha["notas_erro"] = f"Não consegui listar as notas da guia: {e}"[:300]
+
+        return {"linhas": linhas, "pendentes_anteriores": pendentes_anteriores}
+
+    def _listar_notas_da_guia(self) -> list[dict]:
+        """Notas emitidas que entram na guia — atrás de SELECIONAR/VISUALIZAR
+        NOTAS, 10 por página. Avança na mesma sessão até a página não trazer
+        nota nova (o "próxima" às vezes não avança de primeira)."""
+        if not self._page.locator("#ctl00_cphCabMenu_btSelecionarNotas").count():
+            return []
+        self._page.locator("#ctl00_cphCabMenu_ckEmitidas").check()
+        with self._page.expect_navigation(timeout=60_000):
+            self._page.locator("#ctl00_cphCabMenu_btSelecionarNotas").click()
+        notas: dict[str, dict] = {}
+        sem_novas = 0
+        for _ in range(60):
+            antes = len(notas)
+            for tr in lxml_html.fromstring(self._page.content()).xpath(
+                "//table[@id='ctl00_cphCabMenu_dgNotasEmitidas']//tr[td]"
+            ):
+                textos = [td.text_content().strip() for td in tr.xpath("./td")]
+                chave = next((t for t in textos if re.fullmatch(r"\d{50}", t)), None)
+                if not chave:
+                    continue
+                notas[chave] = {
+                    # Chave NFS-e Nacional: município(7) + amb(1) + tpInsc(1)
+                    # + CNPJ(14) + nNFSe(13) + AAMM(4) + código(9) + DV(1).
+                    "numero": str(int(chave[23:36])),
+                    "chave": chave,
+                    "data_emissao": textos[textos.index(chave) + 1],
+                    "valor": _para_decimal_ou_none(textos[-1]),
+                }
+            sem_novas = sem_novas + 1 if len(notas) == antes else 0
+            proxima = self._page.locator("#ctl00_cphCabMenu_btnProximaEm")
+            if sem_novas >= 2 or not proxima.count():
+                break
+            with self._page.expect_navigation(timeout=60_000):
+                proxima.click()
+        return list(notas.values())
 
     def buscar_guia_iss(
         self,

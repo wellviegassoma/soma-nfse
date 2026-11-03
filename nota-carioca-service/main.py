@@ -27,7 +27,7 @@ from fastapi.responses import Response
 
 from auth import exigir_token_interno
 from nota_carioca_client import ClienteNotaCarioca, ErroNotaCarioca
-from schemas import GuiaIssNotaCariocaRequest
+from schemas import ConferenciaIssRequest, GuiaIssNotaCariocaRequest
 
 app = FastAPI(title="nota-carioca-service", docs_url=None, redoc_url=None)
 
@@ -78,3 +78,13 @@ def buscar_guia_iss(req: GuiaIssNotaCariocaRequest):
         raise HTTPException(status_code=422, detail=str(e))
 
     return _resposta_guia_pdf(pdf_bytes, valores)
+
+
+@app.post("/conferencia-iss", dependencies=[Depends(exigir_token_interno)])
+def conferir_iss(req: ConferenciaIssRequest):
+    pfx_bytes = base64.b64decode(req.certificado.pfx_base64)
+    try:
+        with ClienteNotaCarioca(pfx_bytes, req.certificado.senha) as cliente:
+            return cliente.conferir_guias(req.competencia, req.filial, req.listar_notas)
+    except ErroNotaCarioca as e:
+        raise HTTPException(status_code=422, detail=str(e))
