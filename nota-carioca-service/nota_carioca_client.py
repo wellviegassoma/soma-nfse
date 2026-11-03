@@ -232,6 +232,17 @@ class ClienteNotaCarioca:
 
         self._page = self._context.new_page()
         self._page.set_default_timeout(_TIMEOUT_PADRAO_MS)
+        # Sem listener o Playwright CANCELA todo confirm()/alert() — um
+        # "confirma a emissão?" do EMITIR GUIA morreria calado. Aceita
+        # (quem chama este serviço já decidiu emitir) e guarda o texto
+        # pra mensagem de erro.
+        self._dialogos: list[str] = []
+
+        def _aceitar_dialogo(dialogo: Any) -> None:
+            self._dialogos.append(dialogo.message.strip())
+            dialogo.accept()
+
+        self._page.on("dialog", _aceitar_dialogo)
         self._login()
         return self
 
@@ -354,15 +365,24 @@ class ClienteNotaCarioca:
         if "guiaprint.aspx" not in self._page.url:
             # Validação do formulário (ex.: quantidade/data recusadas) fica
             # visível na própria tela — repassa o texto pra quem clicou.
-            avisos = [
-                t.strip()
-                for t in self._page.locator("span[id*='rfv'], span[id*='rev'], span[id*='cv'], span[id*='cpv'], span[id*='lblMensagem'], span[id*='lblErro']").all_inner_texts()
-                if t.strip() and t.strip() != "*"
+            tree = lxml_html.fromstring(self._page.content())
+            campos = [
+                f"{el.get('id').replace('ctl00_cphCabMenu_', '')}={el.text_content().strip()[:50]}"
+                for el in tree.xpath("//span[starts-with(@id, 'ctl00_cphCabMenu_')]")
+                if el.text_content().strip() not in ("", "*")
+            ]
+            controles = [
+                f"{el.get('id', '').replace('ctl00_cphCabMenu_', '')}[{el.get('type', el.tag)}]={(el.get('value') or '')[:30]}"
+                for el in tree.xpath("//input[not(@type='hidden')] | //select")
+                if el.get("id")
             ]
             raise ErroNotaCarioca(
                 "Fluxo inesperado no Nota Carioca — não chegou na tela de "
-                "impressão da guia. A estrutura do site pode ter mudado."
-                + (f" Avisos na tela: {'; '.join(avisos[:10])}" if avisos else "")
+                "impressão da guia. "
+                f"URL: {self._page.url.replace(BASE_URL, '')}. "
+                f"Diálogos: {' / '.join(self._dialogos) or 'nenhum'}. "
+                f"Campos: {'; '.join(campos[:25]) or 'nenhum'}. "
+                f"Controles: {'; '.join(controles[:15]) or 'nenhum'}"
             )
 
         try:
