@@ -272,7 +272,9 @@ class ClienteNotaCarioca:
         if "encerrar" not in self._page.inner_text("body", timeout=15_000).lower():
             raise ErroNotaCarioca("Login não completou — sessão autenticada não foi criada.")
 
-    def buscar_guia_iss(self, competencia: str | None = None) -> tuple[bytes, dict]:
+    def buscar_guia_iss(
+        self, competencia: str | None = None, quantidade_profissionais: int | None = None
+    ) -> tuple[bytes, dict]:
         mes_alvo: int | None = None
         ano_alvo: int | None = None
         if competencia:
@@ -298,7 +300,37 @@ class ClienteNotaCarioca:
         href = href.replace("&amp;", "&")
 
         self._page.goto(f"{BASE_URL}/contribuinte/{href}", timeout=45_000, wait_until="load")
-        valores = _extrair_valores_guia(self._page.content())
+
+        # Guia de sociedade uniprofissional AINDA NÃO emitida: a tela não
+        # mostra valores, pede a quantidade de profissionais (e a data de
+        # pagamento) num formulário antes do EMITIR GUIA — confirmado ao vivo
+        # em 03/11/2026 (campos rfvQtdProfissionais/rfvDataPagamento). Já
+        # emitida, cai no formato FIXO de _extrair_valores_guia.
+        campo_qtd = self._page.locator("input[id*='QtdProfissionais']")
+        guia_fixa_nova = campo_qtd.count() > 0
+        if guia_fixa_nova:
+            if not quantidade_profissionais:
+                raise ErroNotaCarioca(
+                    "O Nota Carioca trata esta empresa como sociedade uniprofissional (ISS fixo "
+                    "por profissional) e pede a quantidade de profissionais para emitir a guia. "
+                    "Cadastre o ISS fixo e a quantidade de profissionais na empresa."
+                )
+            campo_qtd.first.fill(str(quantidade_profissionais))
+            campo_data = self._page.locator("input[id*='DataPagamento']")
+            if campo_data.count() > 0 and not campo_data.first.input_value().strip():
+                vencimento = _texto_por_id(
+                    lxml_html.fromstring(self._page.content()), "ctl00_cphCabMenu_lblVencimentoBase"
+                )
+                if vencimento:
+                    campo_data.first.fill(vencimento)
+            valores = {
+                "regime": "FIXO",
+                "quantidade_profissionais": quantidade_profissionais,
+                "valor_iss": None,
+                "valor_total": None,
+            }
+        else:
+            valores = _extrair_valores_guia(self._page.content())
 
         # Tela de confirmação em guianacional.aspx — o botão muda conforme
         # a guia já existe ou não:
@@ -320,9 +352,17 @@ class ClienteNotaCarioca:
                 break
 
         if "guiaprint.aspx" not in self._page.url:
+            # Validação do formulário (ex.: quantidade/data recusadas) fica
+            # visível na própria tela — repassa o texto pra quem clicou.
+            avisos = [
+                t.strip()
+                for t in self._page.locator("span[id*='rfv'], span[id*='rev'], span[id*='cv'], span[id*='cpv'], span[id*='lblMensagem'], span[id*='lblErro']").all_inner_texts()
+                if t.strip() and t.strip() != "*"
+            ]
             raise ErroNotaCarioca(
                 "Fluxo inesperado no Nota Carioca — não chegou na tela de "
                 "impressão da guia. A estrutura do site pode ter mudado."
+                + (f" Avisos na tela: {'; '.join(avisos[:10])}" if avisos else "")
             )
 
         try:
@@ -337,4 +377,21 @@ class ClienteNotaCarioca:
         caminho_baixado = download_info.value.path()
         if caminho_baixado is None:
             raise ErroNotaCarioca("O download do PDF da guia falhou.")
-        return Path(caminho_baixado).read_bytes(), valores
+        pdf_bytes = Path(caminho_baixado).read_bytes()
+
+        # Guia fixa recém-emitida: o valor só aparece depois de emitida —
+        # reabre a via já existente (só leitura) pra conferir o ISS.
+        if guia_fixa_nova:
+            try:
+                self._page.goto(guias_url, timeout=45_000, wait_until="load")
+                href_emitida = _extrair_link_guia(self._page.content(), mes_alvo)
+                if href_emitida:
+                    self._page.goto(
+                        f"{BASE_URL}/contribuinte/{href_emitida.replace('&amp;', '&')}",
+                        timeout=45_000,
+                        wait_until="load",
+                    )
+                    valores = _extrair_valores_guia(self._page.content())
+            except (ErroNotaCarioca, PlaywrightError):
+                pass
+        return pdf_bytes, valores

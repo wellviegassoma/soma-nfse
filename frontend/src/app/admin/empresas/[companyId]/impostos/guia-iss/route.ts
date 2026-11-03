@@ -30,7 +30,7 @@ export async function GET(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "cnpj, cpf, municipality_ibge_code, certificates(encrypted_file, encrypted_password, expires_at)",
+      "cnpj, cpf, municipality_ibge_code, iss_tipo, iss_quantidade_profissionais, certificates(encrypted_file, encrypted_password, expires_at)",
     )
     .eq("id", companyId)
     .single();
@@ -72,6 +72,10 @@ export async function GET(
       body: JSON.stringify({
         certificado: { pfx_base64: pfxBase64, senha },
         competencia,
+        // Sociedade uniprofissional: guia ainda não emitida pede a
+        // quantidade de profissionais no próprio site.
+        quantidade_profissionais:
+          company.iss_tipo === "FIXO" ? company.iss_quantidade_profissionais : null,
       }),
       cache: "no-store",
     });

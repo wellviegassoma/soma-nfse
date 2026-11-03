@@ -18,3 +18,5 @@ class CertificadoIn(BaseModel):
 class GuiaIssNotaCariocaRequest(BaseModel):
     certificado: CertificadoIn
     competencia: Optional[str] = None  # "YYYY-MM" — None = guia mais recente pendente
+    # Sociedade uniprofissional: o Nota Carioca pede a quantidade pra emitir.
+    quantidade_profissionais: Optional[int] = None
