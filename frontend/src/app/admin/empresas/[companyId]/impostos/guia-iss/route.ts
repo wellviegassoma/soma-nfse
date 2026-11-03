@@ -83,7 +83,7 @@ export async function GET(
     const corpo = await response.json().catch(() => null);
     const mensagem =
       (corpo && typeof corpo.detail === "string" && corpo.detail) ||
-      "Não foi possível buscar a guia de ISS agora.";
+      `Não foi possível buscar a guia de ISS agora (serviço do Nota Carioca respondeu HTTP ${response.status}).`;
     return NextResponse.json({ error: mensagem }, { status: 502 });
   }
 

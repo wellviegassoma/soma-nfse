@@ -175,8 +175,16 @@ def _extrair_valores_guia(html: str) -> dict:
             "valor_total": _para_decimal(_texto_por_id(tree, "ctl00_cphCabMenu_lblValorTotal")),
         }
 
+    # Lista os rótulos que a tela tem de fato, pra dar pra ajustar os ids
+    # acima sem precisar reproduzir o fluxo à mão no site.
+    campos = [
+        f"{el.get('id').replace('ctl00_cphCabMenu_', '')}={el.text_content().strip()[:40]}"
+        for el in tree.xpath("//span[starts-with(@id, 'ctl00_')]")
+        if el.text_content().strip()
+    ]
     raise ErroNotaCarioca(
-        "Não foi possível identificar o formato da guia — a estrutura do site pode ter mudado."
+        "Não foi possível identificar o formato da guia — a estrutura do site pode ter mudado. "
+        f"Campos na tela: {'; '.join(campos[:40]) or 'nenhum'}"
     )
 
 
@@ -277,9 +285,15 @@ class ClienteNotaCarioca:
 
         href = _extrair_link_guia(html, mes_alvo)
         if href is None:
+            linhas = [
+                " | ".join(td.text_content().strip() for td in linha.xpath("./td"))
+                for linha in lxml_html.fromstring(html).xpath(
+                    "//table[@id='ctl00_cphCabMenu_dgGuias']//tr[@class='tableItem']"
+                )
+            ]
             raise ErroNotaCarioca(
                 f"Nenhuma guia de ISS pendente encontrada para a competência "
-                f"{competencia or 'atual'}."
+                f"{competencia or 'atual'}. Guias listadas: {'; '.join(linhas[:12]) or 'nenhuma'}"
             )
         href = href.replace("&amp;", "&")
 
