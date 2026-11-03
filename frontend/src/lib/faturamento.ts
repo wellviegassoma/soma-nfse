@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sugerirAtividade } from "@/lib/lc116-sugestao-atividade";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 
 export type NotaFaturamento = {
   competencia: string; // "YYYY-MM"
@@ -27,6 +28,15 @@ type NotaDistribuidaRow = {
   equiparacao_hospitalar: boolean;
 };
 
+// Empresa com mais de 1000 notas (FVS, Dela, META...) perdia o resto em
+// silêncio — ver buscarTudoPaginado. Devolve no formato { data } pra
+// manter o desestruturamento dos chamadores.
+async function paginado<T>(
+  buscarPagina: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<{ data: T[] }> {
+  return { data: await buscarTudoPaginado(buscarPagina) };
+}
+
 // Mesma lógica de unificação/dedup do admin/page.tsx (Visão geral), mas
 // já filtrada por empresa — uma nota emitida pelo próprio soma-nfse, uma
 // vez sincronizada do Sefin Nacional, também aparece em
@@ -37,15 +47,23 @@ export async function buscarFaturamentoMensal(
   companyId: string,
 ): Promise<NotaFaturamento[]> {
   const [{ data: notas }, { data: distribuidas }] = await Promise.all([
-    supabase
-      .from("dps")
-      .select("valor, status, data_competencia, nfse(status, access_key)")
-      .eq("company_id", companyId),
-    supabase
-      .from("notas_distribuidas")
-      .select("chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar")
-      .eq("company_id", companyId)
-      .eq("direcao", "saida"),
+    paginado((from, to) =>
+      supabase
+        .from("dps")
+        .select("valor, status, data_competencia, nfse(status, access_key)")
+        .eq("company_id", companyId)
+        .order("id")
+        .range(from, to),
+    ),
+    paginado((from, to) =>
+      supabase
+        .from("notas_distribuidas")
+        .select("chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar")
+        .eq("company_id", companyId)
+        .eq("direcao", "saida")
+        .order("id")
+        .range(from, to),
+    ),
   ]);
 
   // equiparacao_hospitalar só existe em notas_distribuidas (única tabela
@@ -190,19 +208,27 @@ export async function buscarFaturamentoPorAtividade(
   };
 
   const [{ data: notas }, { data: distribuidas }, { data: todosServicos }] = await Promise.all([
-    supabase
-      .from("dps")
-      .select(
-        "valor, status, data_competencia, services(name, national_tax_code, atividade_simples_nacional, tipo_retencao_issqn), nfse(status, access_key)",
-      )
-      .eq("company_id", companyId),
-    supabase
-      .from("notas_distribuidas")
-      .select(
-        "chave_acesso, valor_servico, competencia, cancelada, direcao, codigo_trib_nacional, descricao_servico, tipo_retencao_issqn",
-      )
-      .eq("company_id", companyId)
-      .eq("direcao", "saida"),
+    paginado((from, to) =>
+      supabase
+        .from("dps")
+        .select(
+          "valor, status, data_competencia, services(name, national_tax_code, atividade_simples_nacional, tipo_retencao_issqn), nfse(status, access_key)",
+        )
+        .eq("company_id", companyId)
+        .order("id")
+        .range(from, to),
+    ),
+    paginado((from, to) =>
+      supabase
+        .from("notas_distribuidas")
+        .select(
+          "chave_acesso, valor_servico, competencia, cancelada, direcao, codigo_trib_nacional, descricao_servico, tipo_retencao_issqn",
+        )
+        .eq("company_id", companyId)
+        .eq("direcao", "saida")
+        .order("id")
+        .range(from, to),
+    ),
     supabase
       .from("services")
       .select("national_tax_code, atividade_simples_nacional")
