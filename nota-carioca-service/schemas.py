@@ -20,3 +20,5 @@ class GuiaIssNotaCariocaRequest(BaseModel):
     competencia: Optional[str] = None  # "YYYY-MM" — None = guia mais recente pendente
     # Sociedade uniprofissional: o Nota Carioca pede a quantidade pra emitir.
     quantidade_profissionais: Optional[int] = None
+    # Reabre a guia uniprofissional já emitida do mês (nunca emite).
+    uniprofissional_existente: bool = False

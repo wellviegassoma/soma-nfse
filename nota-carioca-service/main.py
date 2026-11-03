@@ -63,7 +63,7 @@ def buscar_guia_iss(req: GuiaIssNotaCariocaRequest):
     try:
         with ClienteNotaCarioca(pfx_bytes, req.certificado.senha) as cliente:
             pdf_bytes, valores = cliente.buscar_guia_iss(
-                req.competencia, req.quantidade_profissionais
+                req.competencia, req.quantidade_profissionais, req.uniprofissional_existente
             )
     except ErroNotaCarioca as e:
         raise HTTPException(status_code=422, detail=str(e))

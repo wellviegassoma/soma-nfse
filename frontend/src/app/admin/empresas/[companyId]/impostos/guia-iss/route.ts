@@ -21,7 +21,11 @@ export async function GET(
   if (naoAutorizado) return naoAutorizado;
 
   const { companyId } = await props.params;
-  const competencia = new URL(request.url).searchParams.get("competencia");
+  const searchParams = new URL(request.url).searchParams;
+  const competencia = searchParams.get("competencia");
+  // Reabre a guia de sociedade uniprofissional já emitida — some da grade
+  // do Nota Carioca e, quando há ISS retido, o mês lá é a guia do retido.
+  const uniprofissionalExistente = searchParams.get("uniprofissional") === "1";
   if (competencia && !/^\d{4}-\d{2}$/.test(competencia)) {
     return NextResponse.json({ error: "Competência inválida." }, { status: 400 });
   }
@@ -75,7 +79,10 @@ export async function GET(
         // Sociedade uniprofissional: guia ainda não emitida pede a
         // quantidade de profissionais no próprio site.
         quantidade_profissionais:
-          company.iss_tipo === "FIXO" ? company.iss_quantidade_profissionais : null,
+          company.iss_tipo === "FIXO" && !uniprofissionalExistente
+            ? company.iss_quantidade_profissionais
+            : null,
+        uniprofissional_existente: uniprofissionalExistente,
       }),
       cache: "no-store",
     });

@@ -59,6 +59,7 @@ não é só leitura. Quem decide emitir é o usuário do SOMA clicando o botão
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -300,7 +301,10 @@ class ClienteNotaCarioca:
             raise ErroNotaCarioca("Login não completou — sessão autenticada não foi criada.")
 
     def buscar_guia_iss(
-        self, competencia: str | None = None, quantidade_profissionais: int | None = None
+        self,
+        competencia: str | None = None,
+        quantidade_profissionais: int | None = None,
+        uniprofissional_existente: bool = False,
     ) -> tuple[bytes, dict]:
         mes_alvo: int | None = None
         ano_alvo: int | None = None
@@ -312,7 +316,26 @@ class ClienteNotaCarioca:
         self._page.goto(guias_url, timeout=45_000, wait_until="load")
         html = self._page.content()
 
-        href = _extrair_link_guia(html, mes_alvo)
+        if uniprofissional_existente:
+            # Guia de sociedade uniprofissional já emitida some da grade de
+            # guias.aspx (e a linha do mês pode ser só a do ISS retido) —
+            # mas abre direto em GuiaSociedadeProfissionais.aspx, mesma URL
+            # que a grade usa pra emitir (confirmado ao vivo 03/11/2026).
+            # Sem quantidade_profissionais: se a guia ainda não existir, o
+            # formulário de emissão aparece e o fluxo para com erro em vez
+            # de emitir.
+            if ano_alvo is None or mes_alvo is None:
+                raise ErroNotaCarioca("Informe a competência da guia uniprofissional.")
+            inscricao = re.search(r"inscricao=(\d+)", html)
+            if inscricao is None:
+                raise ErroNotaCarioca("Inscrição municipal não encontrada na tela de guias do Nota Carioca.")
+            href = (
+                f"GuiaSociedadeProfissionais.aspx?inscricao={inscricao.group(1)}"
+                f"&exercicio={ano_alvo}&mes={mes_alvo}"
+            )
+            quantidade_profissionais = None
+        else:
+            href = _extrair_link_guia(html, mes_alvo)
         if href is None:
             linhas = [
                 " | ".join(td.text_content().strip() for td in linha.xpath("./td"))
