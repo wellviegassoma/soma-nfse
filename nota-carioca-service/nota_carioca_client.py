@@ -340,6 +340,19 @@ class ClienteNotaCarioca:
                 "valor_iss": None,
                 "valor_total": None,
             }
+            # GuiaSociedadeProfissionais.aspx: o EMITIR GUIA só aparece depois
+            # do "Calcular" (#btQtdProfissionais) — confirmado ao vivo 03/11/2026.
+            botao_calcular = self._page.locator("#ctl00_cphCabMenu_btQtdProfissionais")
+            if botao_calcular.count() > 0:
+                botao_calcular.click(timeout=20_000)
+                try:
+                    self._page.wait_for_load_state("load", timeout=45_000)
+                except PlaywrightTimeoutError:
+                    raise ErroNotaCarioca("O cálculo da guia de ISS fixo não completou a tempo — tente novamente.")
+                try:
+                    valores = _extrair_valores_guia(self._page.content())
+                except ErroNotaCarioca:
+                    pass
         else:
             valores = _extrair_valores_guia(self._page.content())
 
