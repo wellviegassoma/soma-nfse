@@ -92,6 +92,13 @@ def _modernizar_pfx(pfx_bytes: bytes, senha: str) -> bytes:
     )
 
 
+# Todas as linhas de dados da grade — as linhas alternam a classe CSS
+# (só `tableItem` pulava metade delas: a guia de outubro "sumia" conforme a
+# posição na lista, visto ao vivo 03/11/2026). Cabeçalho é <th>, a linha
+# vazia do fim não tem mês e cai fora no filtro de competência.
+_XPATH_LINHAS_GUIAS = "//table[@id='ctl00_cphCabMenu_dgGuias']//tr[td]"
+
+
 def _extrair_link_guia(html: str, mes_alvo: int | None) -> str | None:
     """
     Acha, na grid de "Guias de Recolhimento", a linha da competência
@@ -103,7 +110,7 @@ def _extrair_link_guia(html: str, mes_alvo: int | None) -> str | None:
     aberto), que é o caso de uso comum de "buscar a guia agora".
     """
     tree = lxml_html.fromstring(html)
-    linhas = tree.xpath("//table[@id='ctl00_cphCabMenu_dgGuias']//tr[@class='tableItem']")
+    linhas = tree.xpath(_XPATH_LINHAS_GUIAS)
     for linha in linhas:
         celulas = linha.xpath("./td")
         if len(celulas) < 6:
@@ -138,7 +145,7 @@ def _extrair_link_guia_uniprofissional_emitida(html: str, mes_alvo: int) -> str 
         "JUL": 7, "AGO": 8, "SET": 9, "OUT": 10, "NOV": 11, "DEZ": 12,
     }
     tree = lxml_html.fromstring(html)
-    for linha in tree.xpath("//table[@id='ctl00_cphCabMenu_dgGuias']//tr[@class='tableItem']"):
+    for linha in tree.xpath(_XPATH_LINHAS_GUIAS):
         celulas = linha.xpath("./td")
         if len(celulas) < 6:
             continue
@@ -386,7 +393,7 @@ class ClienteNotaCarioca:
             linhas = [
                 " | ".join(td.text_content().strip() for td in linha.xpath("./td"))
                 for linha in lxml_html.fromstring(html).xpath(
-                    "//table[@id='ctl00_cphCabMenu_dgGuias']//tr[@class='tableItem']"
+                    _XPATH_LINHAS_GUIAS
                 )
             ]
             raise ErroNotaCarioca(
