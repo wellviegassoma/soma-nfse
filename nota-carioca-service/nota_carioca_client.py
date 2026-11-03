@@ -59,7 +59,6 @@ não é só leitura. Quem decide emitir é o usuário do SOMA clicando o botão
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -123,6 +122,32 @@ def _extrair_link_guia(html: str, mes_alvo: int | None) -> str | None:
         mes_texto = competencia_texto.split("/")[0].strip().upper()
         if mes_nome_para_numero.get(mes_texto) == mes_alvo:
             return href
+    return None
+
+
+def _extrair_link_guia_uniprofissional_emitida(html: str, mes_alvo: int) -> str | None:
+    """
+    Mesma grade de _extrair_link_guia, mas só a linha da sociedade
+    uniprofissional (Origem Débito "DSPREST/DSTOM") já emitida — o mês pode
+    ter também a guia do ISS retido ("NFS-e Nacional"). Visto ao vivo
+    03/11/2026: "OUT / 2026 | ... | 248,62 | DSPREST/DSTOM | 0016943408" →
+    guia.aspx?guia=16943408.
+    """
+    meses = {
+        "JAN": 1, "FEV": 2, "MAR": 3, "ABR": 4, "MAI": 5, "JUN": 6,
+        "JUL": 7, "AGO": 8, "SET": 9, "OUT": 10, "NOV": 11, "DEZ": 12,
+    }
+    tree = lxml_html.fromstring(html)
+    for linha in tree.xpath("//table[@id='ctl00_cphCabMenu_dgGuias']//tr[@class='tableItem']"):
+        celulas = linha.xpath("./td")
+        if len(celulas) < 6:
+            continue
+        mes_texto = celulas[0].text_content().split("/")[0].strip().upper()
+        if meses.get(mes_texto) != mes_alvo or "DSPREST" not in celulas[4].text_content():
+            continue
+        for link in celulas[5].xpath(".//a[@href]"):
+            if "guia=" in (link.get("href") or ""):
+                return link.get("href")
     return None
 
 
@@ -353,16 +378,7 @@ class ClienteNotaCarioca:
             # de emitir.
             if ano_alvo is None or mes_alvo is None:
                 raise ErroNotaCarioca("Informe a competência da guia uniprofissional.")
-            inscricao = re.search(r"inscricao=(\d+)", html)
-            if inscricao is None:
-                raise ErroNotaCarioca("Inscrição municipal não encontrada na tela de guias do Nota Carioca.")
-            # Sem o returnurl e o Referer da grade, o site responde
-            # "ACESSO NEGADO" (visto ao vivo 03/11/2026).
-            href = (
-                f"GuiaSociedadeProfissionais.aspx?inscricao={inscricao.group(1)}"
-                f"&exercicio={ano_alvo}&mes={mes_alvo}"
-                f"&returnurl=guias.aspx%3Finscricao%3D{inscricao.group(1)}%26exercicio%3D{ano_alvo}"
-            )
+            href = _extrair_link_guia_uniprofissional_emitida(html, mes_alvo)
             quantidade_profissionais = None
         else:
             href = _extrair_link_guia(html, mes_alvo)
