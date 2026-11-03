@@ -352,8 +352,15 @@ class ClienteNotaCarioca:
                 "lento ou instável. Tente novamente."
             )
 
-        if "encerrar" not in self._page.inner_text("body", timeout=15_000).lower():
-            raise ErroNotaCarioca("Login não completou — sessão autenticada não foi criada.")
+        corpo = self._page.inner_text("body", timeout=15_000)
+        if "encerrar" not in corpo.lower():
+            # Mostra onde o site parou (aviso, termo, cadastro pendente...)
+            # em vez de só dizer que falhou.
+            raise ErroNotaCarioca(
+                "Login não completou — sessão autenticada não foi criada. "
+                f"Tela: {self._page.url.replace(BASE_URL, '')} — "
+                f"{' '.join(corpo.split())[:600]}"
+            )
 
     def _abrir_grade_guias(self, ano: int | None, filial: bool | None) -> str:
         url = GUIAS_URL if ano is None else f"{GUIAS_URL}?exercicio={ano}"
