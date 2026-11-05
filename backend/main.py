@@ -245,6 +245,8 @@ def _resposta_guia_pdf(pdf_bytes: bytes, resumo: dict) -> Response:
         headers={
             "X-Valor-Servicos": f"{resumo['valor_servicos']:.2f}",
             "X-Valor-Iss": f"{resumo['valor_iss']:.2f}",
+            "X-Servicos-Retidos": f"{resumo.get('servicos_retidos', 0.0):.2f}",
+            "X-Iss-Retido": f"{resumo.get('iss_retido', 0.0):.2f}",
         },
     )
 
@@ -265,6 +267,8 @@ def buscar_guia_iss_petropolis(req: GuiaIssPetropolisRequest):
                 "mensagem": str(e),
                 "valor_servicos": round(e.resumo["valor_servicos"], 2),
                 "valor_iss": round(e.resumo["valor_iss"], 2),
+                "servicos_retidos": round(e.resumo.get("servicos_retidos", 0.0), 2),
+                "iss_retido": round(e.resumo.get("iss_retido", 0.0), 2),
             },
         )
     except ErroPetropolis as e:

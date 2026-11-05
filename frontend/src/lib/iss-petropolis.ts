@@ -66,7 +66,41 @@ export async function buscarEmpresaPetropolis(
   return { ok: true, cnpj: company.cnpj, loginProprio, cmc: company.petropolis_cmc };
 }
 
-export type ResumoPetropolis = { valorServicos: number; valorIss: number };
+// valorServicos = notas Normais + notas com ISS Retido pelo tomador (é o
+// faturamento, que se compara com o SOMA); valorIss = só o ISS das Normais,
+// que é o que vai na guia — o retido o tomador recolhe.
+export type ResumoPetropolis = {
+  valorServicos: number;
+  valorIss: number;
+  servicosRetidos: number;
+  issRetido: number;
+};
+
+function numeroOuZero(v: unknown): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function resumoDosHeaders(headers: Headers): ResumoPetropolis | null {
+  const valorServicos = Number(headers.get("X-Valor-Servicos") ?? "");
+  const valorIss = Number(headers.get("X-Valor-Iss") ?? "");
+  if (Number.isNaN(valorServicos) || Number.isNaN(valorIss)) return null;
+  return {
+    valorServicos,
+    valorIss,
+    servicosRetidos: numeroOuZero(headers.get("X-Servicos-Retidos")),
+    issRetido: numeroOuZero(headers.get("X-Iss-Retido")),
+  };
+}
+
+export function headersDoResumo(resumo: ResumoPetropolis): Record<string, string> {
+  return {
+    "X-Valor-Servicos": resumo.valorServicos.toFixed(2),
+    "X-Valor-Iss": resumo.valorIss.toFixed(2),
+    "X-Servicos-Retidos": resumo.servicosRetidos.toFixed(2),
+    "X-Iss-Retido": resumo.issRetido.toFixed(2),
+  };
+}
 
 type RespostaConferir =
   | { ok: true; consolidado: false; resumo: ResumoPetropolis }
@@ -117,17 +151,21 @@ export async function conferirBaseCalculoPetropolis(
     return {
       ok: true,
       consolidado: false,
-      resumo: { valorServicos: corpo.valor_servicos, valorIss: corpo.valor_iss },
+      resumo: {
+        valorServicos: corpo.valor_servicos,
+        valorIss: corpo.valor_iss,
+        servicosRetidos: numeroOuZero(corpo.servicos_retidos),
+        issRetido: numeroOuZero(corpo.iss_retido),
+      },
     };
   }
 
-  const valorServicos = Number(response.headers.get("X-Valor-Servicos") ?? "");
-  const valorIss = Number(response.headers.get("X-Valor-Iss") ?? "");
+  const resumo = resumoDosHeaders(response.headers);
   const pdfBytes = await response.arrayBuffer();
-  if (Number.isNaN(valorServicos) || Number.isNaN(valorIss)) {
+  if (!resumo) {
     return { ok: false, erro: "Resposta do ISS de Petrópolis sem valores reconhecíveis." };
   }
-  return { ok: true, consolidado: true, resumo: { valorServicos, valorIss }, pdfBytes };
+  return { ok: true, consolidado: true, resumo, pdfBytes };
 }
 
 // Só leitura (nunca consolida nem gera guia) — usada na conferência de
@@ -217,13 +255,12 @@ export async function emitirGuiaIssPetropolis(
     };
   }
 
-  const valorServicos = Number(response.headers.get("X-Valor-Servicos") ?? "");
-  const valorIss = Number(response.headers.get("X-Valor-Iss") ?? "");
+  const resumo = resumoDosHeaders(response.headers);
   const pdfBytes = await response.arrayBuffer();
-  if (Number.isNaN(valorServicos) || Number.isNaN(valorIss)) {
+  if (!resumo) {
     return { ok: false, erro: "Resposta do ISS de Petrópolis sem valores reconhecíveis." };
   }
-  return { ok: true, resumo: { valorServicos, valorIss }, pdfBytes };
+  return { ok: true, resumo, pdfBytes };
 }
 
 export async function rodarConferenciaPetropolisParaTodasEmpresas(
@@ -258,6 +295,7 @@ export async function rodarConferenciaPetropolisParaTodasEmpresas(
         faturamentoSoma,
         diferenca,
         valorIss: resposta.resumo.valorIss,
+        servicosRetidos: resposta.resumo.servicosRetidos,
       },
     });
   }

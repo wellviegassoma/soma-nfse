@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { autorizarApi } from "@/lib/auth";
-import { emitirGuiaIssPetropolis } from "@/lib/iss-petropolis";
+import { emitirGuiaIssPetropolis, headersDoResumo } from "@/lib/iss-petropolis";
 
 // Consolidação de período + emissão da guia são ações reais (criam a
 // declaração oficial no Petrópolis) — só chamado depois que o usuário
@@ -32,8 +32,7 @@ export async function POST(
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="guia-iss-petropolis-${competencia ?? "atual"}.pdf"`,
-      "X-Valor-Servicos": resposta.resumo.valorServicos.toFixed(2),
-      "X-Valor-Iss": resposta.resumo.valorIss.toFixed(2),
+      ...headersDoResumo(resposta.resumo),
     },
   });
 }

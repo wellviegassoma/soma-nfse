@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { autorizarApi } from "@/lib/auth";
-import { conferirBaseCalculoPetropolis } from "@/lib/iss-petropolis";
+import { conferirBaseCalculoPetropolis, headersDoResumo } from "@/lib/iss-petropolis";
 
 export const maxDuration = 90;
 
@@ -31,6 +31,8 @@ export async function GET(
       consolidado: false,
       valor_servicos: round2(resposta.resumo.valorServicos),
       valor_iss: round2(resposta.resumo.valorIss),
+      servicos_retidos: round2(resposta.resumo.servicosRetidos),
+      iss_retido: round2(resposta.resumo.issRetido),
     });
   }
 
@@ -38,8 +40,7 @@ export async function GET(
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="guia-iss-petropolis-${competencia ?? "atual"}.pdf"`,
-      "X-Valor-Servicos": resposta.resumo.valorServicos.toFixed(2),
-      "X-Valor-Iss": resposta.resumo.valorIss.toFixed(2),
+      ...headersDoResumo(resposta.resumo),
     },
   });
 }

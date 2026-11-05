@@ -8,7 +8,9 @@ function formatMoney(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-type Resumo = { valorServicos: number; valorIss: number };
+// valorServicos = Normal + Retido (faturamento); valorIss = ISS da guia
+// (só das Normais — o retido o tomador recolhe).
+type Resumo = { valorServicos: number; valorIss: number; servicosRetidos: number; issRetido: number };
 type Pendente = { tipo: "pendente"; resumo: Resumo };
 type Baixada = { tipo: "baixada"; resumo: Resumo };
 type Estado = Pendente | Baixada | null;
@@ -26,7 +28,30 @@ function lerResumoDosHeaders(headers: Headers): Resumo | null {
   const valorServicos = Number(headers.get("X-Valor-Servicos") ?? "");
   const valorIss = Number(headers.get("X-Valor-Iss") ?? "");
   if (Number.isNaN(valorServicos) || Number.isNaN(valorIss)) return null;
-  return { valorServicos, valorIss };
+  const servicosRetidos = Number(headers.get("X-Servicos-Retidos") ?? 0) || 0;
+  const issRetido = Number(headers.get("X-Iss-Retido") ?? 0) || 0;
+  return { valorServicos, valorIss, servicosRetidos, issRetido };
+}
+
+function ValoresPrefeitura({ resumo, rotulo }: { resumo: Resumo; rotulo: string }) {
+  if (resumo.servicosRetidos < 0.005) {
+    return (
+      <div>
+        {rotulo}: {formatMoney(resumo.valorServicos)}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div>
+        {rotulo}: {formatMoney(resumo.valorServicos)}
+      </div>
+      <div className="pl-4 text-xs text-foreground/60">
+        Normal (vai na guia): {formatMoney(resumo.valorServicos - resumo.servicosRetidos)} · ISS retido pelo
+        tomador: {formatMoney(resumo.servicosRetidos)} (ISS {formatMoney(resumo.issRetido)}, fora da guia)
+      </div>
+    </div>
+  );
 }
 
 export function BuscarGuiaIssPetropolisButton({
@@ -63,7 +88,12 @@ export function BuscarGuiaIssPetropolisButton({
         if (corpo.consolidado === false) {
           setEstado({
             tipo: "pendente",
-            resumo: { valorServicos: corpo.valor_servicos, valorIss: corpo.valor_iss },
+            resumo: {
+              valorServicos: corpo.valor_servicos,
+              valorIss: corpo.valor_iss,
+              servicosRetidos: Number(corpo.servicos_retidos ?? 0) || 0,
+              issRetido: Number(corpo.iss_retido ?? 0) || 0,
+            },
           });
         } else {
           setErro("Resposta inesperada do servidor.");
@@ -130,7 +160,7 @@ export function BuscarGuiaIssPetropolisButton({
             <Alert tone={bate ? "success" : "warning"}>
               <div className="flex flex-col gap-2">
                 <div className="font-semibold">Período ainda não consolidado na Prefeitura.</div>
-                <div>Valor de serviços lançado até agora: {formatMoney(estado.resumo.valorServicos)}</div>
+                <ValoresPrefeitura resumo={estado.resumo} rotulo="Valor de serviços lançado até agora" />
                 <div>Faturamento no SOMA (notas): {formatMoney(faturamentoSoma)}</div>
                 <div className="font-semibold">
                   {bate ? "Os valores batem." : `Diferença: ${formatMoney(diferenca)}`}
@@ -156,7 +186,7 @@ export function BuscarGuiaIssPetropolisButton({
           return (
             <Alert tone={bate ? "success" : "warning"}>
               <div className="flex flex-col gap-1">
-                <div>Base de cálculo na Prefeitura: {formatMoney(estado.resumo.valorServicos)}</div>
+                <ValoresPrefeitura resumo={estado.resumo} rotulo="Serviços na Prefeitura" />
                 <div>Faturamento no SOMA (notas): {formatMoney(faturamentoSoma)}</div>
                 <div className="font-semibold">
                   {bate ? "Os valores batem." : `Diferença: ${formatMoney(diferenca)}`}

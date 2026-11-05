@@ -326,29 +326,55 @@ class ClientePetropolis:
 
     def _consultar_resumo_periodo(self, ano: int, mes: int) -> dict[str, float]:
         """
-        Soma, por tipo de tributação (TRIB.M/ISENTO/TRIB.F/IMUNE/SUSP.J/
-        SUSP.A), a coluna "Normal" de valor de serviços e ISS — o total
-        bate com o que a tela de consolidação mostrou como "Valor Total"
-        e "Valor Imposto" (confirmado ao vivo).
+        Resumo do período pra guia de ISS, lido do quadro-resumo de
+        iss-consulta_periodos.php (uma linha por tributação: TRIB.M, ISENTO,
+        TRIB.F, IMUNE, SUSP.J, SUSP.A; colunas em pares valor/ISS: Normal |
+        Cancelado | Retido | Substituto | ...).
+
+        valor_servicos = Normal + Retido — o faturamento da empresa inclui as
+        notas com ISS retido pelo tomador, e é isso que se compara com o SOMA.
+        valor_iss = só o ISS das notas Normais: o retido é recolhido pelo
+        tomador e não entra na guia (confirmado ao vivo em 11/2026: Normal
+        48.545,12 + Retido 42.537,38 = 91.082,50 das notas; guia 970,90).
         """
         mesano = f"{mes:02d}{ano:04d}"
         resp = self._sessao.get(
             f"{BASE_URL}/iss-consulta_periodos.php", params={"mesano": mesano}, timeout=30
         )
         tree = lxml_html.fromstring(resp.text)
-        linhas = tree.xpath("//tr[td/div/strong]")
-        total_servicos = 0.0
-        total_iss = 0.0
-        for linha in linhas:
-            tds = linha.xpath("./td")
-            if len(tds) < 3:
+        normal = iss_normal = retida = iss_retido = 0.0
+        linhas_resumo = 0
+        for tr in tree.xpath("//tr"):
+            tds = tr.xpath("./td")
+            if len(tds) < 7:
+                continue
+            rotulo = " ".join(tds[0].text_content().split())
+            if not re.match(r"^(TRIB\.M|ISENTO|TRIB\.F|IMUNE|SUSP\.J|SUSP\.A)\s*=", rotulo):
                 continue
             try:
-                total_servicos += _valor_para_float(tds[1].text_content())
-                total_iss += _valor_para_float(tds[2].text_content())
+                n = _valor_para_float(tds[1].text_content())
+                i = _valor_para_float(tds[2].text_content())
+                r = _valor_para_float(tds[5].text_content())
+                ir = _valor_para_float(tds[6].text_content())
             except ValueError:
                 continue
-        return {"valor_servicos": total_servicos, "valor_iss": total_iss}
+            normal += n
+            iss_normal += i
+            retida += r
+            iss_retido += ir
+            linhas_resumo += 1
+        if linhas_resumo == 0:
+            raise ErroPetropolis(
+                "Não consegui ler o quadro-resumo do período no ISS de Petrópolis "
+                "(o layout da tela pode ter mudado)."
+            )
+        return {
+            "valor_servicos": normal + retida,
+            "valor_iss": iss_normal,
+            "servicos_normais": normal,
+            "servicos_retidos": retida,
+            "iss_retido": iss_retido,
+        }
 
     def consultar_faturamento(
         self, cnpj: str, competencia: str, cmc: str | None = None
