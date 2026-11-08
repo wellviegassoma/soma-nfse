@@ -145,8 +145,11 @@ async function lerPlanilhaAnterior() {
 }
 
 async function main() {
-  const sis = await carregarSistema();
   const comp = arg("--buscar-extratos");
+  if (tem("--buscar-extratos") && !/^\d{4}-\d{2}$/.test(comp || "")) throw new Error("Informe a competência no formato AAAA-MM, ex.: --buscar-extratos 2026-10");
+  const trava = path.join(path.dirname(OUT), "~$" + path.basename(OUT));
+  if (fs.existsSync(trava) && (!comp || tem("--confirmar"))) throw new Error(`A planilha está aberta no Excel (${path.basename(OUT)}). Feche e rode de novo.`);
+  const sis = await carregarSistema();
   if (comp) { await buscarExtratos(sis.empresas, comp); if (!tem("--confirmar")) return; }
   const ext = await carregarExtratos(sis.empresas);
   const prev = await lerPlanilhaAnterior();

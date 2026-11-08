@@ -20,6 +20,15 @@ Gera e atualiza a planilha `Fechamento Simples AAAA.xlsx`, com todas as empresas
    npm run fechamento:simples
    ```
 
+### Atalho (sem terminal)
+
+Dê dois cliques em `atualizar.cmd`. Uma cópia de atalho fica em `Documentos\ClaudeCode\fechamento-simples\Atualizar Fechamento Simples.cmd`. O menu tem duas opções:
+
+- **[1] Atualizar a planilha:** sem custo.
+- **[2] Buscar os extratos de um mês e atualizar:** primeiro mostra quantas consultas vai fazer e só consulta depois que você digitar SIM.
+
+No fim, a planilha abre sozinha.
+
 ## O que o script faz
 
 - Lê as notas emitidas e distribuídas, a receita manual, a folha e o cadastro (Sujeita ao Fator R) direto do banco.
