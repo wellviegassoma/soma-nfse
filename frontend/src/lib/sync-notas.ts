@@ -5,12 +5,8 @@ import { classificarDirecao } from "@/lib/notas-distribuidas";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { documentoEmpresa } from "@/lib/formatters";
 import { certificadoProcurador } from "@/lib/certificado-procurador";
-import type { NfseAmbiente } from "@/lib/types";
 
-const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
-  HOMOLOGACAO: "producao_restrita",
-  PRODUCAO: "producao",
-};
+const AMBIENTE_BUSCA = "producao";
 
 // A causa real de uma nota real ter ficado de fora mesmo depois de
 // "buscar agora" de novo era um bug de paginação em
@@ -156,7 +152,11 @@ export async function syncOneCompany(
           pfxBase64: decryptSecret(fromBytea(certificado!.encrypted_file)).toString("base64"),
           senha: decryptSecret(fromBytea(certificado!.encrypted_password)).toString("utf8"),
         };
-    const ambiente = AMBIENTE_MAP[company.nfse_ambiente as NfseAmbiente];
+    // Busca sempre em produção: `nfse_ambiente` é o ambiente de EMISSÃO
+    // (e nasce HOMOLOGACAO por padrão). Usar ele aqui fazia ~80 empresas
+    // nunca cadastradas como produção consultarem o ADN de testes e
+    // voltarem "sucesso" sem nota nenhuma (Helthy, 11/2026).
+    const ambiente = AMBIENTE_BUSCA;
 
     const mesCorrente = mesCorrenteBrasilia();
     const competenciaAlvo = competencia && /^\d{4}-\d{2}$/.test(competencia) ? competencia : mesCorrente;

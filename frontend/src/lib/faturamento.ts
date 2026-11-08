@@ -10,6 +10,9 @@ export type NotaFaturamento = {
   // Presunção de 8%/12% (IRPJ/CSLL) em vez de 32%/32% no Lucro Presumido
   // — ver resolverBasesLucroPresumido em calculo-impostos.ts.
   equiparacaoHospitalar: boolean;
+  // ISS retido pelo tomador/intermediário (tpRetISSQN 2 ou 3) — essa
+  // receita não entra no ISS que a própria empresa recolhe.
+  issRetido: boolean;
 };
 
 type DpsRow = {
@@ -26,7 +29,14 @@ type NotaDistribuidaRow = {
   cancelada: boolean;
   direcao: string;
   equiparacao_hospitalar: boolean;
+  tipo_retencao_issqn: number | null;
 };
+
+type ServicoRetencao = { tipo_retencao_issqn: number | null };
+
+function retido(tipo: number | null | undefined): boolean {
+  return tipo === 2 || tipo === 3;
+}
 
 // Empresa com mais de 1000 notas (FVS, Dela, META...) perdia o resto em
 // silêncio — ver buscarTudoPaginado. Devolve no formato { data } pra
@@ -50,7 +60,7 @@ export async function buscarFaturamentoMensal(
     paginado((from, to) =>
       supabase
         .from("dps")
-        .select("valor, status, data_competencia, nfse(status, access_key)")
+        .select("valor, status, data_competencia, nfse(status, access_key), services(tipo_retencao_issqn)")
         .eq("company_id", companyId)
         .order("id")
         .range(from, to),
@@ -58,7 +68,7 @@ export async function buscarFaturamentoMensal(
     paginado((from, to) =>
       supabase
         .from("notas_distribuidas")
-        .select("chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar")
+        .select("chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar, tipo_retencao_issqn")
         .eq("company_id", companyId)
         .eq("direcao", "saida")
         .order("id")
@@ -71,8 +81,14 @@ export async function buscarFaturamentoMensal(
   // por aqui (dps) e já espelhada lá usa o flag de lá, não um "false"
   // implícito só porque a linha de dps não tem essa coluna.
   const equiparacaoPorChave = new Map<string, boolean>();
+  // Retenção: o XML distribuído é a fonte mais confiável; nota emitida por
+  // aqui ainda não espelhada usa o cadastro do serviço.
+  const retencaoPorChave = new Map<string, number | null>();
   for (const d of (distribuidas ?? []) as NotaDistribuidaRow[]) {
-    if (d.chave_acesso) equiparacaoPorChave.set(d.chave_acesso, d.equiparacao_hospitalar);
+    if (d.chave_acesso) {
+      equiparacaoPorChave.set(d.chave_acesso, d.equiparacao_hospitalar);
+      retencaoPorChave.set(d.chave_acesso, d.tipo_retencao_issqn);
+    }
   }
 
   const canceladaPorChave = new Map<string, boolean>();
@@ -83,8 +99,11 @@ export async function buscarFaturamentoMensal(
   const vistos = new Set<string>();
   const unificadas: NotaFaturamento[] = [];
 
-  for (const nota of (notas ?? []) as unknown as DpsRow[]) {
+  for (const nota of (notas ?? []) as unknown as (DpsRow & {
+    services: ServicoRetencao | ServicoRetencao[] | null;
+  })[]) {
     if (nota.status !== "ACCEPTED") continue;
+    const servico = Array.isArray(nota.services) ? nota.services[0] : nota.services;
     const nfseArr = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
     const chaveAcesso = nfseArr[0]?.access_key ?? null;
     // Cancelada no sistema (nfse.status) OU por fora — um cancelamento feito
@@ -98,6 +117,9 @@ export async function buscarFaturamentoMensal(
       valor: Number(nota.valor),
       cancelada,
       equiparacaoHospitalar: chaveAcesso ? (equiparacaoPorChave.get(chaveAcesso) ?? false) : false,
+      issRetido: retido(
+        (chaveAcesso ? retencaoPorChave.get(chaveAcesso) : null) ?? servico?.tipo_retencao_issqn,
+      ),
     });
   }
 
@@ -109,6 +131,7 @@ export async function buscarFaturamentoMensal(
       valor: Number(nota.valor_servico ?? 0),
       cancelada: nota.cancelada,
       equiparacaoHospitalar: nota.equiparacao_hospitalar,
+      issRetido: retido(nota.tipo_retencao_issqn),
     });
   }
 
@@ -362,6 +385,15 @@ export function somarFaturamento(notas: NotaFaturamento[], competencias: string[
   const alvo = new Set(competencias);
   return notas
     .filter((n) => !n.cancelada && alvo.has(n.competencia))
+    .reduce((acc, n) => acc + n.valor, 0);
+}
+
+// Parte do faturamento com ISS retido pelo tomador — sai da base do ISS
+// que a empresa recolhe na guia própria (Lucro Presumido).
+export function somarFaturamentoIssRetido(notas: NotaFaturamento[], competencias: string[]): number {
+  const alvo = new Set(competencias);
+  return notas
+    .filter((n) => !n.cancelada && n.issRetido && alvo.has(n.competencia))
     .reduce((acc, n) => acc + n.valor, 0);
 }
 

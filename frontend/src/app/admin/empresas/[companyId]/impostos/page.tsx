@@ -19,6 +19,7 @@ import {
   somarFaturamento,
   somarReceitaIssRetido,
   somarFaturamentoPorEquiparacao,
+  somarFaturamentoIssRetido,
   somarRetencoes,
 } from "@/lib/faturamento";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
@@ -483,12 +484,14 @@ export default async function ImpostosPage(
   const { hospitalar: receitaTrimestreHospitalar, geral: receitaTrimestreGeral } =
     somarFaturamentoPorEquiparacao(notas, mesesTrimestre);
 
+  const receitaIssRetidoLp = somarFaturamentoIssRetido(notas, [competencia]);
   const issMensal = resolverIssMensal({
     issTipo: company.iss_tipo,
     aliquotaIss: company.iss_aliquota_padrao,
     valorFixoProfissional: company.iss_valor_fixo_profissional,
     quantidadeProfissionais: company.iss_quantidade_profissionais,
     receitaMes,
+    receitaIssRetido: receitaIssRetidoLp,
   });
 
   const resultado = calcularLucroPresumido({
@@ -607,7 +610,15 @@ export default async function ImpostosPage(
             <span className="font-medium text-foreground">{formatMoney(resultado.cofins)}</span>
           </div>
           <div className="flex items-center justify-between px-5 py-3 text-sm">
-            <span className="text-foreground/70">ISS</span>
+            <span className="text-foreground/70">
+              ISS
+              {receitaIssRetidoLp > 0 && company.iss_tipo !== "FIXO" && (
+                <span className="block text-xs text-foreground/50">
+                  sobre {formatMoney(Math.max(0, receitaMes - receitaIssRetidoLp))} — {formatMoney(receitaIssRetidoLp)} com
+                  ISS retido pelo tomador fica de fora
+                </span>
+              )}
+            </span>
             <span className="font-medium text-foreground">
               {resultado.iss != null ? (
                 formatMoney(resultado.iss)

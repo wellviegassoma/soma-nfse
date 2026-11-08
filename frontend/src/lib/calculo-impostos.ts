@@ -20,6 +20,9 @@ export function resolverIssMensal(params: {
   valorFixoProfissional: number | null;
   quantidadeProfissionais: number | null;
   receitaMes: number;
+  // Receita do mês com ISS retido pelo tomador — quem recolhe é ele, então
+  // não entra no ISS percentual da empresa. Não afeta o ISS fixo.
+  receitaIssRetido?: number;
 }): number | null {
   if (params.issTipo === "FIXO") {
     if (params.valorFixoProfissional == null || params.quantidadeProfissionais == null) {
@@ -27,7 +30,9 @@ export function resolverIssMensal(params: {
     }
     return params.valorFixoProfissional * params.quantidadeProfissionais;
   }
-  return params.aliquotaIss != null ? params.receitaMes * params.aliquotaIss : null;
+  if (params.aliquotaIss == null) return null;
+  const base = Math.max(0, params.receitaMes - (params.receitaIssRetido ?? 0));
+  return base * params.aliquotaIss;
 }
 
 export type ResultadoSimplesNacional = {

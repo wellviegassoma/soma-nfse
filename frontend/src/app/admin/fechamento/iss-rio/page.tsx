@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { mesAnteriorBrasilia } from "@/lib/competencia";
-import { buscarFaturamentoMensal, somarFaturamento } from "@/lib/faturamento";
+import { buscarFaturamentoMensal, somarFaturamento, somarFaturamentoIssRetido } from "@/lib/faturamento";
 import { resolverIssMensal } from "@/lib/calculo-impostos";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import { CentralIssRio, type EmpresaIssRio } from "./CentralIssRio";
@@ -60,6 +60,7 @@ export default async function CentralIssRioPage(props: PageProps<"/admin/fechame
           valorFixoProfissional: company.iss_valor_fixo_profissional,
           quantidadeProfissionais: company.iss_quantidade_profissionais,
           receitaMes: receita,
+          receitaIssRetido: somarFaturamentoIssRetido(notas, [competencia]),
         }),
         certificadoValido: situacao.valido,
         certificadoVenceEmBreve: situacao.venceEmBreve,
