@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "fechamento:simples": "node scripts/fechamento-simples/gerar.cjs"
+    "fechamento:simples": "node scripts/fechamento-simples/gerar.cjs",
+    "fechamento:lp": "node scripts/fechamento-lp/gerar.cjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.44",
