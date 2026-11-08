@@ -45,6 +45,14 @@ type DpsRow = {
   nfse: { status: string; access_key: string | null } | { status: string; access_key: string | null }[] | null;
 };
 
+type FolhaRow = {
+  company_id: string;
+  competencia: string;
+  valor: number;
+  pro_labore: number | null;
+  fgts: number | null;
+};
+
 type AgregadoDistribuidasRow = {
   company_id: string;
   competencia: string;
@@ -155,7 +163,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   const [
     { data: companies },
     dpsRows,
-    { data: folhas },
+    folhas,
     { data: receitasManuais },
     { data: certificadosRaw },
   ] = await Promise.all([
@@ -172,7 +180,16 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
           .select("company_id, valor, status, data_competencia, nfse(status, access_key)")
           .range(from, to),
       ),
-      supabase.from("folha_mensal").select("company_id, competencia, valor, pro_labore, fgts"),
+      // Cresce ~2 linhas por empresa/mês (ainda mais com a importação em
+      // lote do Resumo da folha) — passa de 1000 rápido.
+      buscarTudoPaginado<FolhaRow>((from, to) =>
+        supabase
+          .from("folha_mensal")
+          .select("company_id, competencia, valor, pro_labore, fgts")
+          .order("company_id")
+          .order("competencia")
+          .range(from, to),
+      ),
       supabase.from("receita_mensal_manual").select("company_id, competencia, valor"),
       supabase.from("certificates").select("company_id, expires_at"),
     ]);
@@ -222,7 +239,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   // Fator R oficial é sobre a "folha de salários, incluídos encargos" —
   // salários + pró-labore + FGTS do mês, não só o bruto.
   const porEmpresaPorMesFolha = new Map<string, Map<string, number>>();
-  for (const f of folhas ?? []) {
+  for (const f of folhas) {
     const porMes = porEmpresaPorMesFolha.get(f.company_id) ?? new Map<string, number>();
     porMes.set(
       f.competencia,
