@@ -1,0 +1,460 @@
+{
+ "faixas": [
+  {
+   "faixa": 1,
+   "ate": 180000
+  },
+  {
+   "faixa": 2,
+   "ate": 360000
+  },
+  {
+   "faixa": 3,
+   "ate": 720000
+  },
+  {
+   "faixa": 4,
+   "ate": 1800000
+  },
+  {
+   "faixa": 5,
+   "ate": 3600000
+  },
+  {
+   "faixa": 6,
+   "ate": 4800000
+  }
+ ],
+ "anexos": {
+  "I": [
+   {
+    "aliq": 0.04,
+    "deduzir": 0,
+    "partilha": {
+     "IRPJ": 0.055,
+     "CSLL": 0.035,
+     "COFINS": 0.1274,
+     "PIS": 0.0276,
+     "CPP": 0.415,
+     "IPI": 0,
+     "ISS": 0,
+     "ICMS": 0.34
+    }
+   },
+   {
+    "aliq": 0.073,
+    "deduzir": 5940,
+    "partilha": {
+     "IRPJ": 0.055,
+     "CSLL": 0.035,
+     "COFINS": 0.1274,
+     "PIS": 0.0276,
+     "CPP": 0.415,
+     "IPI": 0,
+     "ISS": 0,
+     "ICMS": 0.34
+    }
+   },
+   {
+    "aliq": 0.095,
+    "deduzir": 13860,
+    "partilha": {
+     "IRPJ": 0.055,
+     "CSLL": 0.035,
+     "COFINS": 0.1274,
+     "PIS": 0.0276,
+     "CPP": 0.42,
+     "IPI": 0,
+     "ISS": 0,
+     "ICMS": 0.335
+    }
+   },
+   {
+    "aliq": 0.107,
+    "deduzir": 22500,
+    "partilha": {
+     "IRPJ": 0.055,
+     "CSLL": 0.035,
+     "COFINS": 0.1274,
+     "PIS": 0.0276,
+     "CPP": 0.42,
+     "IPI": 0,
+     "ISS": 0,
+     "ICMS": 0.335
+    }
+   },
+   {
+    "aliq": 0.143,
+    "deduzir": 87300,
+    "partilha": {
+     "IRPJ": 0.055,
+     "CSLL": 0.035,
+     "COFINS": 0.1274,
+     "PIS": 0.0276,
+     "CPP": 0.42,
+     "IPI": 0,
+     "ISS": 0,
+     "ICMS": 0.335
+    }
+   },
+   {
+    "aliq": 0.19,
+    "deduzir": 378000,
+    "partilha": {
+     "IRPJ": 0.135,
+     "CSLL": 0.1,
+     "COFINS": 0.2827,
+     "PIS": 0.0613,
+     "CPP": 0.421,
+     "IPI": 0,
+     "ISS": 0,
+     "ICMS": 0
+    }
+   }
+  ],
+  "II": [
+   {
+    "aliq": 0.045,
+    "deduzir": 0,
+    "partilha": {
+     "IRPJ": 0.055,
+     "CSLL": 0.035,
+     "COFINS": 0.1151,
+     "PIS": 0.0249,
+     "CPP": 0.375,
+     "IPI": 0.075,
+     "ISS": 0,
+     "ICMS": 0.32
+    }
+   },
+   {
+    "aliq": 0.078,
+    "deduzir": 5940,
+    "partilha": {
+     "IRPJ": 0.055,
+     "CSLL": 0.035,
+     "COFINS": 0.1151,
+     "PIS": 0.0249,
+     "CPP": 0.375,
+     "IPI": 0.075,
+     "ISS": 0,
+     "ICMS": 0.32
+    }
+   },
+   {
+    "aliq": 0.1,
+    "deduzir": 13860,
+    "partilha": {
+     "IRPJ": 0.055,
+     "CSLL": 0.035,
+     "COFINS": 0.1151,
+     "PIS": 0.0249,
+     "CPP": 0.375,
+     "IPI": 0.075,
+     "ISS": 0,
+     "ICMS": 0.32
+    }
+   },
+   {
+    "aliq": 0.112,
+    "deduzir": 22500,
+    "partilha": {
+     "IRPJ": 0.055,
+     "CSLL": 0.035,
+     "COFINS": 0.1151,
+     "PIS": 0.0249,
+     "CPP": 0.375,
+     "IPI": 0.075,
+     "ISS": 0,
+     "ICMS": 0.32
+    }
+   },
+   {
+    "aliq": 0.147,
+    "deduzir": 85500,
+    "partilha": {
+     "IRPJ": 0.055,
+     "CSLL": 0.035,
+     "COFINS": 0.1151,
+     "PIS": 0.0249,
+     "CPP": 0.375,
+     "IPI": 0.075,
+     "ISS": 0,
+     "ICMS": 0.32
+    }
+   },
+   {
+    "aliq": 0.3,
+    "deduzir": 720000,
+    "partilha": {
+     "IRPJ": 0.085,
+     "CSLL": 0.075,
+     "COFINS": 0.2096,
+     "PIS": 0.0454,
+     "CPP": 0.235,
+     "IPI": 0.35,
+     "ISS": 0,
+     "ICMS": 0
+    }
+   }
+  ],
+  "III": [
+   {
+    "aliq": 0.06,
+    "deduzir": 0,
+    "partilha": {
+     "IRPJ": 0.04,
+     "CSLL": 0.035,
+     "COFINS": 0.1282,
+     "PIS": 0.0278,
+     "CPP": 0.434,
+     "IPI": 0,
+     "ISS": 0.335,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.112,
+    "deduzir": 9360,
+    "partilha": {
+     "IRPJ": 0.04,
+     "CSLL": 0.035,
+     "COFINS": 0.1405,
+     "PIS": 0.0305,
+     "CPP": 0.434,
+     "IPI": 0,
+     "ISS": 0.32,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.135,
+    "deduzir": 17640,
+    "partilha": {
+     "IRPJ": 0.04,
+     "CSLL": 0.035,
+     "COFINS": 0.1364,
+     "PIS": 0.0296,
+     "CPP": 0.434,
+     "IPI": 0,
+     "ISS": 0.325,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.16,
+    "deduzir": 35640,
+    "partilha": {
+     "IRPJ": 0.04,
+     "CSLL": 0.035,
+     "COFINS": 0.1364,
+     "PIS": 0.0296,
+     "CPP": 0.434,
+     "IPI": 0,
+     "ISS": 0.325,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.21,
+    "deduzir": 125640,
+    "partilha": {
+     "IRPJ": 0.04,
+     "CSLL": 0.035,
+     "COFINS": 0.1282,
+     "PIS": 0.0278,
+     "CPP": 0.434,
+     "IPI": 0,
+     "ISS": 0.335,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.33,
+    "deduzir": 648000,
+    "partilha": {
+     "IRPJ": 0.35,
+     "CSLL": 0.15,
+     "COFINS": 0.1603,
+     "PIS": 0.0347,
+     "CPP": 0.305,
+     "IPI": 0,
+     "ISS": 0,
+     "ICMS": 0
+    }
+   }
+  ],
+  "IV": [
+   {
+    "aliq": 0.045,
+    "deduzir": 0,
+    "partilha": {
+     "IRPJ": 0.188,
+     "CSLL": 0.152,
+     "COFINS": 0.1767,
+     "PIS": 0.0383,
+     "CPP": 0,
+     "IPI": 0,
+     "ISS": 0.445,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.09,
+    "deduzir": 8100,
+    "partilha": {
+     "IRPJ": 0.198,
+     "CSLL": 0.152,
+     "COFINS": 0.2055,
+     "PIS": 0.0445,
+     "CPP": 0,
+     "IPI": 0,
+     "ISS": 0.4,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.102,
+    "deduzir": 12420,
+    "partilha": {
+     "IRPJ": 0.208,
+     "CSLL": 0.152,
+     "COFINS": 0.1973,
+     "PIS": 0.0427,
+     "CPP": 0,
+     "IPI": 0,
+     "ISS": 0.4,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.14,
+    "deduzir": 39780,
+    "partilha": {
+     "IRPJ": 0.178,
+     "CSLL": 0.192,
+     "COFINS": 0.189,
+     "PIS": 0.041,
+     "CPP": 0,
+     "IPI": 0,
+     "ISS": 0.4,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.22,
+    "deduzir": 183780,
+    "partilha": {
+     "IRPJ": 0.188,
+     "CSLL": 0.192,
+     "COFINS": 0.1808,
+     "PIS": 0.0392,
+     "CPP": 0,
+     "IPI": 0,
+     "ISS": 0.4,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.33,
+    "deduzir": 828000,
+    "partilha": {
+     "IRPJ": 0.535,
+     "CSLL": 0.215,
+     "COFINS": 0.2055,
+     "PIS": 0.0445,
+     "CPP": 0,
+     "IPI": 0,
+     "ISS": 0,
+     "ICMS": 0
+    }
+   }
+  ],
+  "V": [
+   {
+    "aliq": 0.155,
+    "deduzir": 0,
+    "partilha": {
+     "IRPJ": 0.25,
+     "CSLL": 0.15,
+     "COFINS": 0.141,
+     "PIS": 0.0305,
+     "CPP": 0.2885,
+     "IPI": 0,
+     "ISS": 0.14,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.18,
+    "deduzir": 4500,
+    "partilha": {
+     "IRPJ": 0.23,
+     "CSLL": 0.15,
+     "COFINS": 0.141,
+     "PIS": 0.0305,
+     "CPP": 0.2785,
+     "IPI": 0,
+     "ISS": 0.17,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.195,
+    "deduzir": 9900,
+    "partilha": {
+     "IRPJ": 0.24,
+     "CSLL": 0.15,
+     "COFINS": 0.1492,
+     "PIS": 0.0323,
+     "CPP": 0.2385,
+     "IPI": 0,
+     "ISS": 0.19,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.205,
+    "deduzir": 17100,
+    "partilha": {
+     "IRPJ": 0.21,
+     "CSLL": 0.15,
+     "COFINS": 0.1574,
+     "PIS": 0.0341,
+     "CPP": 0.2385,
+     "IPI": 0,
+     "ISS": 0.21,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.23,
+    "deduzir": 62100,
+    "partilha": {
+     "IRPJ": 0.23,
+     "CSLL": 0.125,
+     "COFINS": 0.141,
+     "PIS": 0.0305,
+     "CPP": 0.2385,
+     "IPI": 0,
+     "ISS": 0.235,
+     "ICMS": 0
+    }
+   },
+   {
+    "aliq": 0.305,
+    "deduzir": 540000,
+    "partilha": {
+     "IRPJ": 0.35,
+     "CSLL": 0.155,
+     "COFINS": 0.1644,
+     "PIS": 0.0356,
+     "CPP": 0.295,
+     "IPI": 0,
+     "ISS": 0,
+     "ICMS": 0
+    }
+   }
+  ]
+ }
+}
