@@ -8,6 +8,8 @@ import { mesAnteriorBrasilia } from "@/lib/competencia";
 import { buscarFaturamentoMensal, somarFaturamento, somarFaturamentoIssRetido } from "@/lib/faturamento";
 import { resolverIssMensal } from "@/lib/calculo-impostos";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
+import { temPermissao } from "@/lib/auth";
+import { buscarFechamentosIss } from "@/lib/iss-fechamentos";
 import { CentralIssRio, type EmpresaIssRio } from "./CentralIssRio";
 
 export const metadata = { title: "Central ISS Rio — Painel SOMA" };
@@ -42,6 +44,11 @@ export default async function CentralIssRioPage(props: PageProps<"/admin/fechame
     .neq("tax_regime", "SIMPLES_NACIONAL")
     .order("codigo_cliente");
 
+  const [fechamentos, podeMarcarFechamento] = await Promise.all([
+    buscarFechamentosIss(supabase, competencia, (companies ?? []).map((c) => c.id)),
+    temPermissao("fechamento.executar"),
+  ]);
+
   const empresas: EmpresaIssRio[] = await Promise.all(
     (companies ?? []).map(async (company) => {
       const notas = await buscarFaturamentoMensal(supabase, company.id);
@@ -65,6 +72,7 @@ export default async function CentralIssRioPage(props: PageProps<"/admin/fechame
         certificadoValido: situacao.valido,
         certificadoVenceEmBreve: situacao.venceEmBreve,
         certificadoVenceEm: certificado?.expires_at ?? null,
+        fechamento: fechamentos.get(company.id) ?? null,
       };
     }),
   );
@@ -92,7 +100,12 @@ export default async function CentralIssRioPage(props: PageProps<"/admin/fechame
         </form>
       </Card>
 
-      <CentralIssRio key={competencia} empresas={empresas} competencia={competencia} />
+      <CentralIssRio
+        key={competencia}
+        empresas={empresas}
+        competencia={competencia}
+        podeMarcarFechamento={podeMarcarFechamento}
+      />
     </div>
   );
 }

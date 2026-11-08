@@ -1,4 +1,5 @@
 import "server-only";
+import { registrarFechamentoIssSistema } from "@/lib/iss-fechamentos";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptSecret, fromBytea } from "@/lib/certificate";
 import { buscarFaturamentoMensal, somarFaturamento } from "@/lib/faturamento";
@@ -124,6 +125,11 @@ export async function rodarIssRjParaTodasEmpresas(
       resultados.push({ companyId: empresa.id, status: "ERRO", detalhes: { erro: resposta.erro } });
       continue;
     }
+    await registrarFechamentoIssSistema(supabase, {
+      companyId: empresa.id,
+      competencia,
+      valorGuia: resposta.valores.valorIss,
+    });
 
     if (resposta.valores.regime === "FIXO") {
       resultados.push({

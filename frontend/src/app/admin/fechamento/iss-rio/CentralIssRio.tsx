@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import JSZip from "jszip";
+import { FechamentoIssCelula, type FechamentoIssResumo } from "@/components/fechamento/FechamentoIssCelula";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +19,7 @@ export type EmpresaIssRio = {
   certificadoValido: boolean;
   certificadoVenceEmBreve: boolean;
   certificadoVenceEm: string | null;
+  fechamento: FechamentoIssResumo;
 };
 
 type Status = "ok" | "falta_emitir" | "diferenca" | "sem_movimento" | "sem_guia" | "cadastro" | "erro";
@@ -200,7 +203,16 @@ function DiferencaNotasView({ diferenca }: { diferenca: DiferencaNotas }) {
   );
 }
 
-export function CentralIssRio({ empresas, competencia }: { empresas: EmpresaIssRio[]; competencia: string }) {
+export function CentralIssRio({
+  empresas,
+  competencia,
+  podeMarcarFechamento,
+}: {
+  empresas: EmpresaIssRio[];
+  competencia: string;
+  podeMarcarFechamento: boolean;
+}) {
+  const router = useRouter();
   const [resultados, setResultados] = useState<Record<string, Resultado>>({});
   const [carregando, setCarregando] = useState<Set<string>>(new Set());
   const [notas, setNotas] = useState<Record<string, DiferencaNotas | string>>({});
@@ -298,6 +310,7 @@ export function CentralIssRio({ empresas, competencia }: { empresas: EmpresaIssR
     try {
       salvar(await baixarGuia(empresa, competencia, resultado), `${empresa.prefixoArquivo} - ISS - ${aaaamm}.pdf`);
       if (!resultado.emitida) await conferir(empresa);
+      router.refresh(); // coluna Fechamento: a guia baixada daqui marca "pelo sistema"
     } catch (e) {
       setResultados((r) => ({
         ...r,
@@ -333,6 +346,7 @@ export function CentralIssRio({ empresas, competencia }: { empresas: EmpresaIssR
     await Promise.all(
       prontasParaEmitir.filter((e) => !resultados[e.id].emitida).map((e) => conferir(e)),
     );
+    router.refresh();
   }
 
   const conferidas = Object.keys(resultados).length;
@@ -400,6 +414,7 @@ export function CentralIssRio({ empresas, competencia }: { empresas: EmpresaIssR
               <th className="border-b border-border px-3 py-2 text-right">Base Nota Carioca</th>
               <th className="border-b border-border px-3 py-2 text-right">Guia</th>
               <th className="border-b border-border px-3 py-2 text-left">Situação</th>
+              <th className="border-b border-border px-3 py-2 text-left">Fechamento</th>
               <th className="border-b border-border px-3 py-2 text-right">Ações</th>
             </tr>
           </thead>
@@ -471,6 +486,14 @@ export function CentralIssRio({ empresas, competencia }: { empresas: EmpresaIssR
                         )}
                       </>
                     )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <FechamentoIssCelula
+                      companyId={empresa.id}
+                      competencia={competencia}
+                      fechamento={empresa.fechamento}
+                      podeMarcar={podeMarcarFechamento}
+                    />
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right">
                     <div className="flex justify-end gap-2">

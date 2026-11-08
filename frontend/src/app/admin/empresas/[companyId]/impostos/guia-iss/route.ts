@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { autorizarApi } from "@/lib/auth";
 import { decryptSecret, fromBytea } from "@/lib/certificate";
 import { documentoEmpresa } from "@/lib/formatters";
+import { registrarFechamentoIssSistema } from "@/lib/iss-fechamentos";
 
 // Código IBGE do município do Rio de Janeiro — o Nota Carioca só existe
 // pra empresas estabelecidas nessa cidade.
@@ -106,6 +107,14 @@ export async function GET(
   }
 
   const pdfBytes = await response.arrayBuffer();
+  if (searchParams.get("diagnostico") !== "1") {
+    const valorGuia = response.headers.get("X-Valor-Total") || response.headers.get("X-Valor-Iss");
+    await registrarFechamentoIssSistema(supabase, {
+      companyId,
+      competencia,
+      valorGuia: valorGuia ? Number(valorGuia) : null,
+    });
+  }
   const headers: Record<string, string> = {
     "Content-Type": "application/pdf",
     "Content-Disposition": `attachment; filename="guia-iss-${competencia ?? "atual"}.pdf"`,

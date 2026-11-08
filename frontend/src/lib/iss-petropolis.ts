@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptSecret, fromBytea } from "@/lib/certificate";
 import { buscarFaturamentoMensal, somarFaturamento } from "@/lib/faturamento";
 import type { ResultadoItem } from "@/lib/rotina-fechamento/registrar";
+import { registrarFechamentoIssSistema } from "@/lib/iss-fechamentos";
 
 // Código IBGE do município de Petrópolis-RJ — mesmo valor usado em
 // admin/empresas/[companyId]/impostos/petropolis-empresa.ts (que esse
@@ -260,6 +261,7 @@ export async function emitirGuiaIssPetropolis(
   if (!resumo) {
     return { ok: false, erro: "Resposta do ISS de Petrópolis sem valores reconhecíveis." };
   }
+  await registrarFechamentoIssSistema(supabase, { companyId, competencia, valorGuia: resumo.valorIss });
   return { ok: true, resumo, pdfBytes };
 }
 

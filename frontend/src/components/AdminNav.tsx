@@ -50,7 +50,9 @@ export function AdminNav({
   ];
 
   return (
-    <nav className="flex gap-1 overflow-x-auto border-b border-border">
+    // Fixa logo abaixo do header (h-16, também sticky) pra trocar de tela sem
+    // rolar até o topo; quebra em mais de uma linha em vez de rolar de lado.
+    <nav className="sticky top-16 z-[9] -mx-4 flex flex-wrap gap-x-1 border-b border-border bg-background/95 px-4 backdrop-blur">
       {tabs.map((tab) => {
         const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
         return (
