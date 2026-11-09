@@ -331,7 +331,10 @@ export function abaterRetencaoDoDas(
   };
 }
 
-export type ResumoImposto = { aliquotaEfetiva: number; valor: number };
+// aliquotaEfetiva deixa de fora o ISS fixo (uniprofissional): é o mesmo
+// valor todo mês, então dividido por um mês de faturamento baixo dava
+// "alíquota" de 50%+ (370/558 em 10/2026). `valor` continua com ele.
+export type ResumoImposto = { aliquotaEfetiva: number; valor: number; issFixo: number };
 
 // Versão resumida (só alíquota efetiva + valor do mês), independente do
 // regime — usada em listas com várias empresas (ex.: Visão geral), onde
@@ -352,6 +355,8 @@ export function calcularImpostoResumo(params: {
   // Presumido; 0 por padrão (nenhuma equiparação).
   receitaMesHospitalar?: number;
   receitaTrimestreHospitalar?: number;
+  // issMensal é ISS fixo por profissional (iss_tipo FIXO), não percentual.
+  issFixo?: boolean;
 }): ResumoImposto | null {
   if (params.taxRegime === "SIMPLES_NACIONAL") {
     const r = calcularSimplesNacional({
@@ -361,7 +366,7 @@ export function calcularImpostoResumo(params: {
       sujeitoFatorR: params.sujeitoFatorR,
       fatorRPercentual: params.fatorRPercentual,
     });
-    return { aliquotaEfetiva: r.aliquotaEfetiva, valor: r.dasTotal };
+    return { aliquotaEfetiva: r.aliquotaEfetiva, valor: r.dasTotal, issFixo: 0 };
   }
 
   if (params.taxRegime === "LUCRO_PRESUMIDO") {
@@ -386,9 +391,11 @@ export function calcularImpostoResumo(params: {
     const receitaBaseAliquota = params.ehUltimoMesDoTrimestre
       ? params.receitaTrimestre
       : params.receitaMes;
+    const issFixo = params.issFixo ? (r.iss ?? 0) : 0;
     return {
-      aliquotaEfetiva: receitaBaseAliquota > 0 ? r.total / receitaBaseAliquota : 0,
+      aliquotaEfetiva: receitaBaseAliquota > 0 ? (r.total - issFixo) / receitaBaseAliquota : 0,
       valor: r.total,
+      issFixo,
     };
   }
 

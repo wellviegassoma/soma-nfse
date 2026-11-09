@@ -390,6 +390,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       issMensal,
       receitaMesHospitalar: agr.faturamentoHospitalarCompetencia,
       receitaTrimestreHospitalar: mesesTrimestre.reduce((acc, m) => acc + receitaHospitalarPorMes(m), 0),
+      issFixo: empresa.iss_tipo === "FIXO",
     });
     return { empresa, agr, imposto, fatorRPercentual };
   });
@@ -680,8 +681,13 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
                     )}
                     {empresa.trade_name || empresa.legal_name}
                   </span>
-                  <span className="shrink-0 text-sm font-semibold text-foreground">
+                  <span className="shrink-0 text-right text-sm font-semibold text-foreground">
                     {formatPercent(imposto!.aliquotaEfetiva)}
+                    {imposto!.issFixo > 0 && (
+                      <span className="block text-xs font-normal text-foreground/50">
+                        + ISS fixo {formatMoney(imposto!.issFixo)}
+                      </span>
+                    )}
                   </span>
                 </div>
               ))}
@@ -732,8 +738,18 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
                         : "—"
                       : "—"}
                   </div>
-                  <div className="w-16 shrink-0 text-right text-sm text-foreground/70">
+                  <div
+                    className="w-16 shrink-0 text-right text-sm text-foreground/70"
+                    title={
+                      imposto && imposto.issFixo > 0
+                        ? `Sem o ISS fixo de ${formatMoney(imposto.issFixo)} (incluído no imposto do mês)`
+                        : undefined
+                    }
+                  >
                     {imposto ? formatPercent(imposto.aliquotaEfetiva) : "—"}
+                    {imposto && imposto.issFixo > 0 && (
+                      <span className="block text-xs text-foreground/40">+ ISS fixo</span>
+                    )}
                   </div>
                   <div className="w-28 shrink-0 text-right text-sm font-medium text-foreground">
                     {imposto ? formatMoney(imposto.valor) : "—"}
