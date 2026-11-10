@@ -12,6 +12,8 @@ export type DadosCep = {
   bairro: string | null;
   cidade: string | null;
   uf: string | null;
+  /** Código IBGE do município (7 dígitos) — vai no cMun do tomador. */
+  ibge: string | null;
 };
 
 type ViaCepResponse = {
@@ -21,6 +23,7 @@ type ViaCepResponse = {
   bairro: string;
   localidade: string;
   uf: string;
+  ibge?: string;
 };
 
 export async function buscarDadosCep(cepDigits: string): Promise<{ data: DadosCep } | { error: string }> {
@@ -53,6 +56,7 @@ export async function buscarDadosCep(cepDigits: string): Promise<{ data: DadosCe
       bairro: json.bairro || null,
       cidade: json.localidade || null,
       uf: json.uf || null,
+      ibge: json.ibge || null,
     },
   };
 }

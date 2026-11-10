@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import type { Service } from "@/lib/types";
 import { ServiceForm } from "../ServiceForm";
-import { fetchServiceCodeSuggestions } from "../suggestions";
+import { fetchServiceFormContext } from "../suggestions";
 
 export const metadata = { title: "Editar serviço — Painel SOMA" };
 
@@ -13,7 +13,7 @@ export default async function EditServicePage(
   const { companyId, serviceId } = await props.params;
   const supabase = await createClient();
 
-  const [{ data: service }, suggestions] = await Promise.all([
+  const [{ data: service }, context] = await Promise.all([
     supabase
       .from("services")
       .select(
@@ -21,14 +21,14 @@ export default async function EditServicePage(
       )
       .eq("id", serviceId)
       .single(),
-    fetchServiceCodeSuggestions(supabase),
+    fetchServiceFormContext(supabase, companyId),
   ]);
 
   if (!service) notFound();
 
   return (
     <Card className="max-w-2xl p-6 sm:p-8">
-      <ServiceForm companyId={companyId} service={service as Service} suggestions={suggestions} />
+      <ServiceForm companyId={companyId} service={service as Service} context={context} />
     </Card>
   );
 }

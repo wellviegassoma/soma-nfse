@@ -15,9 +15,30 @@ import {
   type TratamentoAtividade,
 } from "@/lib/simples-nacional-atividades";
 import { sugerirAtividade } from "@/lib/lc116-sugestao-atividade";
-import { descricaoLc116 } from "@/lib/lc116-lista-servicos";
-import { descricaoNbs } from "@/lib/nbs-tabela";
-import type { ServiceCodeSuggestions } from "./suggestions";
+import { CodigoBusca } from "@/components/ui/CodigoBusca";
+import {
+  OPCOES_NBS,
+  OPCOES_SERVICO_NACIONAL,
+  codigosMunicipaisSugeridos,
+  nbsSugeridasPara,
+} from "@/lib/opcoes-codigos-servico";
+import { TAX_REGIME_LABELS, type TaxRegime } from "@/lib/types";
+import type { ServiceFormContext } from "./suggestions";
+
+// Tabela de CST do PIS/COFINS aceita na NFS-e nacional, com explicação
+// curta pra quem não é da área fiscal.
+const CST_PIS_COFINS: { value: string; label: string }[] = [
+  { value: "00", label: "00 · Simples Nacional / sem PIS e COFINS próprios na nota" },
+  { value: "01", label: "01 · Tributável com alíquota básica (Lucro Presumido ou Real)" },
+  { value: "02", label: "02 · Tributável com alíquota diferenciada" },
+  { value: "03", label: "03 · Tributável por unidade de medida" },
+  { value: "04", label: "04 · Monofásica (revenda com alíquota zero)" },
+  { value: "05", label: "05 · Substituição tributária" },
+  { value: "06", label: "06 · Alíquota zero" },
+  { value: "07", label: "07 · Isenta" },
+  { value: "08", label: "08 · Sem incidência" },
+  { value: "09", label: "09 · Com suspensão" },
+];
 
 const GRUPOS_TRATAMENTO: { tratamento: TratamentoAtividade; label: string }[] = [
   { tratamento: "ANEXO_III_FIXO", label: "Sempre Anexo III" },
@@ -34,11 +55,11 @@ const BADGE_POR_TRATAMENTO: Record<TratamentoAtividade, { label: string; classNa
 export function ServiceForm({
   companyId,
   service,
-  suggestions,
+  context,
 }: {
   companyId: string;
   service?: Service;
-  suggestions?: ServiceCodeSuggestions;
+  context?: ServiceFormContext;
 }) {
   const [state, formAction, pending] = useActionState(saveService, undefined);
   const [atividadeId, setAtividadeId] = useState(service?.atividade_simples_nacional ?? "");
@@ -50,8 +71,26 @@ export function ServiceForm({
 
   const [nationalTaxCode, setNationalTaxCode] = useState(service?.national_tax_code ?? "");
   const [nbs, setNbs] = useState(service?.nbs ?? "");
-  const descricaoNationalTaxCode = descricaoLc116(nationalTaxCode);
-  const descricaoNbsAtual = descricaoNbs(nbs);
+  const [municipalTaxCode, setMunicipalTaxCode] = useState(service?.municipal_tax_code ?? "");
+  const nbsSugeridas = nbsSugeridasPara(nationalTaxCode);
+  const municipaisSugeridos = codigosMunicipaisSugeridos(context?.municipioIbge, nationalTaxCode);
+  const regime = context?.taxRegime as TaxRegime | null | undefined;
+  const cstSugerido =
+    regime === "SIMPLES_NACIONAL" ? "00" : regime === "LUCRO_PRESUMIDO" || regime === "LUCRO_REAL" ? "01" : "";
+  const [cstPisCofins, setCstPisCofins] = useState(service?.cst_pis_cofins ?? cstSugerido);
+
+  function escolherCodigoNacional(codigo: string) {
+    setNationalTaxCode(codigo);
+    if (!atividadeTocada) {
+      const sugestao = sugerirAtividade(codigo);
+      if (sugestao) setAtividadeId(sugestao.id);
+    }
+    // NBS: se ainda vazia, já puxa a mais usada pelos clientes com esse serviço.
+    const [maisUsada] = nbsSugeridasPara(codigo);
+    if (!nbs && maisUsada) setNbs(maisUsada.codigo);
+    const [municipal] = codigosMunicipaisSugeridos(context?.municipioIbge, codigo);
+    if (!municipalTaxCode && municipal) setMunicipalTaxCode(municipal.codigo);
+  }
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
@@ -90,59 +129,75 @@ export function ServiceForm({
           Dados fiscais (a SOMA configura — o cliente nunca vê isso)
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Código tributário nacional" htmlFor="nationalTaxCode">
-            <Input
-              id="nationalTaxCode"
-              name="nationalTaxCode"
-              list="nationalTaxCodeOptions"
-              value={nationalTaxCode}
-              onChange={(e) => setNationalTaxCode(e.target.value)}
-              onBlur={(e) => {
-                if (atividadeTocada) return;
-                const sugestao = sugerirAtividade(e.target.value);
-                if (sugestao) setAtividadeId(sugestao.id);
-              }}
-            />
-            <datalist id="nationalTaxCodeOptions">
-              {suggestions?.nationalTaxCodes.map((code) => (
-                <option key={code} value={code} />
-              ))}
-            </datalist>
-            {nationalTaxCode.trim() && (
-              <p className="mt-1 text-xs text-foreground/50">
-                {descricaoNationalTaxCode ?? "Código LC 116 não reconhecido — confira se digitou certo."}
-              </p>
-            )}
-          </Field>
-          <Field label="Código tributário municipal" htmlFor="municipalTaxCode">
+          <div className="sm:col-span-2">
+            <Field
+              label="Serviço na lista nacional (código de tributação nacional)"
+              htmlFor="nationalTaxCode"
+              hint="Digite o que a empresa faz — ex.: “consulta médica”, “odontologia”, “fisioterapia”, “exame” — ou o código."
+            >
+              <CodigoBusca
+                id="nationalTaxCode"
+                name="nationalTaxCode"
+                value={nationalTaxCode}
+                onChange={escolherCodigoNacional}
+                opcoes={OPCOES_SERVICO_NACIONAL}
+                placeholder="Buscar serviço…"
+              />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field
+              label="NBS — classificação do serviço (obrigatório para emitir)"
+              htmlFor="nbs"
+              hint={
+                nbsSugeridas.length > 0
+                  ? "As primeiras opções são as que os outros clientes da SOMA usam com este serviço e tiveram nota aceita."
+                  : "Busque pela descrição (ex.: “médico”, “odontológico”, “laboratório”)."
+              }
+            >
+              <CodigoBusca
+                id="nbs"
+                name="nbs"
+                value={nbs}
+                onChange={setNbs}
+                opcoes={OPCOES_NBS}
+                destaques={nbsSugeridas}
+                tituloDestaques="Usadas com este serviço"
+                placeholder="Buscar NBS…"
+                required
+              />
+            </Field>
+          </div>
+          <Field
+            label="Código municipal do serviço"
+            htmlFor="municipalTaxCode"
+            hint={
+              municipaisSugeridos.length > 0
+                ? undefined
+                : "Código da prefeitura (não existe tabela nacional). Em branco, a nota vai sem ele — só preencha se a prefeitura exigir."
+            }
+          >
             <Input
               id="municipalTaxCode"
               name="municipalTaxCode"
-              defaultValue={service?.municipal_tax_code ?? ""}
+              value={municipalTaxCode}
+              onChange={(e) => setMunicipalTaxCode(e.target.value)}
             />
-            <p className="mt-1 text-xs text-foreground/50">
-              Código específico da prefeitura do município da empresa — não tem tabela nacional,
-              confira com o cadastro municipal ou uma guia/nota já emitida.
-            </p>
-          </Field>
-          <Field label="NBS (obrigatório para emitir)" htmlFor="nbs">
-            <Input
-              id="nbs"
-              name="nbs"
-              list="nbsOptions"
-              value={nbs}
-              onChange={(e) => setNbs(e.target.value)}
-              required
-            />
-            <datalist id="nbsOptions">
-              {suggestions?.nbsCodes.map((code) => (
-                <option key={code} value={code} />
-              ))}
-            </datalist>
-            {nbs.trim() && (
-              <p className="mt-1 text-xs text-foreground/50">
-                {descricaoNbsAtual ?? "Código NBS não reconhecido — confira se digitou certo."}
-              </p>
+            {municipaisSugeridos.length > 0 && (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-foreground/55">
+                <span>Aceito em {context?.municipioNome ?? "neste município"}:</span>
+                {municipaisSugeridos.map((m) => (
+                  <button
+                    key={m.codigo}
+                    type="button"
+                    onClick={() => setMunicipalTaxCode(m.codigo)}
+                    className={`rounded border px-1.5 py-0.5 font-mono ${m.codigo === municipalTaxCode ? "border-brand bg-brand/10 text-brand" : "border-border hover:border-brand"}`}
+                    title={m.nota}
+                  >
+                    {m.codigo}
+                  </button>
+                ))}
+              </div>
             )}
           </Field>
           <Field label="Alíquota ISS (%)" htmlFor="issRate">
@@ -211,6 +266,12 @@ export function ServiceForm({
         <h2 className="text-sm font-semibold text-foreground/70">
           Tributação (obrigatório para emitir — sem valor, a emissão fica bloqueada)
         </h2>
+        <p className="-mt-2 text-xs text-foreground/55">
+          Os três percentuais são o “valor aproximado dos tributos” que a nota mostra ao tomador
+          (Lei 12.741/2012). Serviço não tem imposto estadual, então o estadual quase sempre é 0.
+          No municipal, use a alíquota do ISS. No federal, use a soma aproximada de PIS, COFINS,
+          IRPJ e CSLL. No Simples, use a alíquota efetiva do DAS menos o ISS.
+        </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="% Tributos federais" htmlFor="percFederal">
             <Input
@@ -245,13 +306,28 @@ export function ServiceForm({
               defaultValue={service?.percentual_total_tributos_municipal ?? ""}
             />
           </Field>
-          <Field label="CST PIS/COFINS" htmlFor="cstPisCofins">
-            <Input
+          <Field
+            label="CST PIS/COFINS"
+            htmlFor="cstPisCofins"
+            hint={
+              regime
+                ? `Empresa no ${TAX_REGIME_LABELS[regime]}${cstSugerido ? ` — o normal é ${cstSugerido}` : ""}.`
+                : "Regime da empresa não cadastrado — confira em Dados fiscais."
+            }
+          >
+            <Select
               id="cstPisCofins"
               name="cstPisCofins"
-              placeholder='"00" para Simples Nacional'
-              defaultValue={service?.cst_pis_cofins ?? ""}
-            />
+              value={cstPisCofins}
+              onChange={(e) => setCstPisCofins(e.target.value)}
+            >
+              <option value="">Não informar</option>
+              {CST_PIS_COFINS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </Select>
           </Field>
         </div>
       </div>

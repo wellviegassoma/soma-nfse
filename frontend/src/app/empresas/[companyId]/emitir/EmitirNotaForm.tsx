@@ -112,7 +112,30 @@ export function EmitirNotaForm({
 
         <h2 className="text-sm font-semibold text-foreground/70">Confirme a emissão</h2>
 
-        {state?.error && <Alert tone="danger">{state.error}</Alert>}
+        {state?.error && (
+          <Alert tone="danger">
+            <p>{state.error}</p>
+            {state.motivos && state.motivos.length > 0 && (
+              <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5">
+                {state.motivos.map((m, i) => (
+                  <li key={m.codigo ?? i}>
+                    <span className="font-medium">{m.mensagem}</span>
+                    {m.acao && <span> {m.acao}</span>}
+                    {m.onde === "tomador" && customerId && (
+                      <>
+                        {" "}
+                        <Link href={`${base}/tomadores/${customerId}`} className="underline">
+                          Abrir cadastro do tomador
+                        </Link>
+                      </>
+                    )}
+                    {m.codigo && <span className="ml-1 text-xs opacity-60">({m.codigo})</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Alert>
+        )}
 
         <Card className="divide-y divide-border p-0">
           <Row

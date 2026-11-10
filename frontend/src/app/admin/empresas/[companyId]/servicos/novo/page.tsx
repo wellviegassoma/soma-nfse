@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/Card";
 import { createClient } from "@/lib/supabase/server";
 import { ServiceForm } from "../ServiceForm";
-import { fetchServiceCodeSuggestions } from "../suggestions";
+import { fetchServiceFormContext } from "../suggestions";
 
 export const metadata = { title: "Novo serviço — Painel SOMA" };
 
@@ -10,10 +10,10 @@ export default async function NewServicePage(
 ) {
   const { companyId } = await props.params;
   const supabase = await createClient();
-  const suggestions = await fetchServiceCodeSuggestions(supabase);
+  const context = await fetchServiceFormContext(supabase, companyId);
   return (
     <Card className="max-w-2xl p-6 sm:p-8">
-      <ServiceForm companyId={companyId} suggestions={suggestions} />
+      <ServiceForm companyId={companyId} context={context} />
     </Card>
   );
 }

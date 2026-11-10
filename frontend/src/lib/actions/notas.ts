@@ -10,10 +10,12 @@ import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import { documentoEmpresa } from "@/lib/formatters";
+import { buscarDadosCep } from "@/lib/cep-lookup";
 import type { NfseAmbiente } from "@/lib/types";
+import { resumoErros, traduzirErrosSefin, type ErroEmissaoTraduzido } from "@/lib/nfse-erros";
 
 export type IssueNfseState =
-  | { error?: string; success?: boolean; dpsId?: string }
+  | { error?: string; success?: boolean; dpsId?: string; motivos?: ErroEmissaoTraduzido[] }
   | undefined;
 
 const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
@@ -91,7 +93,7 @@ export async function issueNfse(
       .single(),
     supabase
       .from("customers")
-      .select("cpf_cnpj, name, email, zip_code, address, number, complement, district")
+      .select("cpf_cnpj, name, email, zip_code, address, number, complement, district, city, state")
       .eq("id", customerId)
       .single(),
     supabase
@@ -139,6 +141,34 @@ export async function issueNfse(
       error:
         "Esse serviço ainda não tem o código NBS cadastrado (obrigatório na NFS-e nacional). Peça pra SOMA completar o cadastro do serviço antes de emitir.",
     };
+  }
+
+  // CEP do tomador: confere antes de enviar e descobre o código IBGE da
+  // cidade dele. Sem isso a nota ia com a cidade da empresa no cMun do
+  // tomador — causa nº 1 de recusa (E0240) quando o tomador mora em outra
+  // cidade. Se o ViaCEP estiver fora do ar, segue como antes.
+  let tomadorCodigoMunicipio: string | undefined;
+  const cepTomador = (customer.zip_code ?? "").replace(/\D/g, "");
+  if (cepTomador) {
+    const cep = await buscarDadosCep(cepTomador);
+    const motivoTomador = (mensagem: string) => ({
+      error: "O cadastro do tomador precisa de ajuste antes de emitir. Nenhuma nota foi enviada.",
+      motivos: [{ mensagem, acao: "Abra o cadastro do tomador e corrija o CEP ou a cidade.", onde: "tomador" as const }],
+    });
+    if ("error" in cep) {
+      if (cep.error === "CEP não encontrado." || cep.error.startsWith("CEP inválido")) {
+        return motivoTomador(`O CEP ${cepTomador} do tomador não existe.`);
+      }
+    } else {
+      const norm = (v: string | null | undefined) =>
+        (v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      if (customer.city && cep.data.cidade && norm(customer.city) !== norm(cep.data.cidade)) {
+        return motivoTomador(
+          `O CEP ${cepTomador} é de ${cep.data.cidade}/${cep.data.uf}, mas o cadastro do tomador diz ${customer.city}.`,
+        );
+      }
+      tomadorCodigoMunicipio = cep.data.ibge ?? undefined;
+    }
   }
 
   // Certificado: só o service role lê — nunca passa pela sessão do usuário.
@@ -196,6 +226,7 @@ export async function issueNfse(
     tomador_numero: customer.number,
     tomador_complemento: customer.complement,
     tomador_bairro: customer.district,
+    ...(tomadorCodigoMunicipio ? { tomador_codigo_municipio: tomadorCodigoMunicipio } : {}),
     codigo_tributacao_nacional: service.national_tax_code,
     codigo_tributacao_municipal: service.municipal_tax_code,
     codigo_nbs: service.nbs,
@@ -260,13 +291,31 @@ export async function issueNfse(
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
+    // 422 = o motor recusou antes de enviar (dado inválido, certificado) —
+    // a mensagem dele já é legível. Outros códigos = falha do motor.
+    let detalhe: string | undefined;
+    if (response.status === 422) {
+      try {
+        const d = JSON.parse(body)?.detail;
+        if (typeof d === "string") detalhe = d;
+      } catch {}
+    }
     await logNfseError(
       companyId,
       null,
       `HTTP ${response.status} de /notas/emitir: ${body}`,
-      "Não foi possível emitir esta nota.",
+      detalhe ?? "Não foi possível emitir esta nota.",
     );
-    return { error: "Não foi possível emitir esta nota. Confira os dados e tente novamente." };
+    if (detalhe) {
+      return {
+        error: "A nota não foi enviada ao governo — há um dado a corrigir antes.",
+        motivos: [{ mensagem: detalhe, acao: "Se não souber o que corrigir, fale com a SOMA." }],
+      };
+    }
+    return {
+      error:
+        "O sistema de emissão está com problema agora. Nenhuma nota foi gerada — tente de novo em alguns minutos.",
+    };
   }
 
   const resultado = await response.json();
@@ -307,15 +356,11 @@ export async function issueNfse(
     const mensagemTecnica =
       detalhes.map((erro) => (typeof erro === "string" ? erro : JSON.stringify(erro))).join(" | ") ||
       "Sefin Nacional recusou a DPS sem detalhe.";
-    await logNfseError(
-      companyId,
-      dpsRow.id,
-      mensagemTecnica,
-      "Não foi possível emitir esta nota.",
-    );
+    const motivos = traduzirErrosSefin(detalhes);
+    await logNfseError(companyId, dpsRow.id, mensagemTecnica, resumoErros(motivos));
     return {
-      error:
-        "Não foi possível emitir esta nota — identificamos um problema na emissão. Tente novamente ou entre em contato com o suporte da SOMA.",
+      error: "O governo recusou a nota. Nenhuma nota foi gerada — corrija o que está abaixo e emita de novo.",
+      motivos,
     };
   }
 
