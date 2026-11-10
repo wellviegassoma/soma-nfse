@@ -186,6 +186,15 @@ class DadosTributacao:
     percentual_total_tributos_municipal: Optional[float] = None
     percentual_total_tributos_simples: Optional[float] = None  # pTotTribSN, alternativa
 
+    # Reforma Tributária — grupo <IBSCBS> da DPS (leiaute 1.01). Obrigatório
+    # pro regime normal (Lucro Presumido/Real) desde out/2026; Simples só em
+    # 2027. A DPS leva só a classificação: o Sefin calcula base, alíquotas e
+    # valores. Quando ibscbs_cst/cclasstrib vêm vazios, o grupo não é enviado
+    # e a DPS continua no leiaute 1.00, como antes.
+    ibscbs_cst: Optional[str] = None  # CST (3 dígitos) — ex.: "200"
+    ibscbs_cclasstrib: Optional[str] = None  # cClassTrib (6 dígitos) — ex.: "200029"
+    ibscbs_cind_op: Optional[str] = None  # cIndOp (6 dígitos) — ex.: "030101"
+
 
 # Domínio do CST do PIS/COFINS (Instrução Normativa RFB nº 1.009/2010,
 # Tabelas II/III — o mesmo domínio usado na NFS-e nacional desde a NT
@@ -418,9 +427,35 @@ def gerar_xml_dps(dados: DadosDPS) -> tuple[str, str]:
     dh_emi = dados.data_emissao.strftime("%Y-%m-%dT%H:%M:%S-03:00")
     d_compet = dados.data_competencia.strftime("%Y-%m-%d")
 
+    trib_rtc = dados.tributacao
+    tem_ibscbs = bool(trib_rtc.ibscbs_cst and trib_rtc.ibscbs_cclasstrib and trib_rtc.ibscbs_cind_op)
+    if tem_ibscbs:
+        cst = _somente_digitos(trib_rtc.ibscbs_cst)
+        cclass = _somente_digitos(trib_rtc.ibscbs_cclasstrib)
+        cindop = _somente_digitos(trib_rtc.ibscbs_cind_op)
+        if len(cst) != 3 or len(cclass) != 6 or len(cindop) != 6 or not cclass.startswith(cst):
+            raise ErroDadosDPS(
+                "IBS/CBS inválido no serviço: CST precisa ter 3 dígitos, cClassTrib e cIndOp 6 dígitos, "
+                "e o cClassTrib começa com o CST."
+            )
+        # finNFSe 0 = nota regular; indDest 0 = destinatário é o próprio tomador.
+        ibscbs_xml = (
+            "<IBSCBS>"
+            "<finNFSe>0</finNFSe>"
+            f"<cIndOp>{cindop}</cIndOp>"
+            "<indDest>0</indDest>"
+            "<valores><trib><gIBSCBS>"
+            f"<CST>{cst}</CST><cClassTrib>{cclass}</cClassTrib>"
+            "</gIBSCBS></trib></valores>"
+            "</IBSCBS>"
+        )
+    else:
+        ibscbs_xml = ""
+    versao_dps = "1.01" if tem_ibscbs else "1.00"
+
     xml_dps = (
         '<?xml version="1.0" encoding="utf-8"?>'
-        '<DPS versao="1.00" xmlns="http://www.sped.fazenda.gov.br/nfse">'
+        f'<DPS versao="{versao_dps}" xmlns="http://www.sped.fazenda.gov.br/nfse">'
         f'<infDPS Id="{id_dps}">'
         f"<tpAmb>{tp_amb}</tpAmb>"
         f"<dhEmi>{dh_emi}</dhEmi>"
@@ -510,6 +545,7 @@ def gerar_xml_dps(dados: DadosDPS) -> tuple[str, str]:
         f"{tot_trib_xml}"
         "</trib>"
         "</valores>"
+        f"{ibscbs_xml}"
         "</infDPS>"
         "</DPS>"
     )

@@ -100,7 +100,7 @@ export async function issueNfse(
     supabase
       .from("services")
       .select(
-        "national_tax_code, municipal_tax_code, nbs, cst_pis_cofins, percentual_total_tributos_federal, percentual_total_tributos_estadual, percentual_total_tributos_municipal, aliquota_pis, aliquota_cofins, retencao_pis_cofins_csll_aliquota, retencao_irrf_aliquota, tipo_retencao_issqn",
+        "national_tax_code, municipal_tax_code, nbs, cst_pis_cofins, percentual_total_tributos_federal, percentual_total_tributos_estadual, percentual_total_tributos_municipal, aliquota_pis, aliquota_cofins, retencao_pis_cofins_csll_aliquota, retencao_irrf_aliquota, tipo_retencao_issqn, ibscbs_cst, ibscbs_cclasstrib, ibscbs_cind_op",
       )
       .eq("id", serviceId)
       .single(),
@@ -295,6 +295,15 @@ export async function issueNfse(
       : {}),
     ...(valoresRetidos.irrf > 0 ? { valor_retido_irrf: valoresRetidos.irrf } : {}),
     ...(valoresRetidos.inss > 0 ? { valor_retido_inss: valoresRetidos.inss } : {}),
+    // Reforma Tributária: grupo IBS/CBS só pra quem está fora do Simples
+    // (regime normal, obrigatório desde out/2026; Simples só em 2027).
+    ...(!simples && service.ibscbs_cst && service.ibscbs_cclasstrib && service.ibscbs_cind_op
+      ? {
+          ibscbs_cst: service.ibscbs_cst,
+          ibscbs_cclasstrib: service.ibscbs_cclasstrib,
+          ibscbs_cind_op: service.ibscbs_cind_op,
+        }
+      : {}),
   };
 
   let response: Response;

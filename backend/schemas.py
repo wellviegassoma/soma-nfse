@@ -72,6 +72,10 @@ class EmitirNotaRequest(BaseModel):
     valor_retido_irrf: Optional[float] = None
     valor_retido_contribuicoes_sociais: Optional[float] = None
 
+    ibscbs_cst: Optional[str] = None
+    ibscbs_cclasstrib: Optional[str] = None
+    ibscbs_cind_op: Optional[str] = None
+
 
 class EmitirNotaResponse(BaseModel):
     sucesso: bool

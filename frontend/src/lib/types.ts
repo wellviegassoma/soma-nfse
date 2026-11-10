@@ -176,6 +176,9 @@ export type Service = {
   tipo_retencao_issqn: number;
   active: boolean;
   atividade_simples_nacional: string | null;
+  ibscbs_cst?: string | null;
+  ibscbs_cclasstrib?: string | null;
+  ibscbs_cind_op?: string | null;
 };
 
 // tpRetISSQN — domínio do layout NFS-e Nacional.

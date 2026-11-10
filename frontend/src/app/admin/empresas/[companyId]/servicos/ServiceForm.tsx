@@ -24,6 +24,7 @@ import {
 } from "@/lib/opcoes-codigos-servico";
 import { TAX_REGIME_LABELS, type TaxRegime } from "@/lib/types";
 import type { ServiceFormContext } from "./suggestions";
+import { NOMES_CCLASSTRIB, NOMES_CINDOP, correlacaoIbsCbs } from "@/lib/ibscbs-correlacao";
 
 // Tabela de CST do PIS/COFINS aceita na NFS-e nacional, com explicação
 // curta pra quem não é da área fiscal.
@@ -78,6 +79,25 @@ export function ServiceForm({
   const cstSugerido =
     regime === "SIMPLES_NACIONAL" ? "00" : regime === "LUCRO_PRESUMIDO" || regime === "LUCRO_REAL" ? "01" : "";
   const [cstPisCofins, setCstPisCofins] = useState(service?.cst_pis_cofins ?? cstSugerido);
+  const sugestaoIbsCbs = (codigo: string) => {
+    const c = correlacaoIbsCbs(codigo);
+    return { cClassTrib: c?.cClassTrib[0] ?? "", cIndOp: c?.indOp[0] ?? "" };
+  };
+  const [cClassTrib, setCClassTrib] = useState(
+    service?.ibscbs_cclasstrib ?? (regime !== "SIMPLES_NACIONAL" ? sugestaoIbsCbs(service?.national_tax_code ?? "").cClassTrib : ""),
+  );
+  const [cIndOp, setCIndOp] = useState(
+    service?.ibscbs_cind_op ?? (regime !== "SIMPLES_NACIONAL" ? sugestaoIbsCbs(service?.national_tax_code ?? "").cIndOp : ""),
+  );
+  const correlacao = correlacaoIbsCbs(nationalTaxCode);
+  const opcoesCClass = [
+    ...(correlacao?.cClassTrib ?? []),
+    ...Object.keys(NOMES_CCLASSTRIB).filter((c) => !correlacao?.cClassTrib.includes(c)),
+  ];
+  const opcoesCIndOp = [
+    ...(correlacao?.indOp ?? []),
+    ...Object.keys(NOMES_CINDOP).filter((c) => !correlacao?.indOp.includes(c)),
+  ];
 
   function escolherCodigoNacional(codigo: string) {
     setNationalTaxCode(codigo);
@@ -90,6 +110,10 @@ export function ServiceForm({
     if (!nbs && maisUsada) setNbs(maisUsada.codigo);
     const [municipal] = codigosMunicipaisSugeridos(context?.municipioIbge, codigo);
     if (!municipalTaxCode && municipal) setMunicipalTaxCode(municipal.codigo);
+    // IBS/CBS: sugere pelo Anexo VIII (só se ainda vazio).
+    const ibs = sugestaoIbsCbs(codigo);
+    if (!cClassTrib && ibs.cClassTrib) setCClassTrib(ibs.cClassTrib);
+    if (!cIndOp && ibs.cIndOp) setCIndOp(ibs.cIndOp);
   }
 
   return (
@@ -360,6 +384,44 @@ export function ServiceForm({
               placeholder="3,00"
               defaultValue={service?.aliquota_cofins ?? ""}
             />
+          </Field>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 border-t border-border pt-5">
+        <h2 className="text-sm font-semibold text-foreground/70">IBS/CBS (Reforma Tributária)</h2>
+        <p className="-mt-2 text-xs text-foreground/55">
+          {regime === "SIMPLES_NACIONAL"
+            ? "Empresa do Simples: o IBS/CBS só passa a ser exigido na nota em 2027. Pode deixar em branco por enquanto."
+            : "Obrigatório na nota para Lucro Presumido e Real desde out/2026. A nota leva só a classificação; o governo calcula o valor."}
+          {correlacao && " As primeiras opções são as da tabela oficial para este serviço."}
+        </p>
+        <div className="grid grid-cols-1 gap-4">
+          <Field
+            label="Classificação tributária (cClassTrib)"
+            htmlFor="ibscbsCclasstrib"
+            hint={cClassTrib ? `CST ${cClassTrib.slice(0, 3)} (vai junto, automático).` : undefined}
+          >
+            <Select id="ibscbsCclasstrib" name="ibscbsCclasstrib" value={cClassTrib} onChange={(e) => setCClassTrib(e.target.value)}>
+              <option value="">Não informar</option>
+              {opcoesCClass.map((c) => (
+                <option key={c} value={c}>
+                  {c} · {NOMES_CCLASSTRIB[c] ?? ""}
+                  {correlacao?.cClassTrib.includes(c) ? " (indicado para este serviço)" : ""}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Onde o serviço é prestado (cIndOp)" htmlFor="ibscbsCindOp">
+            <Select id="ibscbsCindOp" name="ibscbsCindOp" value={cIndOp} onChange={(e) => setCIndOp(e.target.value)}>
+              <option value="">Não informar</option>
+              {opcoesCIndOp.map((c) => (
+                <option key={c} value={c}>
+                  {c} · {NOMES_CINDOP[c] ?? ""}
+                  {correlacao?.indOp.includes(c) ? " (indicado)" : ""}
+                </option>
+              ))}
+            </Select>
           </Field>
         </div>
       </div>

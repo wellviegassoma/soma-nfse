@@ -54,6 +54,16 @@ const serviceSchema = z.object({
     .optional()
     .transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
   tipoRetencaoIssqn: z.coerce.number().int().min(1).max(3),
+  ibscbsCclasstrib: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Classificação tributária do IBS/CBS precisa ter 6 dígitos.")
+    .optional(),
+  ibscbsCindOp: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Indicador de operação do IBS/CBS precisa ter 6 dígitos.")
+    .optional(),
   active: z.coerce.boolean(),
   atividadeSimplesNacional: z
     .string()
@@ -86,6 +96,8 @@ export async function saveService(
     retencaoIrrfAliquota: formData.get("retencaoIrrfAliquota") || undefined,
     retencaoPisCofinsCsllAliquota: formData.get("retencaoPisCofinsCsllAliquota") || undefined,
     tipoRetencaoIssqn: formData.get("tipoRetencaoIssqn"),
+    ibscbsCclasstrib: formData.get("ibscbsCclasstrib") || undefined,
+    ibscbsCindOp: formData.get("ibscbsCindOp") || undefined,
     active: formData.get("active") === "on",
     atividadeSimplesNacional: formData.get("atividadeSimplesNacional") || undefined,
   });
@@ -93,6 +105,9 @@ export async function saveService(
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
   const { serviceId, companyId, ...rest } = parsed.data;
+  if (Boolean(rest.ibscbsCclasstrib) !== Boolean(rest.ibscbsCindOp)) {
+    return { error: "No IBS/CBS, preencha a classificação tributária e o indicador de operação juntos (ou deixe os dois em branco)." };
+  }
 
   const supabase = await createClient();
   const payload = {
@@ -112,6 +127,10 @@ export async function saveService(
     retencao_irrf_aliquota: rest.retencaoIrrfAliquota ?? null,
     retencao_pis_cofins_csll_aliquota: rest.retencaoPisCofinsCsllAliquota ?? null,
     tipo_retencao_issqn: rest.tipoRetencaoIssqn,
+    // CST do IBS/CBS = 3 primeiros dígitos do cClassTrib (regra do leiaute).
+    ibscbs_cclasstrib: rest.ibscbsCclasstrib || null,
+    ibscbs_cst: rest.ibscbsCclasstrib ? rest.ibscbsCclasstrib.slice(0, 3) : null,
+    ibscbs_cind_op: rest.ibscbsCindOp || null,
     active: rest.active,
     atividade_simples_nacional: rest.atividadeSimplesNacional || null,
   };

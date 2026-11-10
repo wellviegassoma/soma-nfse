@@ -117,6 +117,9 @@ def emitir_nota(req: EmitirNotaRequest):
                 valor_retido_inss=req.valor_retido_inss,
                 valor_retido_irrf=req.valor_retido_irrf,
                 valor_retido_contribuicoes_sociais=req.valor_retido_contribuicoes_sociais,
+                ibscbs_cst=req.ibscbs_cst,
+                ibscbs_cclasstrib=req.ibscbs_cclasstrib,
+                ibscbs_cind_op=req.ibscbs_cind_op,
             )
     except emissor.ErroEmissao as e:
         raise HTTPException(status_code=422, detail=str(e))

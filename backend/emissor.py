@@ -143,6 +143,9 @@ def emitir_nota(
     valor_retido_inss: Optional[float] = None,
     valor_retido_irrf: Optional[float] = None,
     valor_retido_contribuicoes_sociais: Optional[float] = None,
+    ibscbs_cst: Optional[str] = None,
+    ibscbs_cclasstrib: Optional[str] = None,
+    ibscbs_cind_op: Optional[str] = None,
     campo_forcado_envio: Optional[str] = "dpsXmlGZipB64",
 ) -> ResultadoEmissao:
     """
@@ -202,6 +205,9 @@ def emitir_nota(
             valor_retido_inss=valor_retido_inss,
             valor_retido_irrf=valor_retido_irrf,
             valor_retido_contribuicoes_sociais=valor_retido_contribuicoes_sociais,
+            ibscbs_cst=ibscbs_cst,
+            ibscbs_cclasstrib=ibscbs_cclasstrib,
+            ibscbs_cind_op=ibscbs_cind_op,
         ),
         ambiente_producao=(prestador.ambiente == "producao"),
     )
