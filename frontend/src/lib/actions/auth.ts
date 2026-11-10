@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 
 export type ActionState = { error?: string; success?: boolean } | undefined;
@@ -59,6 +60,41 @@ export async function requestPasswordReset(
 
   // Sempre "sucesso" — não confirmamos ao remetente se o e-mail existe ou não.
   return { success: true };
+}
+
+const TIPOS_LINK: EmailOtpType[] = ["invite", "recovery", "signup", "magiclink", "email_change", "email"];
+
+// Chamado pelo botão da página /auth/confirm — só aqui o token do e-mail é
+// gasto, para que scanners de e-mail que abrem o link não o invalidem.
+export async function confirmarLinkEmail(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const tokenHash = formData.get("token_hash");
+  const type = formData.get("type");
+  const next = formData.get("next");
+
+  if (
+    typeof tokenHash !== "string" ||
+    !tokenHash ||
+    typeof type !== "string" ||
+    !TIPOS_LINK.includes(type as EmailOtpType)
+  ) {
+    redirect("/login?erro=link-invalido");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.verifyOtp({
+    type: type as EmailOtpType,
+    token_hash: tokenHash,
+  });
+  if (error) redirect("/login?erro=link-invalido");
+
+  const destino =
+    typeof next === "string" && next.startsWith("/") && !next.startsWith("//")
+      ? next
+      : "/redefinir-senha";
+  redirect(destino);
 }
 
 const updatePasswordSchema = z
