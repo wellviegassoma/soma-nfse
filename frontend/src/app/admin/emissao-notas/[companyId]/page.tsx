@@ -4,14 +4,13 @@ import { requirePermissao } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { carregarPrefillEmissao } from "@/lib/emissao-prefill";
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { EmitirNotaForm } from "@/app/empresas/[companyId]/emitir/EmitirNotaForm";
 
 export const metadata = { title: "Emitir nota — Painel SOMA" };
 
-export default async function AdminEmitirNotaPage(
-  props: PageProps<"/admin/emissao-notas/[companyId]">,
-) {
+export default async function AdminEmitirNotaPage(props: PageProps<"/admin/emissao-notas/[companyId]">) {
   const { companyId } = await props.params;
   const { de } = await props.searchParams;
   await requirePermissao("notas.emitir", companyId);
@@ -21,13 +20,17 @@ export default async function AdminEmitirNotaPage(
   const [{ data: company }, { data: customers }, { data: services }] = await Promise.all([
     supabase
       .from("companies")
-      .select("legal_name, trade_name, codigo_cliente, allow_retroactive_emission, tax_regime, iss_aliquota_padrao")
+      .select(
+        "legal_name, trade_name, codigo_cliente, allow_retroactive_emission, tax_regime, iss_aliquota_padrao",
+      )
       .eq("id", companyId)
       .maybeSingle(),
     supabase.from("customers").select("id, name, cpf_cnpj").eq("company_id", companyId).order("name"),
     supabase
       .from("services")
-      .select("id, name, description, tipo_retencao_issqn, iss_rate, retencao_irrf_aliquota, retencao_pis_cofins_csll_aliquota")
+      .select(
+        "id, name, description, tipo_retencao_issqn, iss_rate, retencao_irrf_aliquota, retencao_pis_cofins_csll_aliquota",
+      )
       .eq("company_id", companyId)
       .eq("active", true)
       .order("name"),
@@ -38,27 +41,29 @@ export default async function AdminEmitirNotaPage(
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="text-xl font-semibold text-foreground">
             Emitir nota — {company.codigo_cliente && `#${company.codigo_cliente} `}
             {company.trade_name || company.legal_name}
           </h1>
-          <div className="flex gap-3">
-            <Link href={`${basePath}/notas`} className="text-sm font-medium text-brand hover:underline">
-              Ver notas já emitidas
-            </Link>
-            <Link href={`${basePath}/tomadores/novo`} className="text-sm font-medium text-brand hover:underline">
-              + Novo tomador
-            </Link>
-            <Link href={`${basePath}/lote`} className="text-sm font-medium text-brand hover:underline">
-              Emitir em lote (planilha)
-            </Link>
-          </div>
+          <Link href="/admin/emissao-notas" className="text-sm text-foreground/60 hover:underline">
+            ← Trocar empresa
+          </Link>
         </div>
-        <Link href="/admin/emissao-notas" className="text-sm text-foreground/60 hover:underline">
-          ← Trocar empresa
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`${basePath}/tomadores/novo`}>
+            <Button type="button">+ Novo tomador</Button>
+          </Link>
+          <Link href={`${basePath}/lote`}>
+            <Button type="button" variant="secondary">
+              Emitir em lote (planilha)
+            </Button>
+          </Link>
+          <Link href={`${basePath}/notas`} className="ml-1 text-sm font-medium text-brand hover:underline">
+            Ver notas já emitidas
+          </Link>
+        </div>
       </div>
 
       {!services || services.length === 0 ? (
@@ -69,19 +74,17 @@ export default async function AdminEmitirNotaPage(
           </p>
         </Card>
       ) : (
-        <Card className="max-w-lg p-6 sm:p-8">
-          <EmitirNotaForm
-            companyId={companyId}
-            customers={customers ?? []}
-            services={services}
-            allowRetroactiveEmission={company.allow_retroactive_emission ?? false}
-            mesCorrente={mesCorrenteBrasilia()}
-            taxRegime={company.tax_regime}
-            issAliquotaPadrao={company.iss_aliquota_padrao}
-            prefill={await prefillPromise}
-            basePath={basePath}
-          />
-        </Card>
+        <EmitirNotaForm
+          companyId={companyId}
+          customers={customers ?? []}
+          services={services}
+          allowRetroactiveEmission={company.allow_retroactive_emission ?? false}
+          mesCorrente={mesCorrenteBrasilia()}
+          taxRegime={company.tax_regime}
+          issAliquotaPadrao={company.iss_aliquota_padrao}
+          prefill={await prefillPromise}
+          basePath={basePath}
+        />
       )}
     </div>
   );
