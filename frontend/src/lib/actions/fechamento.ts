@@ -8,7 +8,7 @@ import {
   MESES_ANTERIORES_HISTORICO,
   type ResultadoSincronizacao,
 } from "@/lib/sync-notas";
-import { classificarDirecao } from "@/lib/notas-distribuidas";
+import { salvarNotaNoFechamento } from "@/lib/notas-fechamento";
 import { extrairNotaDeXml, type NotaExtraidaXml } from "@/lib/xml-nota";
 import { gerarZipDaEmpresa } from "@/lib/fechamento-export";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
@@ -22,41 +22,7 @@ async function salvarNotaImportada(
   cnpjEmpresa: string,
   nota: NotaExtraidaXml & { chaveAcesso: string },
 ): Promise<{ ok: true } | { ok: false; duplicada: boolean }> {
-  const { error } = await admin.from("notas_distribuidas").insert({
-    company_id: companyId,
-    nsu: null,
-    origem: "importado_manual",
-    chave_acesso: nota.chaveAcesso,
-    direcao: classificarDirecao(nota.prestadorCnpj, nota.tomadorCnpj, cnpjEmpresa),
-    cancelada: false,
-    motivo_cancelamento: null,
-    numero: nota.numero,
-    data_emissao: nota.dataEmissao,
-    competencia: nota.competencia,
-    bate_competencia: true,
-    prestador_cnpj: nota.prestadorCnpj,
-    prestador_nome: nota.prestadorNome,
-    tomador_cnpj: nota.tomadorCnpj,
-    tomador_nome: nota.tomadorNome,
-    descricao_servico: nota.descricaoServico,
-    local_incidencia: nota.localIncidencia,
-    codigo_trib_nacional: nota.codigoTribNacional,
-    codigo_nbs: nota.codigoNbs,
-    aliquota_issqn: nota.aliquotaIssqn,
-    valor_servico: nota.valorServico,
-    valor_issqn: nota.valorIssqn,
-    valor_pis: nota.valorPis,
-    valor_cofins: nota.valorCofins,
-    valor_ret_cp: nota.valorRetCp,
-    valor_ret_irrf: nota.valorRetIrrf,
-    valor_ret_csll: nota.valorRetCsll,
-    xml: nota.xml,
-  });
-
-  if (error) {
-    return { ok: false, duplicada: error.code === "23505" };
-  }
-  return { ok: true };
+  return salvarNotaNoFechamento(admin, companyId, cnpjEmpresa, nota, "importado_manual");
 }
 
 // A página de fechamento de uma empresa (`maxDuration = 300`) só faz UMA

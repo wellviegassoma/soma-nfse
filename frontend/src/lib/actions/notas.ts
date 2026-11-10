@@ -11,6 +11,7 @@ import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import { documentoEmpresa } from "@/lib/formatters";
 import { buscarDadosCep } from "@/lib/cep-lookup";
+import { registrarNotaEmitidaNoFechamento } from "@/lib/notas-fechamento";
 import { calcularRetencoes, lerPercentual, tomadorRetem, type RetencoesNota } from "@/lib/retencoes-nota";
 import type { NfseAmbiente } from "@/lib/types";
 import { resumoErros, traduzirErrosSefin, type ErroEmissaoTraduzido } from "@/lib/nfse-erros";
@@ -409,6 +410,27 @@ export async function issueNfse(
     xml_nfse: resultado.xml_nfse,
   });
 
+  // Fechamento: a nota entra na hora, sem esperar a distribuição do ADN
+  // (que pode levar horas). Falha aqui não desfaz a emissão — a
+  // sincronização traz a nota depois de qualquer jeito.
+  if (resultado.xml_nfse && resultado.chave_acesso) {
+    const registro = await registrarNotaEmitidaNoFechamento(
+      admin,
+      companyId,
+      documentoPrestador,
+      resultado.xml_nfse,
+      resultado.chave_acesso,
+    ).catch((e: unknown) => ({ ok: false as const, duplicada: false, mensagem: String(e) }));
+    if (!registro.ok && !registro.duplicada) {
+      await logNfseError(
+        companyId,
+        dpsRow.id,
+        `Nota emitida, mas não entrou no fechamento: ${registro.mensagem ?? "erro desconhecido"}`,
+        "Nota emitida. Ela aparece no fechamento na próxima sincronização.",
+      );
+    }
+  }
+
   await logAudit({
     companyId,
     action: "ISSUE",
@@ -548,6 +570,15 @@ export async function cancelarNfse(
   }
 
   await supabase.from("nfse").update({ status: "CANCELADA" }).eq("id", nfseRow.id);
+  // Fechamento: marca a mesma nota como cancelada na hora (a sincronização
+  // também faria, mas só quando o ADN distribuir o evento).
+  if (nfseRow.access_key) {
+    await createAdminClient()
+      .from("notas_distribuidas")
+      .update({ cancelada: true, motivo_cancelamento: motivoDescricao })
+      .eq("company_id", companyId)
+      .eq("chave_acesso", nfseRow.access_key);
+  }
   await supabase.from("nfse_events").insert({
     nfse_id: nfseRow.id,
     type: "CANCELAMENTO",
