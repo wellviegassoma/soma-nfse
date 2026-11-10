@@ -488,6 +488,23 @@ export async function updateCompanyFiscal(
     .eq("id", companyId)
     .single();
 
+  // Número de DPS nunca pode voltar pra um já usado na série — a emissão
+  // seguinte bateria na chave única (company, série, número) depois de já
+  // ter ido ao governo.
+  const { data: ultimaDps } = await supabase
+    .from("dps")
+    .select("numero_dps")
+    .eq("company_id", companyId)
+    .eq("serie", rest.dpsSeries)
+    .order("numero_dps", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (ultimaDps && rest.dpsNextNumber <= ultimaDps.numero_dps) {
+    return {
+      error: `O próximo número da DPS precisa ser maior que ${ultimaDps.numero_dps}, o último já usado na série ${rest.dpsSeries}.`,
+    };
+  }
+
   const newValue = {
     municipal_registration: rest.municipalRegistration || null,
     data_abertura: rest.dataAbertura || null,

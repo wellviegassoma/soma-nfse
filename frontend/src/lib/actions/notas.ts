@@ -382,11 +382,20 @@ export async function issueNfse(
       companyId,
       null,
       `Emissão retornou sucesso=${resultado.sucesso} mas falhou ao gravar dps: ${dpsError?.message}`,
-      "Não foi possível emitir esta nota.",
+      resultado.sucesso
+        ? "Nota autorizada, mas não foi registrada no sistema."
+        : "Nota recusada pelo governo (e não registrada no sistema).",
     );
+    if (!resultado.sucesso) {
+      // O governo recusou: nenhuma nota existe. Mostra o motivo normalmente.
+      return {
+        error: "O governo recusou a nota. Nenhuma nota foi gerada — corrija o que está abaixo e emita de novo.",
+        motivos: traduzirErrosSefin(resultado.erros ?? []),
+      };
+    }
     return {
       error:
-        "A nota pode ter sido processada, mas houve um erro ao registrar no sistema. Contate o suporte da SOMA antes de tentar de novo.",
+        "A nota foi AUTORIZADA pelo governo, mas houve um erro ao registrar no sistema. Não emita de novo — contate o suporte da SOMA.",
     };
   }
 

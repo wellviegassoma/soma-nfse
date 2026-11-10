@@ -470,8 +470,13 @@ def gerar_xml_dps(dados: DadosDPS) -> tuple[str, str]:
         + f"{im_xml}{fone_xml}{email_xml}"
         "<regTrib>"
         f"<opSimpNac>{prest.regime.opcao_simples_nacional}</opSimpNac>"
-        f"<regApTribSN>{prest.regime.regime_apuracao_simples}</regApTribSN>"
-        f"<regEspTrib>{prest.regime.regime_especial_tributacao}</regEspTrib>"
+        # regApTribSN só existe pra optante ME/EPP (opSimpNac=3): não optante
+        # e MEI que mandam o campo são recusados (E0162).
+        + (
+            f"<regApTribSN>{prest.regime.regime_apuracao_simples}</regApTribSN>"
+            if prest.regime.opcao_simples_nacional == 3 else ""
+        )
+        + f"<regEspTrib>{prest.regime.regime_especial_tributacao}</regEspTrib>"
         "</regTrib>"
         "</prest>"
         "<toma>"
