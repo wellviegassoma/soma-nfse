@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermissao } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { carregarPrefillEmissao } from "@/lib/emissao-prefill";
 import { Card } from "@/components/ui/Card";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { EmitirNotaForm } from "@/app/empresas/[companyId]/emitir/EmitirNotaForm";
@@ -12,19 +13,21 @@ export default async function AdminEmitirNotaPage(
   props: PageProps<"/admin/emissao-notas/[companyId]">,
 ) {
   const { companyId } = await props.params;
+  const { de } = await props.searchParams;
   await requirePermissao("notas.emitir", companyId);
 
   const supabase = await createClient();
+  const prefillPromise = carregarPrefillEmissao(supabase, companyId, de);
   const [{ data: company }, { data: customers }, { data: services }] = await Promise.all([
     supabase
       .from("companies")
-      .select("legal_name, trade_name, codigo_cliente, allow_retroactive_emission")
+      .select("legal_name, trade_name, codigo_cliente, allow_retroactive_emission, tax_regime, iss_aliquota_padrao")
       .eq("id", companyId)
       .maybeSingle(),
     supabase.from("customers").select("id, name, cpf_cnpj").eq("company_id", companyId).order("name"),
     supabase
       .from("services")
-      .select("id, name, description")
+      .select("id, name, description, tipo_retencao_issqn, iss_rate, retencao_irrf_aliquota, retencao_pis_cofins_csll_aliquota")
       .eq("company_id", companyId)
       .eq("active", true)
       .order("name"),
@@ -48,6 +51,9 @@ export default async function AdminEmitirNotaPage(
             <Link href={`${basePath}/tomadores/novo`} className="text-sm font-medium text-brand hover:underline">
               + Novo tomador
             </Link>
+            <Link href={`${basePath}/lote`} className="text-sm font-medium text-brand hover:underline">
+              Emitir em lote (planilha)
+            </Link>
           </div>
         </div>
         <Link href="/admin/emissao-notas" className="text-sm text-foreground/60 hover:underline">
@@ -70,6 +76,9 @@ export default async function AdminEmitirNotaPage(
             services={services}
             allowRetroactiveEmission={company.allow_retroactive_emission ?? false}
             mesCorrente={mesCorrenteBrasilia()}
+            taxRegime={company.tax_regime}
+            issAliquotaPadrao={company.iss_aliquota_padrao}
+            prefill={await prefillPromise}
             basePath={basePath}
           />
         </Card>

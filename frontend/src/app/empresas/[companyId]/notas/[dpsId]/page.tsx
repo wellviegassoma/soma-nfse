@@ -118,6 +118,11 @@ export default async function NotaDetailPage(
             <CancelNotaForm companyId={companyId} dpsId={dpsId} />
           </div>
         )}
+        <div className="mt-6 border-t border-border pt-4">
+          <a href={`/empresas/${companyId}/emitir?de=${dpsId}`}>
+            <Button variant="secondary">Emitir de novo (mesmo tomador e serviço)</Button>
+          </a>
+        </div>
       </Card>
 
       <Link

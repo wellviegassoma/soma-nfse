@@ -11,6 +11,7 @@ import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import { documentoEmpresa } from "@/lib/formatters";
 import { buscarDadosCep } from "@/lib/cep-lookup";
+import { calcularRetencoes, lerPercentual, tomadorRetem, type RetencoesNota } from "@/lib/retencoes-nota";
 import type { NfseAmbiente } from "@/lib/types";
 import { resumoErros, traduzirErrosSefin, type ErroEmissaoTraduzido } from "@/lib/nfse-erros";
 
@@ -112,6 +113,35 @@ export async function issueNfse(
   if (!company) return { error: "Empresa não encontrada." };
   if (!customer) return { error: "Tomador não encontrado." };
   if (!service) return { error: "Serviço não encontrado." };
+
+  // Retenções desta nota: vêm do formulário (ajustáveis por nota, já com o
+  // padrão do serviço). Sem os campos (chamada antiga), usa o padrão do
+  // serviço como antes. Pessoa física nunca retém.
+  const retem = tomadorRetem(customer.cpf_cnpj);
+  const retencoes: RetencoesNota = formData.has("issRetido")
+    ? {
+        issRetido: retem && formData.get("issRetido") === "1",
+        aliquotaIss: lerPercentual(formData.get("aliquotaIss")),
+        irrfPct: retem ? lerPercentual(formData.get("irrfPct")) : null,
+        csrfPct: retem ? lerPercentual(formData.get("csrfPct")) : null,
+        inssPct: retem ? lerPercentual(formData.get("inssPct")) : null,
+      }
+    : {
+        issRetido: (service.tipo_retencao_issqn ?? 1) !== 1,
+        aliquotaIss: null,
+        irrfPct: service.retencao_irrf_aliquota,
+        csrfPct: service.retencao_pis_cofins_csll_aliquota,
+        inssPct: null,
+      };
+  const percentuais = [retencoes.aliquotaIss, retencoes.irrfPct, retencoes.csrfPct, retencoes.inssPct];
+  if (percentuais.some((v) => v != null && (Number.isNaN(v) || v < 0 || v > 100))) {
+    return { error: "Algum percentual de retenção está inválido. Use um número entre 0 e 100." };
+  }
+  const simples = company.tax_regime === "SIMPLES_NACIONAL";
+  if (retencoes.issRetido && simples && !(retencoes.aliquotaIss && retencoes.aliquotaIss > 0)) {
+    return { error: "Para reter o ISS de empresa do Simples, informe a alíquota do ISS do mês." };
+  }
+  const valoresRetidos = calcularRetencoes(amount, retencoes);
 
   const documentoPrestador = documentoEmpresa(company);
   if (!documentoPrestador || !company.municipality_ibge_code) {
@@ -233,7 +263,12 @@ export async function issueNfse(
     descricao_servico: description,
     valor_servico: amount,
     data_competencia: competenceDate,
-    tipo_retencao_issqn: service.tipo_retencao_issqn ?? 1,
+    tipo_retencao_issqn: retencoes.issRetido ? (service.tipo_retencao_issqn === 3 ? 3 : 2) : 1,
+    // pAliq só no Simples com ISS retido (obrigatório nesse caso; fora
+    // dele o Sefin calcula e recusa se vier sem retenção — E0625).
+    ...(retencoes.issRetido && simples && retencoes.aliquotaIss
+      ? { aliquota_issqn_informada: retencoes.aliquotaIss }
+      : {}),
     ...(service.cst_pis_cofins ? { cst_pis_cofins: service.cst_pis_cofins } : {}),
     percentual_total_tributos_federal: service.percentual_total_tributos_federal,
     percentual_total_tributos_estadual: service.percentual_total_tributos_estadual,
@@ -255,17 +290,11 @@ export async function issueNfse(
             : {}),
         }
       : {}),
-    ...(service.retencao_pis_cofins_csll_aliquota != null
-      ? {
-          tipo_retencao_pis_cofins: 3,
-          valor_retido_contribuicoes_sociais: round2(
-            (amount * service.retencao_pis_cofins_csll_aliquota) / 100,
-          ),
-        }
+    ...(valoresRetidos.csrf > 0
+      ? { tipo_retencao_pis_cofins: 3, valor_retido_contribuicoes_sociais: valoresRetidos.csrf }
       : {}),
-    ...(service.retencao_irrf_aliquota != null
-      ? { valor_retido_irrf: round2((amount * service.retencao_irrf_aliquota) / 100) }
-      : {}),
+    ...(valoresRetidos.irrf > 0 ? { valor_retido_irrf: valoresRetidos.irrf } : {}),
+    ...(valoresRetidos.inss > 0 ? { valor_retido_inss: valoresRetidos.inss } : {}),
   };
 
   let response: Response;

@@ -105,6 +105,11 @@ export default async function AdminNotaDetailPage(
             <CancelNotaForm companyId={companyId} dpsId={dpsId} />
           </div>
         )}
+        <div className="mt-6 border-t border-border pt-4">
+          <a href={`${basePath}?de=${dpsId}`}>
+            <Button variant="secondary">Emitir de novo (mesmo tomador e serviço)</Button>
+          </a>
+        </div>
       </Card>
 
       <Link href={`${basePath}/notas`} className="text-sm font-medium text-foreground/60 hover:underline">

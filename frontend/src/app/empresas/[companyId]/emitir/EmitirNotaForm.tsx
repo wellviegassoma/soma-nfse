@@ -10,9 +10,32 @@ import { Field } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Alert";
 import { Card } from "@/components/ui/Card";
 import { hojeBrasilia } from "@/lib/competencia";
+import { calcularRetencoes, lerPercentual, tomadorRetem } from "@/lib/retencoes-nota";
+import type { PrefillEmissao } from "@/lib/emissao-prefill";
 
 type Customer = { id: string; name: string; cpf_cnpj: string | null };
-type Service = { id: string; name: string; description: string | null };
+type Service = {
+  id: string;
+  name: string;
+  description: string | null;
+  tipo_retencao_issqn?: number | null;
+  iss_rate?: number | null;
+  retencao_irrf_aliquota?: number | null;
+  retencao_pis_cofins_csll_aliquota?: number | null;
+};
+
+function pctTexto(v: number | null | undefined) {
+  return v != null ? String(v).replace(".", ",") : "";
+}
+
+function padroesRetencao(service: Service | undefined, issAliquotaPadrao?: number | null) {
+  return {
+    issRetido: (service?.tipo_retencao_issqn ?? 1) !== 1,
+    aliquotaIss: pctTexto(service?.iss_rate ?? issAliquotaPadrao),
+    irrfPct: pctTexto(service?.retencao_irrf_aliquota),
+    csrfPct: pctTexto(service?.retencao_pis_cofins_csll_aliquota),
+  };
+}
 
 function formatMoney(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -25,6 +48,9 @@ export function EmitirNotaForm({
   allowRetroactiveEmission,
   mesCorrente,
   basePath,
+  taxRegime,
+  issAliquotaPadrao,
+  prefill,
 }: {
   companyId: string;
   customers: Customer[];
@@ -35,14 +61,40 @@ export function EmitirNotaForm({
    * mesmo form é reaproveitado no portal do cliente (/empresas/[companyId])
    * e no módulo de emissão da equipe (/admin/emissao-notas/[companyId]). */
   basePath?: string;
+  taxRegime?: string | null;
+  issAliquotaPadrao?: number | null;
+  prefill?: PrefillEmissao;
 }) {
   const base = basePath ?? `/empresas/${companyId}`;
+  const emitirHref = basePath ?? `/empresas/${companyId}/emitir`;
+  // Começa preenchido quando é "Emitir de novo" (?de=) ou, senão, com o
+  // serviço que a empresa mais usa — só se ele ainda estiver ativo.
+  const inicial = prefill?.inicial;
+  const servicoInicial =
+    [inicial?.serviceId, prefill?.servicoMaisUsado, services.length === 1 ? services[0].id : undefined]
+      .filter(Boolean)
+      .find((id) => services.some((s) => s.id === id)) ?? "";
+  const clienteInicial =
+    inicial && customers.some((c) => c.id === inicial.customerId) ? inicial.customerId : "";
+  const padraoInicial = padroesRetencao(services.find((s) => s.id === servicoInicial), issAliquotaPadrao);
+  const frequentes = (prefill?.tomadoresFrequentes ?? [])
+    .map((id) => customers.find((c) => c.id === id))
+    .filter((c): c is Customer => Boolean(c));
+
   const [step, setStep] = useState<"form" | "review">("form");
-  const [customerId, setCustomerId] = useState("");
-  const [serviceId, setServiceId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
+  const [customerId, setCustomerId] = useState(clienteInicial);
+  const [serviceId, setServiceId] = useState(servicoInicial);
+  const [amount, setAmount] = useState(inicial?.amount ?? "");
+  const [description, setDescription] = useState(
+    inicial?.description ?? services.find((s) => s.id === servicoInicial)?.description ?? "",
+  );
   const [competenceDate, setCompetenceDate] = useState(hojeBrasilia);
+  const [issRetido, setIssRetido] = useState(padraoInicial.issRetido);
+  const [aliquotaIss, setAliquotaIss] = useState(padraoInicial.aliquotaIss);
+  const [irrfPct, setIrrfPct] = useState(padraoInicial.irrfPct);
+  const [csrfPct, setCsrfPct] = useState(padraoInicial.csrfPct);
+  const [inssPct, setInssPct] = useState("");
+  const simples = taxRegime === "SIMPLES_NACIONAL";
 
   const [state, formAction, pending] = useActionState(issueNfse, undefined);
 
@@ -55,6 +107,24 @@ export function EmitirNotaForm({
     [services, serviceId],
   );
 
+  const retem = tomadorRetem(selectedCustomer?.cpf_cnpj);
+  const valorNum = Number(amount.replace(",", ".")) || 0;
+  const pcts = {
+    issRetido: retem && issRetido,
+    aliquotaIss: lerPercentual(aliquotaIss),
+    irrfPct: retem ? lerPercentual(irrfPct) : null,
+    csrfPct: retem ? lerPercentual(csrfPct) : null,
+    inssPct: retem ? lerPercentual(inssPct) : null,
+  };
+  const pctInvalido = [pcts.aliquotaIss, pcts.irrfPct, pcts.csrfPct, pcts.inssPct].some(
+    (v) => v != null && (Number.isNaN(v) || v < 0 || v > 100),
+  );
+  const retencoes = calcularRetencoes(valorNum, {
+    ...pcts,
+    aliquotaIss: Number.isNaN(pcts.aliquotaIss) ? null : pcts.aliquotaIss,
+  });
+  const faltaAliquotaIss = pcts.issRetido && simples && !(pcts.aliquotaIss && pcts.aliquotaIss > 0);
+
   const competenciaForaDoMes =
     !allowRetroactiveEmission && competenceDate.slice(0, 7) !== mesCorrente;
 
@@ -62,6 +132,13 @@ export function EmitirNotaForm({
     setServiceId(id);
     const service = services.find((s) => s.id === id);
     if (service?.description && !description) setDescription(service.description);
+    // Retenções começam com o padrão do serviço — ajustáveis nesta nota.
+    const padrao = padroesRetencao(service, issAliquotaPadrao);
+    setIssRetido(padrao.issRetido);
+    setAliquotaIss(padrao.aliquotaIss);
+    setIrrfPct(padrao.irrfPct);
+    setCsrfPct(padrao.csrfPct);
+    setInssPct("");
   }
 
   if (state?.success) {
@@ -82,19 +159,14 @@ export function EmitirNotaForm({
               Ver nota
             </Button>
           </Link>
-          <Button
-            onClick={() => {
-              setStep("form");
-              setCustomerId("");
-              setServiceId("");
-              setAmount("");
-              setDescription("");
-              window.location.reload();
-            }}
-            className="w-full sm:w-auto"
-          >
-            Emitir outra nota
-          </Button>
+          <a href={`${emitirHref}?de=${state.dpsId}`}>
+            <Button variant="secondary" className="w-full sm:w-auto">
+              Outra igual para este tomador
+            </Button>
+          </a>
+          <a href={emitirHref}>
+            <Button className="w-full sm:w-auto">Emitir outra nota</Button>
+          </a>
         </div>
       </div>
     );
@@ -109,6 +181,11 @@ export function EmitirNotaForm({
         <input type="hidden" name="amount" value={amount} />
         <input type="hidden" name="description" value={description} />
         <input type="hidden" name="competenceDate" value={competenceDate} />
+        <input type="hidden" name="issRetido" value={pcts.issRetido ? "1" : "0"} />
+        <input type="hidden" name="aliquotaIss" value={aliquotaIss} />
+        <input type="hidden" name="irrfPct" value={retem ? irrfPct : ""} />
+        <input type="hidden" name="csrfPct" value={retem ? csrfPct : ""} />
+        <input type="hidden" name="inssPct" value={retem ? inssPct : ""} />
 
         <h2 className="text-sm font-semibold text-foreground/70">Confirme a emissão</h2>
 
@@ -146,6 +223,11 @@ export function EmitirNotaForm({
           <Row label="Serviço" value={selectedService?.name ?? "—"} />
           <Row label="Valor" value={formatMoney(Number(amount.replace(",", ".")) || 0)} />
           <Row label="Descrição" value={description || "—"} />
+          {retencoes.iss > 0 && <Row label="ISS retido pelo tomador" value={`− ${formatMoney(retencoes.iss)}`} />}
+          {retencoes.irrf > 0 && <Row label="IRRF retido" value={`− ${formatMoney(retencoes.irrf)}`} />}
+          {retencoes.csrf > 0 && <Row label="PIS/COFINS/CSLL retidos" value={`− ${formatMoney(retencoes.csrf)}`} />}
+          {retencoes.inss > 0 && <Row label="INSS retido" value={`− ${formatMoney(retencoes.inss)}`} />}
+          <Row label="Líquido a receber" value={formatMoney(retencoes.liquido)} />
         </Card>
 
         <div className="flex items-center gap-3">
@@ -167,6 +249,26 @@ export function EmitirNotaForm({
 
   return (
     <div className="flex flex-col gap-4">
+      {inicial && (
+        <Alert tone="success">Repetindo uma nota anterior. Confira o valor, a data e a descrição.</Alert>
+      )}
+      {frequentes.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-foreground/55">Tomadores mais usados</span>
+          <div className="flex flex-wrap gap-1.5">
+            {frequentes.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCustomerId(c.id)}
+                className={`max-w-full truncate rounded-full border px-3 py-1 text-xs ${c.id === customerId ? "border-brand bg-brand/10 font-medium text-brand" : "border-border text-foreground/75 hover:border-brand"}`}
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <Field label="Tomador" htmlFor="customerId">
         <Select
           id="customerId"
@@ -259,6 +361,71 @@ export function EmitirNotaForm({
         />
       </Field>
 
+      {selectedService && selectedCustomer && (
+        <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+          <p className="text-sm font-semibold text-foreground">Impostos retidos pelo tomador</p>
+          {!retem ? (
+            <p className="text-xs text-foreground/55">
+              Tomador pessoa física: não há retenção. O líquido é o valor da nota.
+            </p>
+          ) : (
+            <>
+              <p className="-mt-2 text-xs text-foreground/55">
+                Já vem com o padrão do serviço. Mude só se este tomador desconta algo diferente
+                (ex.: órgão público ou empresa grande costuma reter IRRF 1,5% e PIS/COFINS/CSLL 4,65%).
+              </p>
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={issRetido}
+                  onChange={(e) => setIssRetido(e.target.checked)}
+                  className="h-4 w-4 rounded border-border accent-brand"
+                />
+                O tomador vai reter o ISS
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {issRetido && (
+                  <Field
+                    label={simples ? "Alíquota do ISS (%), obrigatória" : "Alíquota do ISS (%)"}
+                    htmlFor="aliquotaIss"
+                    hint={simples ? "No Simples, use a alíquota de ISS do DAS do mês." : undefined}
+                  >
+                    <Input id="aliquotaIss" inputMode="decimal" placeholder="2,00" value={aliquotaIss} onChange={(e) => setAliquotaIss(e.target.value)} />
+                  </Field>
+                )}
+                <Field label="IRRF (%)" htmlFor="irrfPct">
+                  <Input id="irrfPct" inputMode="decimal" placeholder="0" value={irrfPct} onChange={(e) => setIrrfPct(e.target.value)} />
+                </Field>
+                <Field label="PIS/COFINS/CSLL (%)" htmlFor="csrfPct">
+                  <Input id="csrfPct" inputMode="decimal" placeholder="0" value={csrfPct} onChange={(e) => setCsrfPct(e.target.value)} />
+                </Field>
+                <Field label="INSS (%)" htmlFor="inssPct">
+                  <Input id="inssPct" inputMode="decimal" placeholder="0" value={inssPct} onChange={(e) => setInssPct(e.target.value)} />
+                </Field>
+              </div>
+            </>
+          )}
+          <div className="flex flex-col gap-1 border-t border-border pt-3 text-sm">
+            <div className="flex justify-between text-foreground/60">
+              <span>Valor da nota</span>
+              <span>{formatMoney(valorNum)}</span>
+            </div>
+            {retencoes.total > 0 && (
+              <div className="flex justify-between text-foreground/60">
+                <span>Retido pelo tomador</span>
+                <span>− {formatMoney(retencoes.total)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-semibold text-foreground">
+              <span>Líquido a receber</span>
+              <span>{formatMoney(retencoes.liquido)}</span>
+            </div>
+          </div>
+          {pctInvalido && <Alert tone="warning">Algum percentual está inválido. Use um número entre 0 e 100.</Alert>}
+          {faltaAliquotaIss && <Alert tone="warning">Informe a alíquota do ISS para reter o ISS no Simples.</Alert>}
+        </div>
+      )}
+
       <Button
         type="button"
         size="lg"
@@ -269,7 +436,9 @@ export function EmitirNotaForm({
           !amount ||
           !description ||
           !competenceDate ||
-          competenciaForaDoMes
+          competenciaForaDoMes ||
+          pctInvalido ||
+          faltaAliquotaIss
         }
         onClick={() => setStep("review")}
       >

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { carregarPrefillEmissao } from "@/lib/emissao-prefill";
 import { Card } from "@/components/ui/Card";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { EmitirNotaForm } from "./EmitirNotaForm";
@@ -10,7 +11,9 @@ export default async function EmitirNotaPage(
   props: PageProps<"/empresas/[companyId]/emitir">,
 ) {
   const { companyId } = await props.params;
+  const { de } = await props.searchParams;
   const supabase = await createClient();
+  const prefillPromise = carregarPrefillEmissao(supabase, companyId, de);
 
   const [{ data: customers }, { data: services }, { data: company }] = await Promise.all([
     supabase
@@ -20,13 +23,13 @@ export default async function EmitirNotaPage(
       .order("name"),
     supabase
       .from("services")
-      .select("id, name, description")
+      .select("id, name, description, tipo_retencao_issqn, iss_rate, retencao_irrf_aliquota, retencao_pis_cofins_csll_aliquota")
       .eq("company_id", companyId)
       .eq("active", true)
       .order("name"),
     supabase
       .from("companies")
-      .select("allow_retroactive_emission")
+      .select("allow_retroactive_emission, tax_regime, iss_aliquota_padrao")
       .eq("id", companyId)
       .single(),
   ]);
@@ -63,6 +66,9 @@ export default async function EmitirNotaPage(
           services={services}
           allowRetroactiveEmission={company?.allow_retroactive_emission ?? false}
           mesCorrente={mesCorrenteBrasilia()}
+          taxRegime={company?.tax_regime}
+          issAliquotaPadrao={company?.iss_aliquota_padrao}
+          prefill={await prefillPromise}
         />
       </Card>
     </div>
