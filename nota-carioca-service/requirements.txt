@@ -4,4 +4,7 @@ pydantic>=2.9
 cryptography>=42.0
 lxml>=5.0
 python-dotenv>=1.0
-playwright>=1.62
+# Travado em 1.64.x: o 1.65 traz o Node 26 embutido, que precisa da libatomic.so.1
+# (ausente na imagem da Railway) — o driver nem abre e o deploy falha. Pra subir
+# de versão, adicionar libatomic1 em aptPkgs no nixpacks.toml antes.
+playwright>=1.62,<1.65
