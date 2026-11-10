@@ -18,8 +18,17 @@ export function NovoUsuarioEmpresaForm({
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [erro, setErro] = useState<string | null>(null);
-  const [enviado, setEnviado] = useState(false);
+  const [enviado, setEnviado] = useState<"convite" | "conta-existente" | null>(null);
 
+  if (enviado === "conta-existente") {
+    return (
+      <Alert tone="warning">
+        Esse e-mail já tinha conta no sistema: o acesso a esta empresa foi liberado, mas nenhum
+        e-mail foi enviado. Se a pessoa não souber a senha, ela pode usar &ldquo;Esqueci minha
+        senha&rdquo; na tela de login.
+      </Alert>
+    );
+  }
   if (enviado) {
     return <Alert tone="success">Convite enviado.</Alert>;
   }
@@ -57,7 +66,7 @@ export function NovoUsuarioEmpresaForm({
             setErro(resposta.error);
             return resposta;
           }
-          setEnviado(true);
+          setEnviado(resposta.contaExistente ? "conta-existente" : "convite");
           return { success: true };
         }}
       />

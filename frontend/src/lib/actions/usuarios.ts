@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireUser, temPermissao } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { ehContaExistente, traduzirErroEnvio } from "@/lib/auth-erros";
 import { expandirImplicacoes, type Permissao } from "@/lib/permissoes/catalogo";
 
 export type EmpresaPermissoes = { companyId: string; permissoes: Permissao[] };
@@ -69,19 +70,24 @@ export async function convidarUsuario(input: {
   });
 
   let userId = invited?.user?.id;
+  let contaExistente = false;
 
   // E-mail já existe no Auth (acesso a outra empresa, ex-funcionário etc.) —
-  // reaproveita a conta em vez de tentar convidar de novo.
+  // reaproveita a conta em vez de tentar convidar de novo. Nesse caso nenhum
+  // e-mail sai, e a tela do usuário avisa isso. Qualquer outro erro (limite,
+  // SMTP) é mostrado como é, sem gravar permissões.
   if (inviteError) {
+    if (!ehContaExistente(inviteError)) return { error: traduzirErroEnvio(inviteError) };
     const { data: existing } = await admin
       .from("profiles")
       .select("id")
       .ilike("email", email)
       .maybeSingle();
     if (!existing) {
-      return { error: "Não foi possível convidar esse e-mail." };
+      return { error: "Esse e-mail já tem conta, mas o perfil não foi encontrado." };
     }
     userId = existing.id;
+    contaExistente = true;
   }
   if (!userId) {
     return { error: "Não foi possível identificar o usuário convidado." };
@@ -104,7 +110,7 @@ export async function convidarUsuario(input: {
   });
 
   revalidatePath("/admin/usuarios");
-  redirect(`/admin/usuarios/${userId}`);
+  redirect(`/admin/usuarios/${userId}${contaExistente ? "?aviso=conta-existente" : ""}`);
 }
 
 export async function salvarPermissoesUsuario(
@@ -179,15 +185,35 @@ export async function reativarUsuario(userId: string): Promise<{ error?: string;
   return { success: true };
 }
 
-export async function reenviarConvite(email: string): Promise<{ error?: string; success?: boolean }> {
+// Quem ainda não confirmou a conta recebe o convite de novo; quem já tem
+// conta (o Supabase recusa convite para esses) recebe o link de redefinir senha.
+export async function reenviarConvite(
+  userId: string,
+): Promise<{ error?: string; success?: boolean; mensagem?: string }> {
   await requireGerenciarUsuarios();
   const admin = createAdminClient();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  const { error } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${siteUrl}/auth/confirm?next=/redefinir-senha`,
-  });
-  if (error) return { error: "Não foi possível reenviar o convite." };
-  return { success: true };
+  const redirectTo = `${siteUrl}/auth/confirm?next=/redefinir-senha`;
+
+  const { data, error: userError } = await admin.auth.admin.getUserById(userId);
+  const user = data?.user;
+  if (userError || !user?.email) return { error: "Usuário não encontrado no Auth." };
+
+  const jaTemConta = Boolean(user.email_confirmed_at || user.last_sign_in_at);
+  if (jaTemConta) {
+    const { error } = await admin.auth.resetPasswordForEmail(user.email, { redirectTo });
+    if (error) return { error: traduzirErroEnvio(error) };
+    await logAudit({ action: "RESET_LINK", entity: "profiles", entityId: userId });
+    return {
+      success: true,
+      mensagem: "Essa pessoa já tem conta: foi enviado um link para definir uma nova senha.",
+    };
+  }
+
+  const { error } = await admin.auth.admin.inviteUserByEmail(user.email, { redirectTo });
+  if (error) return { error: traduzirErroEnvio(error) };
+  await logAudit({ action: "INVITE_RESEND", entity: "profiles", entityId: userId });
+  return { success: true, mensagem: "Convite reenviado." };
 }
 
 // Autoatendimento do cliente — convida alguém novo já escopado a uma única
@@ -198,7 +224,7 @@ export async function convidarUsuarioEmpresa(input: {
   email: string;
   fullName: string;
   permissoes: Permissao[];
-}): Promise<{ error?: string; userId?: string }> {
+}): Promise<{ error?: string; userId?: string; contaExistente?: boolean }> {
   await requireUser();
 
   const parsed = z
@@ -220,20 +246,23 @@ export async function convidarUsuarioEmpresa(input: {
   });
 
   let userId = invited?.user?.id;
+  let contaExistente = false;
   if (inviteError) {
+    if (!ehContaExistente(inviteError)) return { error: traduzirErroEnvio(inviteError) };
     const { data: existing } = await admin
       .from("profiles")
       .select("id")
       .ilike("email", email)
       .maybeSingle();
-    if (!existing) return { error: "Não foi possível convidar esse e-mail." };
+    if (!existing) return { error: "Esse e-mail já tem conta, mas o perfil não foi encontrado." };
     userId = existing.id;
+    contaExistente = true;
   }
   if (!userId) return { error: "Não foi possível identificar o usuário convidado." };
 
   const resposta = await salvarPermissoesUsuarioEmpresa(userId, input.companyId, input.permissoes);
   if (resposta.error) return { error: resposta.error };
-  return { userId };
+  return { userId, contaExistente };
 }
 
 // Autoatendimento do cliente — só mexe na empresa informada, e a RPC

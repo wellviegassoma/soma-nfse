@@ -24,13 +24,16 @@ export function UsuarioAcoes({
   const [mensagem, setMensagem] = useState<{ tipo: "success" | "danger"; texto: string } | null>(null);
   const router = useRouter();
 
-  function acao(fn: () => Promise<{ error?: string; success?: boolean }>, sucesso: string) {
+  function acao(
+    fn: () => Promise<{ error?: string; success?: boolean; mensagem?: string }>,
+    sucesso: string,
+  ) {
     startTransition(async () => {
       const resposta = await fn();
       if (resposta.error) {
         setMensagem({ tipo: "danger", texto: resposta.error });
       } else {
-        setMensagem({ tipo: "success", texto: sucesso });
+        setMensagem({ tipo: "success", texto: resposta.mensagem ?? sucesso });
         router.refresh();
       }
     });
@@ -45,9 +48,9 @@ export function UsuarioAcoes({
             type="button"
             variant="ghost"
             loading={pending}
-            onClick={() => acao(() => reenviarConvite(email), "Convite reenviado.")}
+            onClick={() => acao(() => reenviarConvite(userId), "E-mail enviado.")}
           >
-            Reenviar convite
+            Reenviar acesso por e-mail
           </Button>
         )}
         {ativo ? (

@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireUser, temPermissao } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/Card";
+import { Alert } from "@/components/ui/Alert";
 import { EditarPermissoesUsuario } from "./EditarPermissoesUsuario";
 import { UsuarioAcoes } from "./UsuarioAcoes";
 import type { Permissao } from "@/lib/permissoes/catalogo";
@@ -20,6 +21,7 @@ export default async function EditarUsuarioPage(
   if (!podeEquipe && !podeClientes) redirect("/");
 
   const { userId } = await props.params;
+  const { aviso } = await props.searchParams;
   const admin = createAdminClient();
 
   const { data: perfil } = await admin
@@ -74,6 +76,13 @@ export default async function EditarUsuarioPage(
         </h1>
         <p className="text-sm text-foreground/50">{perfil.email}</p>
       </div>
+
+      {aviso === "conta-existente" && (
+        <Alert tone="warning">
+          Esse e-mail já tinha conta no sistema: as permissões foram gravadas, mas nenhum e-mail foi
+          enviado. Se a pessoa não souber a senha, use &ldquo;Reenviar acesso por e-mail&rdquo;.
+        </Alert>
+      )}
 
       <Card className="p-6">
         <UsuarioAcoes userId={userId} email={perfil.email} ativo={perfil.ativo} />
