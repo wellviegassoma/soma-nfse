@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FechamentoIssCelula, type FechamentoIssResumo } from "@/components/fechamento/FechamentoIssCelula";
+import { salvarConferenciaIss } from "@/lib/actions/iss-conferencias";
+import type { ConferenciaIssSalva } from "@/lib/iss-conferencias";
 
 export type EmpresaIssPetropolis = {
   id: string;
@@ -19,6 +21,9 @@ export type EmpresaIssPetropolis = {
   // backend tenta pelo login do escritório (busca por CNPJ, menos confiável).
   temAcesso: boolean;
   fechamento: FechamentoIssResumo;
+  // Retrato do faturamento da SOMA agora — vai junto ao salvar a conferência.
+  assinaturaSoma: string;
+  conferenciaSalva: ConferenciaIssSalva | null;
 };
 
 // valorServicos = Normal + Retido; valorIss = ISS só das Normais (o que vai na guia).
@@ -31,8 +36,40 @@ type Resultado = {
   mensagem: string;
   consolidado: boolean;
   resumo: Resumo | null;
-  pdf: Blob | null; // guia já consolidada vem junto na conferência
+  pdf: Blob | null; // guia já consolidada vem junto na conferência (não fica salvo)
+  // Quando/quem conferiu (conferência salva) — ou o erro ao salvar.
+  conferidoEm?: string;
+  conferidoPor?: string | null;
+  erroSalvar?: string;
 };
+
+const STATUS_VALIDOS = ["ok", "falta_emitir", "diferenca", "sem_movimento", "erro"];
+
+// Conferência salva -> resultado da tela (sem o PDF: "Baixar" busca de novo).
+function resultadoSalvo(salva: ConferenciaIssSalva): Resultado | null {
+  const d = salva.dados as Partial<Resultado>;
+  if (!STATUS_VALIDOS.includes(salva.status)) return null;
+  return {
+    status: salva.status as Status,
+    mensagem: salva.mensagem ?? "",
+    consolidado: d.consolidado ?? false,
+    resumo: d.resumo ?? null,
+    pdf: null,
+    conferidoEm: salva.conferidoEm,
+    conferidoPor: salva.conferidoPor,
+  };
+}
+
+function dataHora(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 const STATUS_ROTULO: Record<Status, { texto: string; classe: string }> = {
   ok: { texto: "Bate — guia emitida", classe: "bg-success-soft text-success" },
@@ -153,7 +190,18 @@ export function CentralIssPetropolis({
   podeEmitir: boolean;
 }) {
   const router = useRouter();
-  const [resultados, setResultados] = useState<Record<string, Resultado>>({});
+  const [resultados, setResultados] = useState<Record<string, Resultado>>(() => {
+    const iniciais: Record<string, Resultado> = {};
+    for (const e of empresas) {
+      const r = e.conferenciaSalva && resultadoSalvo(e.conferenciaSalva);
+      if (r) iniciais[e.id] = r;
+    }
+    return iniciais;
+  });
+  // Faturamento/cadastro mudou desde a conferência salva: reprocessar antes de emitir.
+  const [desatualizadas, setDesatualizadas] = useState<Set<string>>(
+    () => new Set(empresas.filter((e) => e.conferenciaSalva?.desatualizada).map((e) => e.id)),
+  );
   const [carregando, setCarregando] = useState<Set<string>>(new Set());
   const [conferindoTodas, setConferindoTodas] = useState(false);
   const [lote, setLote] = useState<{ rodando: boolean; feitas: number; total: number; falhas: string[] } | null>(null);
@@ -169,31 +217,77 @@ export function CentralIssPetropolis({
     });
   }
 
+  // Mostra o resultado e salva a conferência (status + quando/quem), pra
+  // central abrir com ela da próxima vez sem logar na Prefeitura.
+  async function guardar(empresa: EmpresaIssPetropolis, resultado: Resultado): Promise<Resultado> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { pdf, conferidoEm, conferidoPor, erroSalvar, ...dados } = resultado;
+    let final: Resultado = resultado;
+    try {
+      const salvo = await salvarConferenciaIss({
+        companyId: empresa.id,
+        competencia,
+        municipio: "petropolis",
+        status: resultado.status,
+        mensagem: resultado.mensagem,
+        dados,
+        assinaturaSoma: empresa.assinaturaSoma,
+        faturamentoSoma: empresa.receitaSoma,
+        issSoma: empresa.issSoma,
+      });
+      final = salvo.ok
+        ? { ...dados, pdf, conferidoEm: salvo.conferidoEm, conferidoPor: salvo.conferidoPor }
+        : { ...dados, pdf, erroSalvar: salvo.erro };
+    } catch (e) {
+      final = { ...dados, pdf, erroSalvar: e instanceof Error ? e.message : String(e) };
+    }
+    setResultados((atual) => ({ ...atual, [empresa.id]: final }));
+    setDesatualizadas((atual) => {
+      if (!atual.has(empresa.id)) return atual;
+      const novo = new Set(atual);
+      novo.delete(empresa.id);
+      return novo;
+    });
+    return final;
+  }
+
   async function conferir(empresa: EmpresaIssPetropolis) {
     marcar(empresa.id, true);
     try {
-      const r = await conferirNaPrefeitura(empresa, competencia);
-      setResultados((atual) => ({ ...atual, [empresa.id]: r }));
+      await guardar(empresa, await conferirNaPrefeitura(empresa, competencia));
     } catch (e) {
-      setResultados((atual) => ({
-        ...atual,
-        [empresa.id]: {
-          status: "erro",
-          mensagem: e instanceof Error ? e.message : String(e),
-          consolidado: false,
-          resumo: null,
-          pdf: null,
-        },
-      }));
+      await guardar(empresa, {
+        status: "erro",
+        mensagem: e instanceof Error ? e.message : String(e),
+        consolidado: false,
+        resumo: null,
+        pdf: null,
+      });
     } finally {
       marcar(empresa.id, false);
     }
   }
 
+  // Só as que ainda não têm conferência salva, deram erro ou ficaram
+  // desatualizadas — as outras ficam como estão ("Reprocessar" na linha).
+  const pendentes = empresas.filter(
+    (e) => !resultados[e.id] || resultados[e.id].status === "erro" || desatualizadas.has(e.id),
+  );
+
+  // PDF da guia já consolidada: a conferência salva não guarda o arquivo,
+  // então busca de novo na Prefeitura (só leitura).
+  async function pdfDaGuia(empresa: EmpresaIssPetropolis, r: Resultado): Promise<Blob> {
+    if (r.pdf) return r.pdf;
+    const novo = await conferirNaPrefeitura(empresa, competencia);
+    if (!novo.pdf) throw new Error(novo.status === "erro" ? novo.mensagem : "A Prefeitura não devolveu a guia.");
+    setResultados((atual) => ({ ...atual, [empresa.id]: { ...atual[empresa.id], pdf: novo.pdf } }));
+    return novo.pdf;
+  }
+
   // Três por vez: o site da Prefeitura é lento e cada consulta faz login.
-  async function conferirTodas() {
+  async function conferirPendentes() {
     setConferindoTodas(true);
-    const fila = [...empresas];
+    const fila = [...pendentes];
     await Promise.all(
       Array.from({ length: 3 }, async () => {
         while (fila.length) {
@@ -208,8 +302,18 @@ export function CentralIssPetropolis({
   async function emitirUma(empresa: EmpresaIssPetropolis) {
     const r = resultados[empresa.id];
     if (!r) return;
-    if (r.consolidado && r.pdf) {
-      salvar(r.pdf, nomeArquivo(empresa));
+    if (r.consolidado) {
+      marcar(empresa.id, true);
+      try {
+        salvar(await pdfDaGuia(empresa, r), nomeArquivo(empresa));
+      } catch (e) {
+        setResultados((atual) => ({
+          ...atual,
+          [empresa.id]: { ...r, mensagem: `Falhou ao baixar: ${e instanceof Error ? e.message : e}` },
+        }));
+      } finally {
+        marcar(empresa.id, false);
+      }
       return;
     }
     const ok = window.confirm(
@@ -220,8 +324,7 @@ export function CentralIssPetropolis({
     if (!ok) return;
     marcar(empresa.id, true);
     try {
-      const emitido = await emitirNaPrefeitura(empresa, competencia);
-      setResultados((atual) => ({ ...atual, [empresa.id]: emitido }));
+      const emitido = await guardar(empresa, await emitirNaPrefeitura(empresa, competencia));
       if (emitido.pdf) salvar(emitido.pdf, nomeArquivo(empresa));
       router.refresh();
     } catch (e) {
@@ -234,7 +337,9 @@ export function CentralIssPetropolis({
     }
   }
 
-  const batem = empresas.filter((e) => ["ok", "falta_emitir"].includes(resultados[e.id]?.status ?? ""));
+  const batem = empresas.filter(
+    (e) => ["ok", "falta_emitir"].includes(resultados[e.id]?.status ?? "") && !desatualizadas.has(e.id),
+  );
   const faltaEmitir = batem.filter((e) => resultados[e.id].status === "falta_emitir");
 
   // Emite as que batem e ainda não foram consolidadas, e baixa todas as que
@@ -255,10 +360,9 @@ export function CentralIssPetropolis({
       try {
         let r = resultados[empresa.id];
         if (!r.consolidado) {
-          r = await emitirNaPrefeitura(empresa, competencia);
-          setResultados((atual) => ({ ...atual, [empresa.id]: r }));
+          r = await guardar(empresa, await emitirNaPrefeitura(empresa, competencia));
         }
-        if (r.pdf) zip.file(nomeArquivo(empresa), r.pdf);
+        zip.file(nomeArquivo(empresa), await pdfDaGuia(empresa, r));
       } catch (e) {
         falhas.push(`${empresa.nome}: ${e instanceof Error ? e.message : e}`);
       }
@@ -283,8 +387,13 @@ export function CentralIssPetropolis({
     <div className="flex flex-col gap-6">
       <Card className="flex flex-col gap-3 p-6">
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" loading={conferindoTodas} onClick={conferirTodas}>
-            Conferir todas ({empresas.length})
+          <Button
+            type="button"
+            loading={conferindoTodas}
+            disabled={pendentes.length === 0}
+            onClick={conferirPendentes}
+          >
+            Conferir pendentes ({pendentes.length})
           </Button>
           {podeEmitir && (
             <Button
@@ -304,10 +413,13 @@ export function CentralIssPetropolis({
                 (Object.entries(contagem) as [Status, number][])
                   .map(([s, n]) => `${n} ${STATUS_ROTULO[s].texto.toLowerCase()}`)
                   .join(", ")}
+            {desatualizadas.size > 0 && ` · ${desatualizadas.size} desatualizada(s)`}
           </span>
         </div>
         <p className="text-xs text-foreground/50">
-          Conferir é só leitura. Emitir consolida o movimento do mês na Prefeitura (definitivo) e baixa a guia — o
+          Conferir é só leitura, e o resultado fica salvo: &ldquo;Conferir pendentes&rdquo; só roda as que ainda não
+          foram conferidas, deram erro ou ficaram desatualizadas (o faturamento da SOMA mudou depois da
+          conferência); pra refazer uma, use &ldquo;Reprocessar&rdquo; na linha. Emitir consolida o movimento do mês na Prefeitura (definitivo) e baixa a guia — o
           sistema marca o fechamento sozinho. Guia emitida direto no site: use &ldquo;Marcar emitida por fora&rdquo;.
         </p>
         {lote && !lote.rodando && lote.falhas.length > 0 && (
@@ -343,6 +455,7 @@ export function CentralIssPetropolis({
             {empresas.map((empresa) => {
               const r = resultados[empresa.id];
               const ocupada = carregando.has(empresa.id);
+              const desatualizada = desatualizadas.has(empresa.id);
               return (
                 <tr key={empresa.id} className="align-top">
                   <td className="px-3 py-2">
@@ -387,7 +500,24 @@ export function CentralIssPetropolis({
                         <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${STATUS_ROTULO[r.status].classe}`}>
                           {STATUS_ROTULO[r.status].texto}
                         </span>
+                        {desatualizada && (
+                          <span className="ml-1 rounded bg-warning-soft px-1.5 py-0.5 text-[11px] font-medium text-warning">
+                            Desatualizada
+                          </span>
+                        )}
                         <p className="mt-1 text-xs text-foreground/70">{r.mensagem}</p>
+                        {desatualizada && (
+                          <p className="mt-1 text-xs text-warning">
+                            O faturamento da SOMA mudou depois desta conferência — reprocesse antes de emitir.
+                          </p>
+                        )}
+                        {r.conferidoEm && (
+                          <p className="mt-1 text-[10px] text-foreground/50">
+                            Conferido em {dataHora(r.conferidoEm)}
+                            {r.conferidoPor && ` por ${r.conferidoPor}`}
+                          </p>
+                        )}
+                        {r.erroSalvar && <p className="mt-1 text-[10px] text-danger">Não foi salvo: {r.erroSalvar}</p>}
                       </>
                     )}
                   </td>
@@ -402,14 +532,14 @@ export function CentralIssPetropolis({
                   <td className="whitespace-nowrap px-3 py-2 text-right">
                     <div className="flex justify-end gap-2">
                       <Button type="button" variant="ghost" loading={ocupada} onClick={() => conferir(empresa)}>
-                        Conferir
+                        {r ? "Reprocessar" : "Conferir"}
                       </Button>
-                      {r?.consolidado && r.pdf && (
+                      {r?.consolidado && (
                         <Button type="button" variant="secondary" disabled={ocupada} onClick={() => emitirUma(empresa)}>
                           Baixar
                         </Button>
                       )}
-                      {podeEmitir && r?.status === "falta_emitir" && (
+                      {podeEmitir && r?.status === "falta_emitir" && !desatualizada && (
                         <Button type="button" variant="secondary" disabled={ocupada} onClick={() => emitirUma(empresa)}>
                           Emitir e baixar
                         </Button>

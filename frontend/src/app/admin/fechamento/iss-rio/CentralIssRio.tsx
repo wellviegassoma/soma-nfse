@@ -7,6 +7,8 @@ import { FechamentoIssCelula, type FechamentoIssResumo } from "@/components/fech
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { salvarConferenciaIss } from "@/lib/actions/iss-conferencias";
+import type { ConferenciaIssSalva } from "@/lib/iss-conferencias";
 import type { ConferenciaIss, DiferencaNotas, LinhaGuia } from "./conferencia/[companyId]/route";
 
 export type EmpresaIssRio = {
@@ -20,6 +22,9 @@ export type EmpresaIssRio = {
   certificadoVenceEmBreve: boolean;
   certificadoVenceEm: string | null;
   fechamento: FechamentoIssResumo;
+  // Retrato do faturamento da SOMA agora — vai junto ao salvar a conferência.
+  assinaturaSoma: string;
+  conferenciaSalva: ConferenciaIssSalva | null;
 };
 
 type Status = "ok" | "falta_emitir" | "diferenca" | "sem_movimento" | "sem_guia" | "cadastro" | "erro";
@@ -36,7 +41,44 @@ type Resultado = {
   reabrirUniprofissional: boolean;
   pendentesAnteriores: ConferenciaIss["pendentes_anteriores"];
   outrasGuias: LinhaGuia[];
+  // Quando/quem conferiu (conferência salva) — ou o erro ao salvar.
+  conferidoEm?: string;
+  conferidoPor?: string | null;
+  erroSalvar?: string;
 };
+
+const STATUS_VALIDOS = ["ok", "falta_emitir", "diferenca", "sem_movimento", "sem_guia", "cadastro", "erro"];
+
+// Conferência salva -> resultado da tela. Registro em formato estranho é
+// ignorado (a linha só aparece como não conferida).
+function resultadoSalvo(salva: ConferenciaIssSalva): Resultado | null {
+  const d = salva.dados as Partial<Resultado>;
+  if (!STATUS_VALIDOS.includes(salva.status)) return null;
+  return {
+    status: salva.status as Status,
+    mensagem: salva.mensagem ?? "",
+    guia: d.guia ?? null,
+    baseNotaCarioca: d.baseNotaCarioca ?? null,
+    retencoes: d.retencoes ?? 0,
+    emitida: d.emitida ?? false,
+    reabrirUniprofissional: d.reabrirUniprofissional ?? false,
+    pendentesAnteriores: d.pendentesAnteriores ?? [],
+    outrasGuias: d.outrasGuias ?? [],
+    conferidoEm: salva.conferidoEm,
+    conferidoPor: salva.conferidoPor,
+  };
+}
+
+function dataHora(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 const STATUS_ROTULO: Record<Status, { texto: string; classe: string }> = {
   ok: { texto: "Bate", classe: "bg-success-soft text-success" },
@@ -213,7 +255,18 @@ export function CentralIssRio({
   podeMarcarFechamento: boolean;
 }) {
   const router = useRouter();
-  const [resultados, setResultados] = useState<Record<string, Resultado>>({});
+  const [resultados, setResultados] = useState<Record<string, Resultado>>(() => {
+    const iniciais: Record<string, Resultado> = {};
+    for (const e of empresas) {
+      const r = e.conferenciaSalva && resultadoSalvo(e.conferenciaSalva);
+      if (r) iniciais[e.id] = r;
+    }
+    return iniciais;
+  });
+  // Faturamento/cadastro mudou desde a conferência salva: reprocessar antes de emitir.
+  const [desatualizadas, setDesatualizadas] = useState<Set<string>>(
+    () => new Set(empresas.filter((e) => e.conferenciaSalva?.desatualizada).map((e) => e.id)),
+  );
   const [carregando, setCarregando] = useState<Set<string>>(new Set());
   const [notas, setNotas] = useState<Record<string, DiferencaNotas | string>>({});
   const [conferindoTodas, setConferindoTodas] = useState(false);
@@ -225,6 +278,39 @@ export function CentralIssRio({
       const novo = new Set(atual);
       if (ligado) novo.add(id);
       else novo.delete(id);
+      return novo;
+    });
+  }
+
+  // Mostra o resultado e salva a conferência (status + quando/quem), pra
+  // central abrir com ela da próxima vez sem logar no Nota Carioca.
+  async function guardar(empresa: EmpresaIssRio, resultado: Resultado) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { conferidoEm, conferidoPor, erroSalvar, ...dados } = resultado;
+    let final: Resultado = resultado;
+    try {
+      const salvo = await salvarConferenciaIss({
+        companyId: empresa.id,
+        competencia,
+        municipio: "rio",
+        status: resultado.status,
+        mensagem: resultado.mensagem,
+        dados,
+        assinaturaSoma: empresa.assinaturaSoma,
+        faturamentoSoma: empresa.receitaSoma,
+        issSoma: empresa.issSoma,
+      });
+      final = salvo.ok
+        ? { ...dados, conferidoEm: salvo.conferidoEm, conferidoPor: salvo.conferidoPor }
+        : { ...dados, erroSalvar: salvo.erro };
+    } catch (e) {
+      final = { ...dados, erroSalvar: e instanceof Error ? e.message : String(e) };
+    }
+    setResultados((r) => ({ ...r, [empresa.id]: final }));
+    setDesatualizadas((atual) => {
+      if (!atual.has(empresa.id)) return atual;
+      const novo = new Set(atual);
+      novo.delete(empresa.id);
       return novo;
     });
   }
@@ -252,31 +338,34 @@ export function CentralIssRio({
       const resposta = await fetch(`/admin/fechamento/iss-rio/conferencia/${empresa.id}?competencia=${competencia}`);
       const corpo = await resposta.json();
       if (!resposta.ok) throw new Error(corpo.error ?? `HTTP ${resposta.status}`);
-      setResultados((r) => ({ ...r, [empresa.id]: avaliar(empresa, corpo as ConferenciaIss) }));
+      await guardar(empresa, avaliar(empresa, corpo as ConferenciaIss));
     } catch (e) {
-      setResultados((r) => ({
-        ...r,
-        [empresa.id]: {
-          status: "erro",
-          mensagem: e instanceof Error ? e.message : String(e),
-          guia: null,
-          baseNotaCarioca: null,
-          retencoes: 0,
-          emitida: false,
-          reabrirUniprofissional: false,
-          pendentesAnteriores: [],
-          outrasGuias: [],
-        },
-      }));
+      await guardar(empresa, {
+        status: "erro",
+        mensagem: e instanceof Error ? e.message : String(e),
+        guia: null,
+        baseNotaCarioca: null,
+        retencoes: 0,
+        emitida: false,
+        reabrirUniprofissional: false,
+        pendentesAnteriores: [],
+        outrasGuias: [],
+      });
     } finally {
       marcar(empresa.id, false);
     }
   }
 
+  // Só as que ainda não têm conferência salva, deram erro ou ficaram
+  // desatualizadas — as outras ficam como estão ("Reprocessar" na linha).
+  const pendentes = empresas.filter(
+    (e) => !resultados[e.id] || resultados[e.id].status === "erro" || desatualizadas.has(e.id),
+  );
+
   // 3 de cada vez: cada conferência é um login de Chromium no serviço.
-  async function conferirTodas() {
+  async function conferirPendentes() {
     setConferindoTodas(true);
-    const fila = [...empresas];
+    const fila = [...pendentes];
     await Promise.all(
       Array.from({ length: 3 }, async () => {
         for (let e = fila.shift(); e; e = fila.shift()) await conferir(e);
@@ -321,7 +410,9 @@ export function CentralIssRio({
     }
   }
 
-  const prontasParaEmitir = empresas.filter((e) => PODE_EMITIR.includes(resultados[e.id]?.status));
+  const prontasParaEmitir = empresas.filter(
+    (e) => PODE_EMITIR.includes(resultados[e.id]?.status) && !desatualizadas.has(e.id),
+  );
 
   // Emite as que ainda não foram emitidas e baixa todas num ZIP com o nome
   // padrão de cada guia ("093 - CHRISORTO - ISS - 202610.pdf").
@@ -360,8 +451,13 @@ export function CentralIssRio({
     <div className="flex flex-col gap-6">
       <Card className="flex flex-col gap-3 p-6">
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" loading={conferindoTodas} onClick={conferirTodas}>
-            Conferir todas ({empresas.length})
+          <Button
+            type="button"
+            loading={conferindoTodas}
+            disabled={pendentes.length === 0}
+            onClick={conferirPendentes}
+          >
+            Conferir pendentes ({pendentes.length})
           </Button>
           <Button
             type="button"
@@ -376,12 +472,15 @@ export function CentralIssRio({
             <p className="text-xs text-foreground/60">
               {conferidas}/{empresas.length} conferidas —{" "}
               {(Object.keys(contagem) as Status[]).map((s) => `${STATUS_ROTULO[s].texto}: ${contagem[s]}`).join(" · ")}
+              {desatualizadas.size > 0 && ` · Desatualizadas: ${desatualizadas.size}`}
             </p>
           )}
         </div>
         <p className="text-xs text-foreground/50">
-          Conferir só lê o Nota Carioca. Emitir gera a guia oficial no site — só entram as que batem com a SOMA
-          (as com diferença ficam pra você decidir, com o botão da própria linha).
+          Conferir só lê o Nota Carioca, e o resultado fica salvo: &ldquo;Conferir pendentes&rdquo; só roda as que
+          ainda não foram conferidas, deram erro ou ficaram desatualizadas (o faturamento da SOMA mudou depois da
+          conferência). Pra refazer uma, use &ldquo;Reprocessar&rdquo; na linha. Emitir gera a guia oficial no site — só
+          entram as que batem com a SOMA e não estão desatualizadas.
         </p>
         {lote && !lote.rodando && (
           <Alert tone={lote.falhas.length ? "warning" : "success"}>
@@ -423,6 +522,7 @@ export function CentralIssRio({
               const r = resultados[empresa.id];
               const ocupada = carregando.has(empresa.id);
               const diferencaNotas = notas[empresa.id];
+              const desatualizada = desatualizadas.has(empresa.id);
               return (
                 <tr key={empresa.id} className="align-top">
                   <td className="px-3 py-2">
@@ -468,7 +568,24 @@ export function CentralIssRio({
                         >
                           {STATUS_ROTULO[r.status].texto}
                         </span>
+                        {desatualizada && (
+                          <span className="ml-1 rounded bg-warning-soft px-1.5 py-0.5 text-[11px] font-medium text-warning">
+                            Desatualizada
+                          </span>
+                        )}
                         <p className="mt-1 text-xs text-foreground/70">{r.mensagem}</p>
+                        {desatualizada && (
+                          <p className="mt-1 text-xs text-warning">
+                            O faturamento da SOMA mudou depois desta conferência — reprocesse antes de emitir.
+                          </p>
+                        )}
+                        {r.conferidoEm && (
+                          <p className="mt-1 text-[10px] text-foreground/50">
+                            Conferido em {dataHora(r.conferidoEm)}
+                            {r.conferidoPor && ` por ${r.conferidoPor}`}
+                          </p>
+                        )}
+                        {r.erroSalvar && <p className="mt-1 text-[10px] text-danger">Não foi salvo: {r.erroSalvar}</p>}
                         {r.pendentesAnteriores.length > 0 && (
                           <p className="mt-1 text-xs text-warning">
                             Em aberto de outros meses:{" "}
@@ -498,14 +615,14 @@ export function CentralIssRio({
                   <td className="whitespace-nowrap px-3 py-2 text-right">
                     <div className="flex justify-end gap-2">
                       <Button type="button" variant="ghost" loading={ocupada} onClick={() => conferir(empresa)}>
-                        Conferir
+                        {r ? "Reprocessar" : "Conferir"}
                       </Button>
                       {r?.status === "diferenca" && r.guia?.origem.includes("NFS-e") && (
                         <Button type="button" variant="secondary" disabled={ocupada} onClick={() => compararNotas(empresa)}>
                           Comparar notas
                         </Button>
                       )}
-                      {r?.guia && r.status !== "erro" && r.status !== "cadastro" && (
+                      {r?.guia && r.status !== "erro" && r.status !== "cadastro" && !desatualizada && (
                         <Button type="button" variant="secondary" disabled={ocupada} onClick={() => emitirUma(empresa)}>
                           {r.emitida ? "Baixar" : "Emitir e baixar"}
                         </Button>

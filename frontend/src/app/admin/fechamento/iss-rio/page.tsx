@@ -10,6 +10,7 @@ import { resolverIssMensal } from "@/lib/calculo-impostos";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import { temPermissao } from "@/lib/auth";
 import { buscarFechamentosIss } from "@/lib/iss-fechamentos";
+import { assinaturaFaturamentoIss, buscarConferenciasIss } from "@/lib/iss-conferencias";
 import { CentralIssRio, type EmpresaIssRio } from "./CentralIssRio";
 
 export const metadata = { title: "Central ISS Rio — Painel SOMA" };
@@ -49,26 +50,28 @@ export default async function CentralIssRioPage(props: PageProps<"/admin/fechame
     temPermissao("fechamento.executar"),
   ]);
 
-  const empresas: EmpresaIssRio[] = await Promise.all(
+  const empresasSemConferencia = await Promise.all(
     (companies ?? []).map(async (company) => {
       const notas = await buscarFaturamentoMensal(supabase, company.id);
       const receita = somarFaturamento(notas, [competencia]);
       const certificado = Array.isArray(company.certificates) ? company.certificates[0] : company.certificates;
       const situacao = situacaoCertificado(certificado?.expires_at);
+      const issSoma = resolverIssMensal({
+        issTipo: company.iss_tipo,
+        aliquotaIss: company.iss_aliquota_padrao,
+        valorFixoProfissional: company.iss_valor_fixo_profissional,
+        quantidadeProfissionais: company.iss_quantidade_profissionais,
+        receitaMes: receita,
+        receitaIssRetido: somarFaturamentoIssRetido(notas, [competencia]),
+      });
       return {
         id: company.id,
         nome: `${company.codigo_cliente ? `${company.codigo_cliente} ` : ""}${company.trade_name || company.legal_name}`,
         prefixoArquivo: prefixoArquivoEmpresa(company),
         issTipo: company.iss_tipo,
         receitaSoma: receita,
-        issSoma: resolverIssMensal({
-          issTipo: company.iss_tipo,
-          aliquotaIss: company.iss_aliquota_padrao,
-          valorFixoProfissional: company.iss_valor_fixo_profissional,
-          quantidadeProfissionais: company.iss_quantidade_profissionais,
-          receitaMes: receita,
-          receitaIssRetido: somarFaturamentoIssRetido(notas, [competencia]),
-        }),
+        issSoma,
+        assinaturaSoma: assinaturaFaturamentoIss(notas, competencia, company.iss_tipo, issSoma),
         certificadoValido: situacao.valido,
         certificadoVenceEmBreve: situacao.venceEmBreve,
         certificadoVenceEm: certificado?.expires_at ?? null,
@@ -76,6 +79,19 @@ export default async function CentralIssRioPage(props: PageProps<"/admin/fechame
       };
     }),
   );
+
+  // Última conferência salva de cada empresa — a central abre com ela em
+  // vez de logar no Nota Carioca de novo.
+  const conferencias = await buscarConferenciasIss(
+    supabase,
+    "rio",
+    competencia,
+    new Map(empresasSemConferencia.map((e) => [e.id, e.assinaturaSoma])),
+  );
+  const empresas: EmpresaIssRio[] = empresasSemConferencia.map((e) => ({
+    ...e,
+    conferenciaSalva: conferencias.get(e.id) ?? null,
+  }));
 
   return (
     <div className="flex flex-col gap-6">

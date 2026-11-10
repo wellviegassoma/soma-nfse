@@ -10,6 +10,7 @@ import { buscarFaturamentoMensal, somarFaturamento, somarFaturamentoIssRetido } 
 import { resolverIssMensal } from "@/lib/calculo-impostos";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import { buscarFechamentosIss } from "@/lib/iss-fechamentos";
+import { assinaturaFaturamentoIss, buscarConferenciasIss } from "@/lib/iss-conferencias";
 import { IBGE_PETROPOLIS } from "@/lib/iss-petropolis";
 import { CentralIssPetropolis, type EmpresaIssPetropolis } from "./CentralIssPetropolis";
 
@@ -48,30 +49,45 @@ export default async function CentralIssPetropolisPage(props: PageProps<"/admin/
     temPermissao("impostos.emitir_iss"),
   ]);
 
-  const empresas: EmpresaIssPetropolis[] = await Promise.all(
+  const empresasSemConferencia = await Promise.all(
     (companies ?? []).map(async (company) => {
       const notas = await buscarFaturamentoMensal(supabase, company.id);
       const receita = somarFaturamento(notas, [competencia]);
       const retido = somarFaturamentoIssRetido(notas, [competencia]);
+      const issSoma = resolverIssMensal({
+        issTipo: company.iss_tipo,
+        aliquotaIss: company.iss_aliquota_padrao,
+        valorFixoProfissional: company.iss_valor_fixo_profissional,
+        quantidadeProfissionais: company.iss_quantidade_profissionais,
+        receitaMes: receita,
+        receitaIssRetido: retido,
+      });
       return {
         id: company.id,
         nome: `${company.codigo_cliente ? `${company.codigo_cliente} ` : ""}${company.trade_name || company.legal_name}`,
         prefixoArquivo: prefixoArquivoEmpresa(company),
         receitaSoma: receita,
         receitaRetidaSoma: retido,
-        issSoma: resolverIssMensal({
-          issTipo: company.iss_tipo,
-          aliquotaIss: company.iss_aliquota_padrao,
-          valorFixoProfissional: company.iss_valor_fixo_profissional,
-          quantidadeProfissionais: company.iss_quantidade_profissionais,
-          receitaMes: receita,
-          receitaIssRetido: retido,
-        }),
+        issSoma,
+        assinaturaSoma: assinaturaFaturamentoIss(notas, competencia, company.iss_tipo, issSoma),
         temAcesso: !!company.petropolis_cmc || comLogin.has(company.id),
         fechamento: fechamentos.get(company.id) ?? null,
       };
     }),
   );
+
+  // Última conferência salva de cada empresa — a central abre com ela em
+  // vez de logar no site da Prefeitura de novo.
+  const conferencias = await buscarConferenciasIss(
+    supabase,
+    "petropolis",
+    competencia,
+    new Map(empresasSemConferencia.map((e) => [e.id, e.assinaturaSoma])),
+  );
+  const empresas: EmpresaIssPetropolis[] = empresasSemConferencia.map((e) => ({
+    ...e,
+    conferenciaSalva: conferencias.get(e.id) ?? null,
+  }));
 
   return (
     <div className="flex flex-col gap-6">
