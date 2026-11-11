@@ -33,6 +33,12 @@ const TRADUCOES: Record<string, Omit<ErroEmissaoTraduzido, "codigo">> = {
     acao: "Peça pra SOMA conferir o código municipal no cadastro do serviço.",
     onde: "servico",
   },
+  E0312: {
+    mensagem:
+      "A prefeitura não aceitou o código do serviço sem o código municipal (ou com o código municipal errado).",
+    acao: "Peça pra SOMA preencher o código municipal no cadastro do serviço (ex.: 401 para Medicina em Petrópolis).",
+    onde: "servico",
+  },
   E0116: {
     mensagem: "A prefeitura exige a inscrição municipal da empresa na nota.",
     acao: "Peça pra SOMA cadastrar a inscrição municipal em Dados fiscais.",
