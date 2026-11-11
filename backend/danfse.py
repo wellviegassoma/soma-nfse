@@ -474,7 +474,9 @@ def gerar_danfse_pdf(xml_nfse: str, caminho_saida: str, cancelada: bool = False)
         [(0, 1, "PIS - Débito Apuração Própria", _moeda(_t(piscofins, "vPis"))),
          (1, 1, "COFINS - Débito Apuração Própria", _moeda(_t(piscofins, "vCofins"))),
          (2, 2, "Descrição Contrib. Sociais - Retidas",
-          DESCRICAO_TP_RET_PISCOFINS.get(_t(piscofins, "tpRetPisCofins"), "-") if _t(trib_fed, "vRetCSLL") else "-")],
+          # Igual ao portal: mostra sempre o tipo informado na DPS, inclusive
+          # "0 - PIS/COFINS/CSLL Não Retidos" (tomador PF ou sem retenção).
+          DESCRICAO_TP_RET_PISCOFINS.get(_t(piscofins, "tpRetPisCofins"), "-"))],
     ])
 
     # Tributação IBS/CBS
