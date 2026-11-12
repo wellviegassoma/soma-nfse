@@ -22,6 +22,9 @@ export type DadosCnpj = {
   ativa: boolean;
   simplesNacional: boolean;
   dataAbertura: string | null;
+  email: string | null;
+  /** "RUA", "AVENIDA"... — a BrasilAPI separa do logradouro. */
+  tipoLogradouro: string | null;
 };
 
 type BrasilApiCnpjResponse = {
@@ -41,6 +44,8 @@ type BrasilApiCnpjResponse = {
   descricao_situacao_cadastral: string | null;
   opcao_pelo_simples: boolean | null;
   data_inicio_atividade: string | null;
+  email?: string | null;
+  descricao_tipo_de_logradouro?: string | null;
 };
 
 export async function buscarDadosCnpj(
@@ -94,6 +99,8 @@ export async function buscarDadosCnpj(
       ativa: (situacao || "").toUpperCase() === "ATIVA",
       simplesNacional: json.opcao_pelo_simples === true,
       dataAbertura: json.data_inicio_atividade || null,
+      email: json.email ? json.email.toLowerCase() : null,
+      tipoLogradouro: json.descricao_tipo_de_logradouro || null,
     },
   };
 }

@@ -9,6 +9,7 @@ import { uuidLike } from "@/lib/zod-helpers";
 import { extrairTomadorDeXml } from "@/lib/xml-tomador";
 import { logAudit } from "@/lib/audit";
 import { buscarDadosCep, type DadosCep } from "@/lib/cep-lookup";
+import { buscarDadosCnpj } from "@/lib/cnpj-lookup";
 import type { ActionState } from "@/lib/actions/auth";
 
 async function requireCompanyMember(companyId: string) {
@@ -21,6 +22,105 @@ async function requireCompanyMember(companyId: string) {
 export async function buscarCepAction(cep: string): Promise<{ data: DadosCep } | { error: string }> {
   await requireUser();
   return buscarDadosCep(cep.replace(/\D/g, ""));
+}
+
+export type DadosTomadorBusca = {
+  nome?: string;
+  email?: string;
+  cep?: string;
+  endereco?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+};
+
+function cpfValido(cpf: string): boolean {
+  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+  const dv = (base: string, peso: number) => {
+    let soma = 0;
+    for (const d of base) soma += Number(d) * peso--;
+    const r = (soma * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  return dv(cpf.slice(0, 9), 10) === Number(cpf[9]) && dv(cpf.slice(0, 10), 11) === Number(cpf[10]);
+}
+
+/**
+ * "Buscar dados" do cadastro de tomador.
+ * - CNPJ: Receita Federal (BrasilAPI, gratuito) — razão social, endereço, e-mail.
+ * - CPF: a Receita não libera nome por CPF de forma pública. Procura o CPF nos
+ *   tomadores já cadastrados no sistema: na própria empresa pra qualquer um;
+ *   nas outras empresas só pra equipe da SOMA (dado de paciente não vaza
+ *   entre clientes no portal).
+ */
+export async function buscarDadosTomadorAction(
+  companyId: string,
+  documento: string,
+): Promise<{ data: DadosTomadorBusca; origem: string; aviso?: string } | { error: string }> {
+  await requireCompanyMember(companyId);
+  const doc = documento.replace(/\D/g, "");
+
+  if (doc.length === 14) {
+    const r = await buscarDadosCnpj(doc);
+    if ("error" in r) return { error: r.error };
+    const d = r.data;
+    const logradouro = [d.tipoLogradouro, d.logradouro].filter(Boolean).join(" ");
+    return {
+      origem: "com os dados da Receita Federal",
+      aviso: d.ativa ? undefined : `Atenção: CNPJ com situação "${d.situacaoCadastral ?? "não ativa"}" na Receita.`,
+      data: {
+        nome: d.razaoSocial,
+        email: d.email ?? undefined,
+        cep: d.cep ?? undefined,
+        endereco: logradouro || undefined,
+        numero: d.numero ?? undefined,
+        complemento: d.complemento ?? undefined,
+        bairro: d.bairro ?? undefined,
+        cidade: d.municipio ?? undefined,
+        uf: d.uf ?? undefined,
+      },
+    };
+  }
+
+  if (doc.length !== 11) return { error: "Digite um CPF (11 dígitos) ou CNPJ (14 dígitos)." };
+  if (!cpfValido(doc)) return { error: "CPF inválido — confira os dígitos." };
+
+  const staff = await isSomaStaff();
+  const supabase = await createClient();
+  let consulta = supabase
+    .from("customers")
+    .select("company_id, name, email, zip_code, address, number, complement, district, city, state, updated_at")
+    .eq("cpf_cnpj", doc)
+    .order("updated_at", { ascending: false })
+    .limit(20);
+  if (!staff) consulta = consulta.eq("company_id", companyId);
+  const { data: achados } = await consulta;
+  if (!achados || achados.length === 0) {
+    return {
+      error:
+        "A Receita não libera o nome por CPF em consulta pública, e esse CPF ainda não está cadastrado no sistema. Preencha o nome à mão.",
+    };
+  }
+  // O cadastro mais completo (mais campos preenchidos), desempatando pelo mais recente.
+  const preenchidos = (c: (typeof achados)[number]) =>
+    [c.email, c.zip_code, c.address, c.number, c.district, c.city, c.state].filter(Boolean).length;
+  const melhor = [...achados].sort((a, b) => preenchidos(b) - preenchidos(a))[0];
+  return {
+    origem: melhor.company_id === companyId ? "com o cadastro desta empresa" : "com o cadastro de outra empresa da SOMA",
+    data: {
+      nome: melhor.name,
+      email: melhor.email ?? undefined,
+      cep: melhor.zip_code ?? undefined,
+      endereco: melhor.address ?? undefined,
+      numero: melhor.number ?? undefined,
+      complemento: melhor.complement ?? undefined,
+      bairro: melhor.district ?? undefined,
+      cidade: melhor.city ?? undefined,
+      uf: melhor.state ?? undefined,
+    },
+  };
 }
 
 const customerSchema = z.object({

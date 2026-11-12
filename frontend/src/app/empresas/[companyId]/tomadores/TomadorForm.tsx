@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
-import { saveCustomer, buscarCepAction } from "@/lib/actions/tomadores";
+import { saveCustomer, buscarCepAction, buscarDadosTomadorAction } from "@/lib/actions/tomadores";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -27,6 +27,15 @@ export function TomadorForm({
   const [state, formAction, pending] = useActionState(saveCustomer, undefined);
   const [type, setType] = useState(customer?.type ?? "PF");
 
+  const [documento, setDocumento] = useState(customer?.cpf_cnpj ?? "");
+  const [nome, setNome] = useState(customer?.name ?? "");
+  const [email, setEmail] = useState(customer?.email ?? "");
+  const [numero, setNumero] = useState(customer?.number ?? "");
+  const [complemento, setComplemento] = useState(customer?.complement ?? "");
+  const [enderecoAberto, setEnderecoAberto] = useState(Boolean(customer?.address));
+  const [buscandoDoc, setBuscandoDoc] = useState(false);
+  const [msgDoc, setMsgDoc] = useState<{ tom: "ok" | "erro"; texto: string } | null>(null);
+  const documentoDigits = documento.replace(/\D/g, "");
   const [zipCode, setZipCode] = useState(customer?.zip_code ?? "");
   const [address, setAddress] = useState(customer?.address ?? "");
   const [district, setDistrict] = useState(customer?.district ?? "");
@@ -57,6 +66,36 @@ export function TomadorForm({
     if (dados.uf) setUfEndereco(dados.uf);
   }
 
+  async function handleBuscarDocumento() {
+    setMsgDoc(null);
+    setBuscandoDoc(true);
+    const r = await buscarDadosTomadorAction(companyId, documentoDigits).catch(() => ({
+      error: "Não foi possível buscar agora. Tente de novo.",
+    }));
+    setBuscandoDoc(false);
+    if ("error" in r) {
+      setMsgDoc({ tom: "erro", texto: r.error });
+      return;
+    }
+    const d = r.data;
+    if (documentoDigits.length === 14) setType("PJ");
+    if (documentoDigits.length === 11) setType("PF");
+    if (d.nome) setNome(d.nome);
+    if (d.email) setEmail(d.email);
+    if (d.cep) setZipCode(d.cep);
+    if (d.endereco) setAddress(d.endereco);
+    if (d.numero) setNumero(d.numero);
+    if (d.complemento) setComplemento(d.complemento);
+    if (d.bairro) setDistrict(d.bairro);
+    if (d.cidade) setCity(d.cidade);
+    if (d.uf) setUfEndereco(d.uf);
+    if (d.cep || d.endereco) setEnderecoAberto(true);
+    setMsgDoc({
+      tom: "ok",
+      texto: `Dados preenchidos ${r.origem}. Confira antes de salvar.${r.aviso ? ` ${r.aviso}` : ""}`,
+    });
+  }
+
   return (
     <form action={formAction} className="flex flex-col gap-5">
       <input type="hidden" name="companyId" value={companyId} />
@@ -78,19 +117,48 @@ export function TomadorForm({
           </Select>
         </Field>
         <Field label={type === "PF" ? "CPF" : "CNPJ"} htmlFor="cpfCnpj" hint="Opcional">
-          <Input id="cpfCnpj" name="cpfCnpj" defaultValue={customer?.cpf_cnpj ?? ""} />
+          <div className="flex gap-2">
+            <Input
+              id="cpfCnpj"
+              name="cpfCnpj"
+              inputMode="numeric"
+              value={documento}
+              onChange={(e) => {
+                setDocumento(e.target.value);
+                const n = e.target.value.replace(/\D/g, "").length;
+                if (n === 14) setType("PJ");
+                if (n === 11) setType("PF");
+              }}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              loading={buscandoDoc}
+              disabled={documentoDigits.length !== 11 && documentoDigits.length !== 14}
+              onClick={handleBuscarDocumento}
+            >
+              Buscar dados
+            </Button>
+          </div>
         </Field>
       </div>
+      {msgDoc && (
+        <p className={`-mt-2 text-xs ${msgDoc.tom === "erro" ? "text-danger" : "text-success"}`}>{msgDoc.texto}</p>
+      )}
 
       <Field label={type === "PF" ? "Nome" : "Razão social"} htmlFor="name">
-        <Input id="name" name="name" defaultValue={customer?.name} autoFocus required />
+        <Input id="name" name="name" value={nome} onChange={(e) => setNome(e.target.value)} required />
       </Field>
 
       <Field label="E-mail" htmlFor="email" hint="Opcional">
-        <Input id="email" name="email" type="email" defaultValue={customer?.email ?? ""} />
+        <Input id="email" name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
       </Field>
 
-      <details className="group" open={Boolean(customer?.address)}>
+      <details
+        className="group"
+        open={enderecoAberto}
+        onToggle={(e) => setEnderecoAberto((e.currentTarget as HTMLDetailsElement).open)}
+      >
         <summary className="cursor-pointer text-sm font-medium text-brand">
           Endereço (opcional)
         </summary>
@@ -122,10 +190,10 @@ export function TomadorForm({
             <Input id="address" name="address" value={address} onChange={(e) => setAddress(e.target.value)} />
           </Field>
           <Field label="Número" htmlFor="number">
-            <Input id="number" name="number" defaultValue={customer?.number ?? ""} />
+            <Input id="number" name="number" value={numero} onChange={(e) => setNumero(e.target.value)} />
           </Field>
           <Field label="Complemento" htmlFor="complement">
-            <Input id="complement" name="complement" defaultValue={customer?.complement ?? ""} />
+            <Input id="complement" name="complement" value={complemento} onChange={(e) => setComplemento(e.target.value)} />
           </Field>
           <Field label="Bairro" htmlFor="district">
             <Input
