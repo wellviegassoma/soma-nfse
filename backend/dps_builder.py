@@ -78,6 +78,8 @@ class DadosTomador:
     documento: str  # CPF (11 dígitos) ou CNPJ (14 dígitos) — detectado automaticamente
     nome: str
     email: Optional[str] = None
+    telefone: Optional[str] = None  # DDD + número (6 a 20 dígitos)
+    inscricao_municipal: Optional[str] = None
     # Endereço — presente em TODOS os exemplos reais de notas aceitas que
     # já vimos (mesmo não sendo estritamente obrigatório para todo
     # código de serviço). Todos opcionais, mas recomendado preencher.
@@ -370,6 +372,11 @@ def gerar_xml_dps(dados: DadosDPS) -> tuple[str, str]:
     email_xml = f"<email>{_escapar(prest.email)}</email>" if prest.email else ""
 
     email_tomador_xml = f"<email>{_escapar(dados.tomador.email)}</email>" if dados.tomador.email else ""
+    # Ordem do TCInfoPessoa: doc, CAEPF, IM, xNome, end, fone, email.
+    im_tomador = (dados.tomador.inscricao_municipal or "").strip()[:15]
+    im_tomador_xml = f"<IM>{_escapar(im_tomador)}</IM>" if im_tomador else ""
+    fone_tomador = _somente_digitos(dados.tomador.telefone or "")
+    fone_tomador_xml = f"<fone>{fone_tomador}</fone>" if 6 <= len(fone_tomador) <= 20 else ""
 
     tom = dados.tomador
     end_tomador_xml = ""
@@ -481,8 +488,10 @@ def gerar_xml_dps(dados: DadosDPS) -> tuple[str, str]:
         "</prest>"
         "<toma>"
         f"{tag_tomador_doc}"
+        f"{im_tomador_xml}"
         f"<xNome>{_escapar(dados.tomador.nome)}</xNome>"
         f"{end_tomador_xml}"
+        f"{fone_tomador_xml}"
         f"{email_tomador_xml}"
         "</toma>"
         "<serv>"

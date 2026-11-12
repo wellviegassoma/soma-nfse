@@ -94,6 +94,8 @@ def emitir_nota(req: EmitirNotaRequest):
                 data_competencia=req.data_competencia,
                 codigo_tributacao_municipal=req.codigo_tributacao_municipal,
                 tomador_email=req.tomador_email,
+                tomador_telefone=req.tomador_telefone,
+                tomador_inscricao_municipal=req.tomador_inscricao_municipal,
                 tomador_cep=req.tomador_cep,
                 tomador_logradouro=req.tomador_logradouro,
                 tomador_numero=req.tomador_numero,

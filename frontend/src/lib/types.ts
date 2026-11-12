@@ -220,6 +220,8 @@ export type Customer = {
   cpf_cnpj: string | null;
   name: string;
   email: string | null;
+  phone: string | null;
+  municipal_registration: string | null;
   zip_code: string | null;
   address: string | null;
   number: string | null;

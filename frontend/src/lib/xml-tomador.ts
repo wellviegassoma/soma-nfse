@@ -12,6 +12,8 @@ export type TomadorExtraido = {
   cpfCnpj: string;
   nome: string;
   email?: string;
+  phone?: string;
+  municipalRegistration?: string;
   zipCode?: string;
   address?: string;
   number?: string;
@@ -47,6 +49,8 @@ export function extrairTomadorDeXml(xml: string): TomadorExtraido | null {
     cpfCnpj,
     nome,
     email: extrairTag(toma, "email"),
+    phone: extrairTag(toma, "fone"),
+    municipalRegistration: extrairTag(toma, "IM"),
     zipCode: endNac ? extrairTag(endNac, "CEP") : undefined,
     address: end ? extrairTag(end, "xLgr") : undefined,
     number: end ? extrairTag(end, "nro") : undefined,

@@ -23,7 +23,7 @@ export default async function AdminEditarTomadorPage(
   const { data: customer } = await supabase
     .from("customers")
     .select(
-      "id, company_id, type, cpf_cnpj, name, email, zip_code, address, number, complement, district, city, state",
+      "id, company_id, type, cpf_cnpj, name, email, phone, municipal_registration, zip_code, address, number, complement, district, city, state",
     )
     .eq("id", customerId)
     .eq("company_id", companyId)

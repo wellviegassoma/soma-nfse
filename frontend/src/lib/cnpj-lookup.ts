@@ -25,6 +25,8 @@ export type DadosCnpj = {
   email: string | null;
   /** "RUA", "AVENIDA"... — a BrasilAPI separa do logradouro. */
   tipoLogradouro: string | null;
+  /** DDD + número, só dígitos. */
+  telefone: string | null;
 };
 
 type BrasilApiCnpjResponse = {
@@ -46,6 +48,7 @@ type BrasilApiCnpjResponse = {
   data_inicio_atividade: string | null;
   email?: string | null;
   descricao_tipo_de_logradouro?: string | null;
+  ddd_telefone_1?: string | null;
 };
 
 export async function buscarDadosCnpj(
@@ -101,6 +104,7 @@ export async function buscarDadosCnpj(
       dataAbertura: json.data_inicio_atividade || null,
       email: json.email ? json.email.toLowerCase() : null,
       tipoLogradouro: json.descricao_tipo_de_logradouro || null,
+      telefone: (json.ddd_telefone_1 || "").replace(/\D/g, "") || null,
     },
   };
 }

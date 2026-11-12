@@ -30,6 +30,8 @@ export function TomadorForm({
   const [documento, setDocumento] = useState(customer?.cpf_cnpj ?? "");
   const [nome, setNome] = useState(customer?.name ?? "");
   const [email, setEmail] = useState(customer?.email ?? "");
+  const [telefone, setTelefone] = useState(customer?.phone ?? "");
+  const [inscricaoMunicipal, setInscricaoMunicipal] = useState(customer?.municipal_registration ?? "");
   const [numero, setNumero] = useState(customer?.number ?? "");
   const [complemento, setComplemento] = useState(customer?.complement ?? "");
   const [enderecoAberto, setEnderecoAberto] = useState(Boolean(customer?.address));
@@ -82,6 +84,8 @@ export function TomadorForm({
     if (documentoDigits.length === 11) setType("PF");
     if (d.nome) setNome(d.nome);
     if (d.email) setEmail(d.email);
+    if (d.telefone) setTelefone(d.telefone);
+    if (d.inscricaoMunicipal) setInscricaoMunicipal(d.inscricaoMunicipal);
     if (d.cep) setZipCode(d.cep);
     if (d.endereco) setAddress(d.endereco);
     if (d.numero) setNumero(d.numero);
@@ -153,6 +157,29 @@ export function TomadorForm({
       <Field label="E-mail" htmlFor="email" hint="Opcional">
         <Input id="email" name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
       </Field>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Telefone" htmlFor="phone" hint="Opcional — DDD + número">
+          <Input
+            id="phone"
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            placeholder="(21) 99999-9999"
+            value={telefone}
+            onChange={(e) => setTelefone(e.target.value)}
+          />
+        </Field>
+        <Field label="Inscrição municipal" htmlFor="municipalRegistration" hint="Opcional">
+          <Input
+            id="municipalRegistration"
+            name="municipalRegistration"
+            maxLength={15}
+            value={inscricaoMunicipal}
+            onChange={(e) => setInscricaoMunicipal(e.target.value)}
+          />
+        </Field>
+      </div>
 
       <details
         className="group"

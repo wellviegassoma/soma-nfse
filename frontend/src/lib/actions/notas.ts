@@ -95,7 +95,9 @@ export async function issueNfse(
       .single(),
     supabase
       .from("customers")
-      .select("cpf_cnpj, name, email, zip_code, address, number, complement, district, city, state")
+      .select(
+        "cpf_cnpj, name, email, phone, municipal_registration, zip_code, address, number, complement, district, city, state",
+      )
       .eq("id", customerId)
       .single(),
     supabase
@@ -252,6 +254,8 @@ export async function issueNfse(
     tomador_documento: customer.cpf_cnpj,
     tomador_nome: customer.name,
     tomador_email: customer.email,
+    tomador_telefone: customer.phone,
+    tomador_inscricao_municipal: customer.municipal_registration,
     tomador_cep: customer.zip_code,
     tomador_logradouro: customer.address,
     tomador_numero: customer.number,

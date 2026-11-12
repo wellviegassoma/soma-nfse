@@ -27,6 +27,8 @@ export async function buscarCepAction(cep: string): Promise<{ data: DadosCep } |
 export type DadosTomadorBusca = {
   nome?: string;
   email?: string;
+  telefone?: string;
+  inscricaoMunicipal?: string;
   cep?: string;
   endereco?: string;
   numero?: string;
@@ -73,6 +75,7 @@ export async function buscarDadosTomadorAction(
       data: {
         nome: d.razaoSocial,
         email: d.email ?? undefined,
+        telefone: d.telefone ?? undefined,
         cep: d.cep ?? undefined,
         endereco: logradouro || undefined,
         numero: d.numero ?? undefined,
@@ -91,7 +94,9 @@ export async function buscarDadosTomadorAction(
   const supabase = await createClient();
   let consulta = supabase
     .from("customers")
-    .select("company_id, name, email, zip_code, address, number, complement, district, city, state, updated_at")
+    .select(
+      "company_id, name, email, phone, municipal_registration, zip_code, address, number, complement, district, city, state, updated_at",
+    )
     .eq("cpf_cnpj", doc)
     .order("updated_at", { ascending: false })
     .limit(20);
@@ -105,13 +110,15 @@ export async function buscarDadosTomadorAction(
   }
   // O cadastro mais completo (mais campos preenchidos), desempatando pelo mais recente.
   const preenchidos = (c: (typeof achados)[number]) =>
-    [c.email, c.zip_code, c.address, c.number, c.district, c.city, c.state].filter(Boolean).length;
+    [c.email, c.phone, c.zip_code, c.address, c.number, c.district, c.city, c.state].filter(Boolean).length;
   const melhor = [...achados].sort((a, b) => preenchidos(b) - preenchidos(a))[0];
   return {
     origem: melhor.company_id === companyId ? "com o cadastro desta empresa" : "com o cadastro de outra empresa da SOMA",
     data: {
       nome: melhor.name,
       email: melhor.email ?? undefined,
+      telefone: melhor.phone ?? undefined,
+      inscricaoMunicipal: melhor.municipal_registration ?? undefined,
       cep: melhor.zip_code ?? undefined,
       endereco: melhor.address ?? undefined,
       numero: melhor.number ?? undefined,
@@ -134,6 +141,13 @@ const customerSchema = z.object({
     .optional()
     .transform((v) => (v ? v.replace(/\D/g, "") : undefined)),
   email: z.string().trim().optional(),
+  phone: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v.replace(/\D/g, "") : undefined))
+    .refine((v) => !v || (v.length >= 6 && v.length <= 20), "Telefone: informe DDD + número."),
+  municipalRegistration: z.string().trim().max(15, "Inscrição municipal tem no máximo 15 caracteres.").optional(),
   zipCode: z.string().trim().optional(),
   address: z.string().trim().optional(),
   number: z.string().trim().optional(),
@@ -158,6 +172,8 @@ export async function saveCustomer(
     name: formData.get("name"),
     cpfCnpj: formData.get("cpfCnpj") || undefined,
     email: formData.get("email") || undefined,
+    phone: formData.get("phone") || undefined,
+    municipalRegistration: formData.get("municipalRegistration") || undefined,
     zipCode: formData.get("zipCode") || undefined,
     address: formData.get("address") || undefined,
     number: formData.get("number") || undefined,
@@ -178,6 +194,8 @@ export async function saveCustomer(
     name: rest.name,
     cpf_cnpj: rest.cpfCnpj || null,
     email: rest.email || null,
+    phone: rest.phone || null,
+    municipal_registration: rest.municipalRegistration || null,
     zip_code: rest.zipCode || null,
     address: rest.address || null,
     number: rest.number || null,
@@ -273,6 +291,8 @@ export async function importarTomadoresXml(
       cpf_cnpj: tomador.cpfCnpj,
       name: tomador.nome,
       email: tomador.email || null,
+      phone: tomador.phone?.replace(/\D/g, "") || null,
+      municipal_registration: tomador.municipalRegistration || null,
       zip_code: tomador.zipCode || null,
       address: tomador.address || null,
       number: tomador.number || null,

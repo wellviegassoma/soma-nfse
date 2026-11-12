@@ -38,6 +38,8 @@ class EmitirNotaRequest(BaseModel):
     tomador_documento: str
     tomador_nome: str
     tomador_email: Optional[str] = None
+    tomador_telefone: Optional[str] = None
+    tomador_inscricao_municipal: Optional[str] = None
     tomador_cep: Optional[str] = None
     tomador_logradouro: Optional[str] = None
     tomador_numero: Optional[str] = None

@@ -120,6 +120,8 @@ def emitir_nota(
     data_competencia: Optional[date] = None,
     codigo_tributacao_municipal: Optional[str] = None,
     tomador_email: Optional[str] = None,
+    tomador_telefone: Optional[str] = None,
+    tomador_inscricao_municipal: Optional[str] = None,
     tomador_cep: Optional[str] = None,
     tomador_logradouro: Optional[str] = None,
     tomador_numero: Optional[str] = None,
@@ -176,6 +178,7 @@ def emitir_nota(
         ),
         tomador=db.DadosTomador(
             documento=tomador_documento, nome=tomador_nome, email=tomador_email,
+            telefone=tomador_telefone, inscricao_municipal=tomador_inscricao_municipal,
             endereco_codigo_municipio=tomador_codigo_municipio or prestador.codigo_municipio_ibge,
             endereco_cep=tomador_cep, endereco_logradouro=tomador_logradouro,
             endereco_numero=tomador_numero, endereco_complemento=tomador_complemento,
