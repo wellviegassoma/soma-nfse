@@ -109,6 +109,13 @@ export async function receberComandoNota(messageId: string): Promise<{ pedidoId:
     ]);
 
     const limiteTempo = Date.parse(comando.timestamp);
+    // Um chamado pode ter vários pedidos: mensagens antes do "#nota" anterior
+    // já foram atendidas por ele (visto no teste real — o 3º #nota do mesmo
+    // chamado gerou rascunhos repetidos dos pedidos anteriores).
+    const anterior = mensagensChamado
+      .filter((m) => m.id !== comando.id && m.isComment && lerComando(m.text).ehComando && Date.parse(m.timestamp) < limiteTempo)
+      .at(-1);
+    const inicio = Math.max(limiteTempo - JANELA_MS, anterior ? Date.parse(anterior.timestamp) : -Infinity);
     const doCliente = mensagensChamado
       .filter(
         (m) =>
@@ -116,7 +123,7 @@ export async function receberComandoNota(messageId: string): Promise<{ pedidoId:
           !m.isComment &&
           TIPOS_CLIENTE.has(m.type) &&
           Date.parse(m.timestamp) <= limiteTempo &&
-          limiteTempo - Date.parse(m.timestamp) <= JANELA_MS,
+          Date.parse(m.timestamp) > inicio,
       )
       .slice(-MAX_MENSAGENS);
 
@@ -166,7 +173,7 @@ export async function receberComandoNota(messageId: string): Promise<{ pedidoId:
         anexos,
         status: semMensagem ? "ERRO" : "RECEBIDO",
         erro: semMensagem
-          ? "Nenhuma mensagem do cliente encontrada neste chamado (últimas 72h antes do #nota)."
+          ? "Nenhuma mensagem nova do cliente neste chamado (desde o #nota anterior, no máximo 72h)."
           : avisos.join(" ") || null,
       })
       .eq("id", pedidoId);
@@ -235,7 +242,7 @@ function montarAviso(p: {
   rascunhos: number | null;
 }): string {
   if (p.semMensagem) {
-    return "⚠️ SOMA Gestão: recebi o #nota, mas não achei mensagem do cliente neste chamado nas últimas 72h.";
+    return "⚠️ SOMA Gestão: recebi o #nota, mas não achei mensagem nova do cliente desde o #nota anterior (máx. 72h).";
   }
   const partes = [`${p.mensagens.length} mensagem(ns)`];
   if (p.anexos.length) partes.push(`${p.anexos.length} anexo(s)`);
