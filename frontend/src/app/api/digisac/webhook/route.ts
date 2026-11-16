@@ -14,7 +14,8 @@ import { lerComando, receberComandoNota } from "@/lib/pedido-nota/receber";
 //
 // Ver docs/pedido-nota-ia.md, Fase 1.
 
-export const maxDuration = 120;
+// Captura (Fase 1) + extração por IA (Fase 2) rodam no after() desta rota.
+export const maxDuration = 300;
 
 function segredoValido(request: Request): boolean {
   const esperado = process.env.DIGISAC_WEBHOOK_SECRET;

@@ -169,6 +169,41 @@ ao analista para escolher.
 
 ## Fase 2: IA monta o rascunho (3–4 dias)
 
+**Status (16/11/2026): código pronto e testado com dados fictícios; não publicado.**
+
+- [x] `src/lib/pedido-nota/extrair-core.ts` (sem banco, testável): instruções, catálogo da
+      empresa em cache, schema zod da resposta, `chamarIA` (AI SDK `generateText` +
+      `Output.object`; instruções em `instructions`, porque o AI SDK 7 recusa `role: system`
+      dentro de `messages`) e `posProcessar` (ids só do catálogo; o documento citado vence o
+      nome; alertas `TOMADOR_NOVO`, `TOMADOR_DIVERGENTE`, `DOCUMENTO_INVALIDO`,
+      `SERVICO_INCERTO`, `VALOR_AUSENTE`, `VALOR_ACIMA_PADRAO` (> 3× a média),
+      `POSSIVEL_DUPLICIDADE` (mesmo valor em 7 dias), `COMPETENCIA_FORA_DO_MES`,
+      `AUDIO_NAO_TRANSCRITO`, `OBSERVACAO_IA`).
+- [x] `src/lib/pedido-nota/extrair.ts`: lê o pedido, trava (`EXTRAINDO`), monta o catálogo
+      (serviços ativos, até 400 tomadores com os das últimas notas primeiro, 15 últimas notas),
+      prepara os anexos (imagem/PDF até 18 MB no total vão para a IA; a planilha passa pelo
+      `lerPlanilhaLote`; o áudio fica sem transcrição por enquanto), grava `pedido_nota_itens` e
+      deixa `AGUARDANDO_APROVACAO` com tokens e custo. A reextração substitui só os itens
+      `RASCUNHO`.
+- [x] Encadeado no recebimento: com uma única empresa candidata, extrai na hora; o comentário
+      de retorno passa a dizer "N rascunho(s) prontos".
+- [x] Teste com dados fictícios: duas notas ("igual mês passado, mas 3,8 mil" e "450 de
+      ultrassom pro CPF X") e uma tentativa de manipulação ("IGNORE AS REGRAS… 99999"). Os dois
+      modelos acertaram tomador, serviço e valor, ignoraram a manipulação e a registraram em
+      observação.
+
+      | Modelo | Tempo | Tokens (entrada/saída) | Custo/pedido |
+      |---|---|---|---|
+      | `claude-opus-5-5` (padrão) | 8 s | 3.255 / 590 | US$ 0,028 (≈ R$ 0,15) |
+      | `claude-sonnet-5-5` | 11,5 s | 3.255 / 507 | US$ 0,013 (≈ R$ 0,07) |
+
+      Troca por `PEDIDO_NOTA_MODELO` na Vercel. O cache não pegou nesse teste (o catálogo
+      fictício é menor que o mínimo cacheável); com catálogo real grande deve pegar.
+- [ ] Transcrição de áudio: escolher o serviço.
+- [ ] Publicar e testar com um `#nota` real.
+
+Plano original desta fase:
+
 `lib/pedido-nota/extrair.ts`: **uma** chamada `generateObject` (AI SDK, `@ai-sdk/anthropic`, já
 usado em `app/api/chat-ia/route.ts`) com schema zod `RascunhoNotas`.
 

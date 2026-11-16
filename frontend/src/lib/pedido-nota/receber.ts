@@ -9,6 +9,7 @@ import {
   listarMensagensDoChamado,
   type DigisacMensagem,
 } from "@/lib/digisac/client";
+import { extrairPedido } from "@/lib/pedido-nota/extrair";
 
 // Fase 1 do pedido de nota (docs/pedido-nota-ia.md): o atendente manda um
 // comentário interno "#nota" no chamado do Digisac; aqui capturamos as
@@ -164,8 +165,19 @@ export async function receberComandoNota(messageId: string): Promise<{ pedidoId:
       })
       .eq("id", pedidoId);
 
-    await avisarAtendente(comando.contactId, montarAviso({ semMensagem, candidatas: candidatas.length, mensagens, anexos }));
-    return { pedidoId, motivo: semMensagem ? "sem mensagens do cliente" : "ok" };
+    // Fase 2: com empresa definida, a IA já monta o rascunho. Falha aqui não
+    // perde o pedido — fica em ERRO com o motivo, e o painel pode reextrair.
+    let rascunhos: number | null = null;
+    if (!semMensagem && candidatas.length === 1) {
+      try {
+        rascunhos = (await extrairPedido(pedidoId)).itens;
+      } catch (e) {
+        console.error("[pedido-nota] extração falhou:", e instanceof Error ? e.message : e);
+      }
+    }
+
+    await avisarAtendente(comando.contactId, montarAviso({ semMensagem, candidatas: candidatas.length, mensagens, anexos, rascunhos }));
+    return { pedidoId, motivo: semMensagem ? "sem mensagens do cliente" : rascunhos == null ? "ok (sem rascunho)" : `ok (${rascunhos} rascunho(s))` };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Falha ao processar o pedido.";
     await admin.from("pedidos_nota").update({ status: "ERRO", erro: msg }).eq("id", pedidoId);
@@ -201,6 +213,7 @@ function montarAviso(p: {
   candidatas: number;
   mensagens: MensagemGravada[];
   anexos: AnexoGravado[];
+  rascunhos: number | null;
 }): string {
   if (p.semMensagem) {
     return "⚠️ SOMA Gestão: recebi o #nota, mas não achei mensagem do cliente neste chamado nas últimas 72h.";
@@ -213,6 +226,11 @@ function montarAviso(p: {
       : p.candidatas === 0
         ? " Telefone sem empresa cadastrada: escolha a empresa no painel."
         : ` Telefone ligado a ${p.candidatas} empresas: escolha a empresa no painel.`;
+  if (p.rascunhos != null) {
+    return p.rascunhos > 0
+      ? `✅ SOMA Gestão: ${p.rascunhos} rascunho(s) de nota prontos para aprovação (${partes.join(", ")}).`
+      : `⚠️ SOMA Gestão: li ${partes.join(", ")}, mas não identifiquei nenhuma nota. Confira no painel.`;
+  }
   return `✅ SOMA Gestão: pedido de nota recebido (${partes.join(", ")}). O rascunho vai para aprovação.${empresa}`;
 }
 
