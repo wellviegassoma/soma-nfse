@@ -163,9 +163,32 @@ Plano original desta fase:
   Storage (bucket privado `pedidos-nota`).
 - Responde ao atendente com um comentário: "Pedido de nota recebido, rascunho no SOMA Gestão."
 
-**Identificar a empresa:** telefone do contato → `company_contatos_setor` (o mesmo auto-match do
-módulo Atendimento). Sem match ou com mais de uma empresa, `company_id` fica nulo e o painel pede
-ao analista para escolher.
+**Identificar a empresa:** ~~telefone do contato → `company_contatos_setor`~~. **Revisto em
+16/11/2026** depois do primeiro teste real: os 3 pedidos ficaram sem empresa. Diagnóstico no banco
+e no Digisac (só leitura, só contagens):
+
+- `company_contatos_setor` tem **0** telefones preenchidos; nenhum tomador tem o telefone de teste.
+- No Digisac não há organizações nem campos personalizados ligando contato a empresa.
+- **25 de 34** conversas ativas de clientes são **grupos** de WhatsApp (grupo não tem telefone).
+- 72 das 314 empresas não têm CNPJ; 68 delas são pessoa física com CPF.
+
+Nova ordem (`src/lib/pedido-nota/empresa.ts` + `empresa-core.ts`, migration
+`20261117090000_fase_bk_pedido_nota_vinculos.sql`):
+
+1. **CPF/CNPJ no `#nota`** (`#nota 12.345.678/0001-90 3500 consultoria`). O primeiro documento
+   que for de uma empresa cadastrada (CNPJ, ou CPF de cliente PF) define a empresa e sai da dica.
+   Documento que não é de empresa fica na dica, porque pode ser o do tomador. Grava o vínculo.
+2. **Vínculo aprendido** (`pedido_nota_vinculos`: contato/grupo do Digisac → empresa). Gravado
+   pelo passo 1 e, na Fase 3, pela escolha no painel.
+3. **Telefone** (`company_contatos_setor`), quando houver; nunca em grupo.
+4. **Nome do grupo/contato**: todas as palavras significativas do nome da empresa aparecem no
+   nome do contato. Se casar com **uma** empresa, usa essa e põe o alerta `EMPRESA_PELO_NOME` em
+   todos os rascunhos; com várias, elas vão para `companies_candidatas`. Medido nos contatos
+   ativos: casou com uma empresa em 12 de 25 grupos (4 ambíguos, 9 sem match).
+
+`pedidos_nota.empresa_fonte` guarda de onde veio a empresa (`CNPJ_COMANDO`, `VINCULO`,
+`TELEFONE`, `NOME_CONTATO`, `PAINEL`). O comentário de retorno ao atendente explica como indicar
+a empresa quando ela não for achada.
 
 ## Fase 2: IA monta o rascunho (3–4 dias)
 

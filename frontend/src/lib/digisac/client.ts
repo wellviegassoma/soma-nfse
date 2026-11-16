@@ -40,6 +40,7 @@ export type DigisacContato = {
   id: string;
   name?: string | null;
   internalName?: string | null;
+  isGroup?: boolean;
   data?: { number?: string | null } | null;
 };
 

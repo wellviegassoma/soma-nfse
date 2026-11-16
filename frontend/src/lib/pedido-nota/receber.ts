@@ -9,6 +9,7 @@ import {
   listarMensagensDoChamado,
   type DigisacMensagem,
 } from "@/lib/digisac/client";
+import { resolverEmpresa } from "@/lib/pedido-nota/empresa";
 import { extrairPedido } from "@/lib/pedido-nota/extrair";
 
 // Fase 1 do pedido de nota (docs/pedido-nota-ia.md): o atendente manda um
@@ -137,38 +138,43 @@ export async function receberComandoNota(messageId: string): Promise<{ pedidoId:
       mensagens.push({ id: m.id, timestamp: m.timestamp, tipo: m.type, texto: m.text || null, anexo_index: anexoIndex });
     }
 
-    const telefone = contato.data?.number ?? null;
-    let candidatas: string[] = [];
-    if (telefone) {
-      const { data } = await admin.rpc("pedido_nota_empresas_por_telefone", { p_telefone: telefone });
-      candidatas = ((data ?? []) as unknown[]).map((v) =>
-        typeof v === "string" ? v : String((v as Record<string, unknown>).pedido_nota_empresas_por_telefone),
-      );
-    }
+    // Grupo de WhatsApp: data.number é o id do grupo, não um telefone.
+    const ehGrupo = Boolean(contato.isGroup);
+    const telefone = ehGrupo ? null : (contato.data?.number ?? null);
+    const nomeContato = [contato.internalName, contato.name].filter(Boolean).join(" ");
+    const empresa = await resolverEmpresa(admin, { contactId: comando.contactId, nomeContato, telefone, dica, pedidoId });
+    const candidatas = empresa.candidatas;
 
     const semMensagem = mensagens.length === 0;
+    const avisos = [
+      falhasAnexo.length ? `Alguns anexos não foram copiados: ${falhasAnexo.join("; ")}` : null,
+      empresa.cnpjNaoEncontrado && !empresa.companyId
+        ? `O documento ${empresa.cnpjNaoEncontrado} do #nota não é de nenhuma empresa cadastrada (se for do tomador, tudo bem).`
+        : null,
+    ].filter(Boolean);
     await admin
       .from("pedidos_nota")
       .update({
         telefone,
-        contato_nome: contato.name ?? contato.internalName ?? null,
-        company_id: candidatas.length === 1 ? candidatas[0] : null,
+        contato_nome: contato.internalName || contato.name || null,
+        contato_eh_grupo: ehGrupo,
+        dica_atendente: empresa.dica,
+        company_id: empresa.companyId,
+        empresa_fonte: empresa.fonte,
         companies_candidatas: candidatas,
         mensagens,
         anexos,
         status: semMensagem ? "ERRO" : "RECEBIDO",
         erro: semMensagem
           ? "Nenhuma mensagem do cliente encontrada neste chamado (últimas 72h antes do #nota)."
-          : falhasAnexo.length
-            ? `Alguns anexos não foram copiados: ${falhasAnexo.join("; ")}`
-            : null,
+          : avisos.join(" ") || null,
       })
       .eq("id", pedidoId);
 
     // Fase 2: com empresa definida, a IA já monta o rascunho. Falha aqui não
     // perde o pedido — fica em ERRO com o motivo, e o painel pode reextrair.
     let rascunhos: number | null = null;
-    if (!semMensagem && candidatas.length === 1) {
+    if (!semMensagem && empresa.companyId) {
       try {
         rascunhos = (await extrairPedido(pedidoId)).itens;
       } catch (e) {
@@ -176,7 +182,18 @@ export async function receberComandoNota(messageId: string): Promise<{ pedidoId:
       }
     }
 
-    await avisarAtendente(comando.contactId, montarAviso({ semMensagem, candidatas: candidatas.length, mensagens, anexos, rascunhos }));
+    await avisarAtendente(
+      comando.contactId,
+      montarAviso({
+        semMensagem,
+        temEmpresa: Boolean(empresa.companyId),
+        candidatas: candidatas.length,
+        cnpjNaoEncontrado: empresa.cnpjNaoEncontrado,
+        mensagens,
+        anexos,
+        rascunhos,
+      }),
+    );
     return { pedidoId, motivo: semMensagem ? "sem mensagens do cliente" : rascunhos == null ? "ok (sem rascunho)" : `ok (${rascunhos} rascunho(s))` };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Falha ao processar o pedido.";
@@ -210,7 +227,9 @@ async function copiarAnexo(pedidoId: string, m: DigisacMensagem): Promise<AnexoG
 
 function montarAviso(p: {
   semMensagem: boolean;
+  temEmpresa: boolean;
   candidatas: number;
+  cnpjNaoEncontrado: string | null;
   mensagens: MensagemGravada[];
   anexos: AnexoGravado[];
   rascunhos: number | null;
@@ -220,12 +239,12 @@ function montarAviso(p: {
   }
   const partes = [`${p.mensagens.length} mensagem(ns)`];
   if (p.anexos.length) partes.push(`${p.anexos.length} anexo(s)`);
-  const empresa =
-    p.candidatas === 1
-      ? ""
-      : p.candidatas === 0
-        ? " Telefone sem empresa cadastrada: escolha a empresa no painel."
-        : ` Telefone ligado a ${p.candidatas} empresas: escolha a empresa no painel.`;
+  const cnpj = p.cnpjNaoEncontrado ? ` O documento ${p.cnpjNaoEncontrado} não é de empresa cadastrada no SOMA Gestão.` : "";
+  const empresa = p.temEmpresa
+    ? ""
+    : p.candidatas > 1
+      ? ` Encontrei ${p.candidatas} empresas possíveis: escolha no painel, ou mande "#nota <CNPJ da empresa>".${cnpj}`
+      : ` Não identifiquei a empresa: mande "#nota <CNPJ da empresa>" ou escolha no painel.${cnpj}`;
   if (p.rascunhos != null) {
     return p.rascunhos > 0
       ? `✅ SOMA Gestão: ${p.rascunhos} rascunho(s) de nota prontos para aprovação (${partes.join(", ")}).`

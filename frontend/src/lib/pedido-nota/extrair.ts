@@ -60,7 +60,7 @@ export async function extrairPedido(pedidoId: string): Promise<{ itens: number; 
 
   const { data: pedido } = await admin
     .from("pedidos_nota")
-    .select("id, status, company_id, dica_atendente, mensagens, anexos")
+    .select("id, status, company_id, empresa_fonte, dica_atendente, mensagens, anexos")
     .eq("id", pedidoId)
     .maybeSingle();
   if (!pedido) return { itens: 0, motivo: "pedido não encontrado" };
@@ -155,17 +155,25 @@ export async function extrairPedido(pedidoId: string): Promise<{ itens: number; 
     };
     const temAudioSemTranscricao = anexosPreparados.some((a) => a?.tipo === "audio" && !a.transcricao);
 
+    const empresaPorNome = pedido.empresa_fonte === "NOME_CONTATO";
     const itensFinais = ia.resposta.eh_pedido_de_nota
-      ? ia.resposta.itens.map((it) =>
-          posProcessar(it, {
+      ? ia.resposta.itens.map((it) => {
+          const final = posProcessar(it, {
             servicos: entrada.servicos,
             tomadores,
             hojeBrasilia: hoje,
             permiteRetroativa: Boolean(empresa.allow_retroactive_emission),
             historico,
             temAudioSemTranscricao,
-          }),
-        )
+          });
+          if (empresaPorNome) {
+            final.alertas.unshift({
+              codigo: "EMPRESA_PELO_NOME",
+              mensagem: `Empresa (${entrada.empresa.nome}) identificada pelo nome do grupo/contato no Digisac: confira antes de aprovar.`,
+            });
+          }
+          return final;
+        })
       : [];
 
     // Reextração substitui os rascunhos anteriores ainda não aprovados.
