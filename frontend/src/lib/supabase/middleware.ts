@@ -10,6 +10,9 @@ const PUBLIC_ROUTES = [
   "/esqueci-senha",
   "/redefinir-senha",
   "/api/financeiro/migrar-nibo",
+  // Webhook do Digisac — se autentica por DIGISAC_WEBHOOK_SECRET na URL
+  // (ver app/api/digisac/webhook/route.ts). Rota exata, mesmo motivo acima.
+  "/api/digisac/webhook",
 ];
 // /api/cron/ e /api/rotina-fechamento/ não usam sessão de usuário — se
 // autenticam sozinhas via CRON_SECRET (ver route.ts de cada uma, e
