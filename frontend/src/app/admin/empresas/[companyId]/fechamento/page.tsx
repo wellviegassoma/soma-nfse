@@ -5,13 +5,16 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { mesAnteriorBrasilia } from "@/lib/competencia";
-import { formatarDataHora } from "@/lib/formatters";
+import { formatarDataHora, formatarData, formatarCpfCnpj } from "@/lib/formatters";
 import { BuscarAgoraButton } from "./BuscarAgoraButton";
 import { BuscarHistoricoButton } from "./BuscarHistoricoButton";
 import { EquiparacaoHospitalarToggle } from "./EquiparacaoHospitalarToggle";
 
 export const metadata = { title: "Fechamento — Painel SOMA" };
 export const maxDuration = 300;
+
+const RE_DOC_TOMADOR = /<(toma)>[\s\S]*?<(CNPJ|CPF)>(\d+)<\/\2>/;
+const RE_DOC_PRESTADOR = /<(emit|prest)>[\s\S]*?<(CNPJ|CPF)>(\d+)<\/\2>/;
 
 function formatMoney(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -39,7 +42,9 @@ type NotaRow = {
   cancelada: boolean;
   valor_servico: number | null;
   prestador_nome: string | null;
+  prestador_cnpj: string | null;
   tomador_nome: string | null;
+  tomador_cnpj: string | null;
   descricao_servico: string | null;
   equiparacao_hospitalar: boolean;
   motivo_cancelamento: string | null;
@@ -79,7 +84,7 @@ export default async function AdminFechamentoPage(
     supabase
       .from("notas_distribuidas")
       .select(
-        "id, numero, direcao, cancelada, valor_servico, prestador_nome, tomador_nome, descricao_servico, equiparacao_hospitalar, motivo_cancelamento, data_emissao",
+        "id, numero, direcao, cancelada, valor_servico, prestador_nome, prestador_cnpj, tomador_nome, tomador_cnpj, descricao_servico, equiparacao_hospitalar, motivo_cancelamento, data_emissao",
       )
       .eq("company_id", companyId)
       .gte("competencia", `${competencia}-01`)
@@ -87,6 +92,27 @@ export default async function AdminFechamentoPage(
   ]);
 
   const linhas = (notas ?? []) as NotaRow[];
+
+  // Tomador/prestador pessoa física: a sincronização só grava CNPJ, o CPF
+  // fica só no XML — lê dele pras notas sem documento.
+  const semDoc = linhas.filter((n) => (n.direcao === "entrada" ? !n.prestador_cnpj : !n.tomador_cnpj));
+  for (let i = 0; i < semDoc.length; i += 100) {
+    const lote = semDoc.slice(i, i + 100);
+    const { data: xmls } = await supabase
+      .from("notas_distribuidas")
+      .select("id, xml")
+      .in(
+        "id",
+        lote.map((n) => n.id),
+      );
+    const porId = new Map((xmls ?? []).map((x) => [x.id as string, (x.xml as string | null) ?? ""]));
+    for (const n of lote) {
+      const m = porId.get(n.id)?.match(n.direcao === "entrada" ? RE_DOC_PRESTADOR : RE_DOC_TOMADOR);
+      if (!m) continue;
+      if (n.direcao === "entrada") n.prestador_cnpj = m[3];
+      else n.tomador_cnpj = m[3];
+    }
+  }
   const saidaAtivas = linhas.filter((n) => n.direcao === "saida" && !n.cancelada);
   const saidaCanceladas = linhas.filter((n) => n.direcao === "saida" && n.cancelada);
   const entradaAtivas = linhas.filter((n) => n.direcao === "entrada" && !n.cancelada);
@@ -243,7 +269,13 @@ export default async function AdminFechamentoPage(
               <div key={n.id} className="flex flex-col gap-1 px-5 py-3 text-sm">
                 <div className="flex items-center justify-between gap-4">
                   <span className="w-16 shrink-0 text-foreground/50">{n.numero || "—"}</span>
-                  <span className="min-w-0 flex-1 truncate">{n.tomador_nome || "—"}</span>
+                  <span className="w-20 shrink-0 text-xs text-foreground/60">{formatarData(n.data_emissao) ?? "—"}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{n.tomador_nome || "—"}</span>
+                    {n.tomador_cnpj && (
+                      <span className="block text-xs text-foreground/50">{formatarCpfCnpj(n.tomador_cnpj)}</span>
+                    )}
+                  </span>
                   <span className="shrink-0 font-medium">{formatMoney(n.valor_servico ?? 0)}</span>
                   {company?.tax_regime === "LUCRO_PRESUMIDO" && company?.equiparacao_hospitalar && (
                     <EquiparacaoHospitalarToggle
@@ -261,7 +293,7 @@ export default async function AdminFechamentoPage(
                   </a>
                 </div>
                 {company?.tax_regime === "LUCRO_PRESUMIDO" && company?.equiparacao_hospitalar && n.descricao_servico && (
-                  <p className="pl-16 text-xs text-foreground/50">{n.descricao_servico}</p>
+                  <p className="pl-40 text-xs text-foreground/50">{n.descricao_servico}</p>
                 )}
               </div>
             ))}
@@ -280,7 +312,13 @@ export default async function AdminFechamentoPage(
             {entradaAtivas.map((n) => (
               <div key={n.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
                 <span className="w-16 shrink-0 text-foreground/50">{n.numero || "—"}</span>
-                <span className="min-w-0 flex-1 truncate">{n.prestador_nome || "—"}</span>
+                <span className="w-20 shrink-0 text-xs text-foreground/60">{formatarData(n.data_emissao) ?? "—"}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{n.prestador_nome || "—"}</span>
+                  {n.prestador_cnpj && (
+                    <span className="block text-xs text-foreground/50">{formatarCpfCnpj(n.prestador_cnpj)}</span>
+                  )}
+                </span>
                 <span className="shrink-0 font-medium">{formatMoney(n.valor_servico ?? 0)}</span>
                 <a
                   href={`/admin/empresas/${companyId}/fechamento/notas/${n.id}/pdf`}

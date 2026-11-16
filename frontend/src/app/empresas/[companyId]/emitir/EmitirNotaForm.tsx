@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import { issueNfse } from "@/lib/actions/notas";
+import { listarNotasParaCopiarAction } from "@/lib/actions/emissao-copiar";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -35,6 +36,18 @@ function padroesRetencao(service: Service | undefined, issAliquotaPadrao?: numbe
     irrfPct: pctTexto(service?.retencao_irrf_aliquota),
     csrfPct: pctTexto(service?.retencao_pis_cofins_csll_aliquota),
   };
+}
+
+const NOMES_MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/** Os últimos `n` meses (AAAA-MM), do mais recente pro mais antigo. */
+function mesesAnteriores(mesCorrente: string, n: number) {
+  const [a, m] = mesCorrente.split("-").map(Number);
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(a, m - 1 - i, 1);
+    const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return { valor, rotulo: `${NOMES_MES[d.getMonth()]}/${d.getFullYear()}` };
+  });
 }
 
 function formatMoney(value: number) {
@@ -151,19 +164,97 @@ export function EmitirNotaForm({
       window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  const ultimas = prefill?.ultimasNotas ?? [];
+  // "" = últimas notas (vem pronto do servidor); "AAAA-MM" = todas daquele mês.
+  const [mesFiltro, setMesFiltro] = useState("");
+  const [notasMes, setNotasMes] = useState<NotaRecente[] | null>(null);
+  const [carregandoMes, setCarregandoMes] = useState(false);
+  const [erroMes, setErroMes] = useState<string | null>(null);
+  const [buscaNota, setBuscaNota] = useState("");
+  const meses = useMemo(() => mesesAnteriores(mesCorrente, 24), [mesCorrente]);
+
+  async function escolherMes(mes: string) {
+    setMesFiltro(mes);
+    setErroMes(null);
+    setBuscaNota("");
+    if (!mes) {
+      setNotasMes(null);
+      return;
+    }
+    setCarregandoMes(true);
+    const r = await listarNotasParaCopiarAction(companyId, mes).catch(() => ({
+      error: "Não foi possível carregar as notas desse mês.",
+    }));
+    setCarregandoMes(false);
+    if ("error" in r) {
+      setErroMes(r.error);
+      setNotasMes([]);
+    } else {
+      setNotasMes(r.notas);
+    }
+  }
+
+  const termoBusca = buscaNota.trim().toLowerCase();
+  const ultimas = (mesFiltro ? (notasMes ?? []) : (prefill?.ultimasNotas ?? [])).filter(
+    (n) =>
+      !termoBusca ||
+      n.tomadorNome.toLowerCase().includes(termoBusca) ||
+      n.descricao.toLowerCase().includes(termoBusca) ||
+      (n.numero ?? "").includes(termoBusca),
+  );
+  const totalLista = ultimas.reduce((soma, n) => soma + n.valor, 0);
   const painelUltimas = (
     <Card className="flex flex-col p-0">
-      <div className="border-b border-border px-5 py-4">
-        <h2 className="text-sm font-semibold text-foreground">Últimas notas emitidas</h2>
-        <p className="text-xs text-foreground/55">
-          Clique em Copiar pra preencher o formulário e mude só o que for diferente.
-        </p>
+      <div className="flex flex-col gap-3 border-b border-border px-5 py-4">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">
+            {mesFiltro ? "Notas emitidas no mês" : "Últimas notas emitidas"}
+          </h2>
+          <p className="text-xs text-foreground/55">
+            Clique em Copiar pra preencher o formulário e mude só o que for diferente. Use PDF pra conferir a
+            nota antes.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Select
+            aria-label="Mês das notas"
+            value={mesFiltro}
+            onChange={(e) => escolherMes(e.target.value)}
+            className="sm:w-48"
+          >
+            <option value="">Últimas notas</option>
+            {meses.map((m) => (
+              <option key={m.valor} value={m.valor}>
+                {m.rotulo}
+              </option>
+            ))}
+          </Select>
+          <Input
+            aria-label="Buscar nota"
+            placeholder="Buscar tomador, descrição ou número"
+            value={buscaNota}
+            onChange={(e) => setBuscaNota(e.target.value)}
+          />
+        </div>
+        {mesFiltro && !carregandoMes && !erroMes && (
+          <p className="text-xs text-foreground/55">
+            {ultimas.length} {ultimas.length === 1 ? "nota" : "notas"} · {formatMoney(totalLista)}
+          </p>
+        )}
       </div>
-      {ultimas.length === 0 ? (
-        <p className="px-5 py-6 text-sm text-foreground/50">Nenhuma nota recente dessa empresa.</p>
+      {carregandoMes ? (
+        <p className="px-5 py-6 text-sm text-foreground/50">Carregando notas do mês…</p>
+      ) : erroMes ? (
+        <p className="px-5 py-6 text-sm text-danger">{erroMes}</p>
+      ) : ultimas.length === 0 ? (
+        <p className="px-5 py-6 text-sm text-foreground/50">
+          {termoBusca
+            ? "Nenhuma nota encontrada com essa busca."
+            : mesFiltro
+              ? "Nenhuma nota emitida nesse mês."
+              : "Nenhuma nota recente dessa empresa."}
+        </p>
       ) : (
-        <ul className="divide-y divide-border">
+        <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
           {ultimas.map((n) => (
             <li key={`${n.origem}-${n.id}`} className="flex items-start gap-3 px-5 py-3">
               <div className="min-w-0 flex-1">
@@ -174,6 +265,7 @@ export function EmitirNotaForm({
                   </span>
                 </div>
                 <div className="truncate text-xs text-foreground/55" title={n.descricao}>
+                  {n.numero ? `Nº ${n.numero} · ` : ""}
                   {n.data ? dataCurta(n.data) : ""}
                   {n.descricao ? ` · ${n.descricao}` : ""}
                 </div>
@@ -181,15 +273,20 @@ export function EmitirNotaForm({
                   <div className="text-xs text-warning">Tomador ainda não cadastrado aqui</div>
                 )}
               </div>
-              <Button
-                type="button"
-                variant="secondary"
-                className="shrink-0"
-                onClick={() => copiarNota(n)}
-                disabled={pending}
-              >
-                Copiar
-              </Button>
+              <div className="flex shrink-0 gap-2">
+                <a
+                  href={n.pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted"
+                  title="Abrir o PDF da nota numa nova aba"
+                >
+                  PDF
+                </a>
+                <Button type="button" variant="secondary" onClick={() => copiarNota(n)} disabled={pending}>
+                  Copiar
+                </Button>
+              </div>
             </li>
           ))}
         </ul>

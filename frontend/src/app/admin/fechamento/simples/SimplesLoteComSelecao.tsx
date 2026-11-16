@@ -37,7 +37,12 @@ export type LinhaSimples = {
   conferencia: ResultadoConferencia;
   assinatura: string;
   liberado: boolean;
-  aprovacao: { assinatura: string; aprovadoEm: string; aprovadoPorNome: string | null; observacao: string | null } | null;
+  aprovacao: {
+    assinatura: string;
+    aprovadoEm: string;
+    aprovadoPorNome: string | null;
+    observacao: string | null;
+  } | null;
   jaEnviado: boolean;
   // Etapa 6 da Rotina de Fechamento (Automação) — Anexo III fixo, sem
   // Fator R, não depende do resto do mês pra fechar antes.
@@ -70,7 +75,10 @@ function CelulaPrefeitura({
   const quando = new Date(c.consultadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
   if (c.valor == null) {
     return (
-      <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-medium text-danger" title={`${c.erro ?? "erro"} — ${quando}`}>
+      <span
+        className="rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-medium text-danger"
+        title={`${c.erro ?? "erro"} — ${quando}`}
+      >
         sem acesso
       </span>
     );
@@ -81,7 +89,9 @@ function CelulaPrefeitura({
     <span title={`Consultado em ${quando}`}>
       {formatMoney(c.valor)}
       {bate ? (
-        <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">bate</span>
+        <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">
+          bate
+        </span>
       ) : (
         <span className="ml-2 rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-medium text-danger">
           dif. {formatMoney(diferenca)}
@@ -183,7 +193,9 @@ export function SimplesLoteComSelecao({
     () =>
       // Só as visíveis no filtro atual — quem aprova está olhando pra elas.
       linhasVisiveis
-        .filter((l) => selecionados.has(l.id) && !l.jaEnviado && !l.liberado && l.conferencia.status === "REVISAR")
+        .filter(
+          (l) => selecionados.has(l.id) && !l.jaEnviado && !l.liberado && l.conferencia.status === "REVISAR",
+        )
         .map((l) => ({ id: l.id, nome: l.nome, assinatura: l.assinatura, motivos: l.conferencia.motivos })),
     [linhasVisiveis, selecionados],
   );
@@ -215,8 +227,8 @@ export function SimplesLoteComSelecao({
       <Card className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <p className="text-xs text-foreground/50">
-            {algumMarcado ? `${selecionados.size} de ${linhas.length} selecionada(s)` : "Nenhuma selecionada"} — use
-            os checkboxes da tabela pra escolher quais empresas entram no lote.
+            {algumMarcado ? `${selecionados.size} de ${linhas.length} selecionada(s)` : "Nenhuma selecionada"}{" "}
+            — use os checkboxes da tabela pra escolher quais empresas entram no lote.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <AprovarRevisarLoteButton competencia={competencia} empresas={empresasParaAprovar} />
@@ -227,15 +239,18 @@ export function SimplesLoteComSelecao({
               empresas={empresasParaBaixar}
             />
             <FecharAntecipadoLoteButton competencia={competencia} empresas={empresasParaFechar} />
-            <ConferirPrefeituraLoteButton competencia={competencia} empresas={empresasParaConferirPrefeitura} />
+            <ConferirPrefeituraLoteButton
+              competencia={competencia}
+              empresas={empresasParaConferirPrefeitura}
+            />
           </div>
         </div>
         <p className="mt-3 text-xs text-foreground/50">
           A coluna <strong className="text-danger">DAS líquido</strong> é o valor que de fato seria
           transmitido no PGDAS-D — já líquido de retenção sofrida. Só entram no envio as empresas{" "}
           <strong>liberadas na conferência</strong>: OK direto, ou em revisão depois de aprovadas. Bloqueadas
-          não transmitem até o problema ser corrigido. Para aprovar várias de uma vez, filtre &quot;A revisar&quot;,
-          marque as que já conferiu e use &quot;Aprovar revisão das selecionadas&quot;.
+          não transmitem até o problema ser corrigido. Para aprovar várias de uma vez, filtre &quot;A
+          revisar&quot;, marque as que já conferiu e use &quot;Aprovar revisão das selecionadas&quot;.
         </p>
         <div className="mt-4 flex flex-wrap gap-2 text-xs">
           {(
@@ -252,7 +267,9 @@ export function SimplesLoteComSelecao({
               type="button"
               onClick={() => setFiltro(valor)}
               className={`rounded-full border px-3 py-1 ${
-                filtro === valor ? "border-foreground bg-foreground text-background" : "border-border text-foreground/70"
+                filtro === valor
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border text-foreground/70"
               }`}
             >
               {rotulo}
@@ -264,11 +281,16 @@ export function SimplesLoteComSelecao({
       {linhas.length === 0 ? (
         <Alert tone="warning">Nenhuma empresa Simples Nacional com CNPJ cadastrada.</Alert>
       ) : (
-        <Card className="overflow-x-auto">
+        // Rolagem dentro do card (altura da tela): a barra horizontal fica
+        // sempre visível no rodapé; cabeçalho e nome da empresa ficam parados.
+        <Card className="max-h-[calc(100vh-13rem)] overflow-auto">
           <table className="w-full min-w-[1500px] text-sm">
-            <thead>
+            <thead className="sticky top-0 z-20 bg-surface">
               <tr className="text-xs text-foreground/50">
-                <th rowSpan={2} className="border-b border-border px-3 py-2 text-center align-bottom">
+                <th
+                  rowSpan={2}
+                  className="sticky left-0 z-10 w-11 min-w-11 bg-surface border-b border-border px-3 py-2 text-center align-bottom"
+                >
                   <input
                     type="checkbox"
                     checked={todosMarcados}
@@ -276,7 +298,10 @@ export function SimplesLoteComSelecao({
                     aria-label="Selecionar todas"
                   />
                 </th>
-                <th rowSpan={2} className="border-b border-border px-3 py-2 text-left align-bottom">
+                <th
+                  rowSpan={2}
+                  className="sticky left-11 z-10 w-72 min-w-72 max-w-72 border-b border-border bg-surface px-3 py-2 text-left align-bottom shadow-[1px_0_0_var(--border)]"
+                >
                   Nome
                 </th>
                 <th rowSpan={2} className="border-b border-border px-3 py-2 text-left align-bottom">
@@ -303,7 +328,10 @@ export function SimplesLoteComSelecao({
                 <th rowSpan={2} className="border-b border-border px-3 py-2 text-right align-bottom">
                   DAS bruto
                 </th>
-                <th rowSpan={2} className="border-b border-border px-3 py-2 text-right align-bottom text-danger">
+                <th
+                  rowSpan={2}
+                  className="border-b border-border px-3 py-2 text-right align-bottom text-danger"
+                >
                   DAS líquido
                 </th>
               </tr>
@@ -315,7 +343,7 @@ export function SimplesLoteComSelecao({
             <tbody className="divide-y divide-border">
               {linhasVisiveis.map((linha) => (
                 <tr key={linha.id}>
-                  <td className="px-3 py-2 text-center">
+                  <td className="sticky left-0 z-10 w-11 min-w-11 bg-surface px-3 py-2 text-center">
                     <input
                       type="checkbox"
                       checked={selecionados.has(linha.id)}
@@ -323,35 +351,41 @@ export function SimplesLoteComSelecao({
                       aria-label={`Selecionar ${linha.nome}`}
                     />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2">
-                    {linha.nome}
-                    {linha.jaEnviado && (
-                      <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">
-                        enviado
-                      </span>
-                    )}
-                    {linha.jaFechada ? (
-                      <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">
-                        fechada
-                      </span>
-                    ) : (
-                      linha.podeFecharAntes && (
-                        <span
-                          className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-900"
-                          title="Anexo III fixo, sem Fator R — não depende do resto do mês pra fechar"
-                        >
-                          pode fechar antes
+                  <td className="sticky left-11 z-10 w-72 min-w-72 max-w-72 bg-surface px-3 py-2 shadow-[1px_0_0_var(--border)]">
+                    <div className="truncate" title={linha.nome}>
+                      {linha.nome}
+                    </div>
+                    <div className="flex flex-wrap gap-1 empty:hidden [&>span]:ml-0">
+                      {linha.jaEnviado && (
+                        <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">
+                          enviado
                         </span>
-                      )
-                    )}
-                    {linha.bloqueios.length > 0 && (
-                      <span
-                        className="ml-2 rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-medium text-danger"
-                        title={linha.bloqueios.join(" ")}
-                      >
-                        {linha.bloqueios.length === 1 ? "1 pendência" : `${linha.bloqueios.length} pendências`}
-                      </span>
-                    )}
+                      )}
+                      {linha.jaFechada ? (
+                        <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">
+                          fechada
+                        </span>
+                      ) : (
+                        linha.podeFecharAntes && (
+                          <span
+                            className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-900"
+                            title="Anexo III fixo, sem Fator R — não depende do resto do mês pra fechar"
+                          >
+                            pode fechar antes
+                          </span>
+                        )
+                      )}
+                      {linha.bloqueios.length > 0 && (
+                        <span
+                          className="ml-2 rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-medium text-danger"
+                          title={linha.bloqueios.join(" ")}
+                        >
+                          {linha.bloqueios.length === 1
+                            ? "1 pendência"
+                            : `${linha.bloqueios.length} pendências`}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2 align-top">
                     {linha.jaEnviado ? (
@@ -373,16 +407,23 @@ export function SimplesLoteComSelecao({
                   </td>
                   <td className="px-3 py-2 text-right">
                     {formatMoney(linha.rbt12)}
-                    {linha.rbt12Estimado && <span className="ml-1 text-[10px] text-foreground/40">(est.)</span>}
+                    {linha.rbt12Estimado && (
+                      <span className="ml-1 text-[10px] text-foreground/40">(est.)</span>
+                    )}
                   </td>
-                  <td className="px-3 py-2 text-center" title={linha.fatorR === null ? undefined : `Fator R ${formatPercent(linha.fatorR)}`}>
+                  <td
+                    className="px-3 py-2 text-center"
+                    title={linha.fatorR === null ? undefined : `Fator R ${formatPercent(linha.fatorR)}`}
+                  >
                     {linha.anexo}
                   </td>
                   <td className="px-3 py-2 text-right">{formatPercent(linha.aliquotaEfetiva)}</td>
                   <td className="px-3 py-2 text-right">{formatMoney(linha.retencaoIrrf)}</td>
                   <td className="px-3 py-2 text-right">{formatMoney(linha.retencaoFederal)}</td>
                   <td className="px-3 py-2 text-right">{formatMoney(linha.dasBruto)}</td>
-                  <td className="px-3 py-2 text-right font-medium text-danger">{formatMoney(linha.dasLiquido)}</td>
+                  <td className="px-3 py-2 text-right font-medium text-danger">
+                    {formatMoney(linha.dasLiquido)}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -52,6 +52,27 @@ export function formatarCpf(cpf: string | null | undefined): string | null {
   return digitos.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
 }
 
+/** CPF ou CNPJ formatado conforme a quantidade de dígitos. */
+export function formatarCpfCnpj(doc: string | null | undefined): string | null {
+  if (!doc) return null;
+  const n = doc.replace(/\D/g, "").length;
+  return n === 11 ? formatarCpf(doc) : formatarCnpj(doc);
+}
+
+const formatadorDataBrasilia = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+/** Só a data (dd/mm/aaaa), no fuso de Brasília. */
+export function formatarData(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : formatadorDataBrasilia.format(d);
+}
+
 /** Checksum dos dois dígitos verificadores do CPF (algoritmo oficial). */
 export function isCpfValido(cpf: string): boolean {
   const digitos = cpf.replace(/\D/g, "");
