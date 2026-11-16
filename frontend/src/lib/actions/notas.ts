@@ -5,7 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { temPermissao } from "@/lib/auth";
-import { decryptSecret, fromBytea } from "@/lib/certificate";
+import { carregarCertificadoEmissao, AVISO_PROCURACAO } from "@/lib/certificado-emissao";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
@@ -205,28 +205,15 @@ export async function issueNfse(
   }
 
   // Certificado: só o service role lê — nunca passa pela sessão do usuário.
+  // Sem certificado próprio válido, empresa do Simples emite com o da SOMA
+  // por procuração (ver lib/certificado-emissao.ts).
   const admin = createAdminClient();
-  const { data: certificate } = await admin
-    .from("certificates")
-    .select("encrypted_file, encrypted_password, expires_at")
-    .eq("company_id", companyId)
-    .maybeSingle();
-
-  if (!certificate) {
-    return { error: "Essa empresa ainda não tem certificado digital cadastrado." };
-  }
-  if (new Date(certificate.expires_at).getTime() < Date.now()) {
-    return { error: "O certificado digital dessa empresa está vencido." };
-  }
-
-  let pfxBase64: string;
-  let senha: string;
-  try {
-    pfxBase64 = decryptSecret(fromBytea(certificate.encrypted_file)).toString("base64");
-    senha = decryptSecret(fromBytea(certificate.encrypted_password)).toString("utf8");
-  } catch {
-    return { error: "Não foi possível preparar o certificado para assinatura." };
-  }
+  const cert = await carregarCertificadoEmissao(admin, companyId, company.tax_regime);
+  if ("error" in cert) return { error: cert.error };
+  const { pfxBase64, senha, viaProcuracao } = cert;
+  const avisoProcuracao = viaProcuracao
+    ? [{ mensagem: AVISO_PROCURACAO, acao: "Sem procuração, cadastre o certificado da empresa." }]
+    : [];
 
   // Numeração atômica — nunca reaproveitada, mesmo se a emissão falhar depois.
   const { data: numeroDps, error: numeroError } = await supabase.rpc(
@@ -352,7 +339,7 @@ export async function issueNfse(
     if (detalhe) {
       return {
         error: "A nota não foi enviada ao governo — há um dado a corrigir antes.",
-        motivos: [{ mensagem: detalhe, acao: "Se não souber o que corrigir, fale com a SOMA." }],
+        motivos: [{ mensagem: detalhe, acao: "Se não souber o que corrigir, fale com a SOMA." }, ...avisoProcuracao],
       };
     }
     return {
@@ -394,7 +381,7 @@ export async function issueNfse(
       // O governo recusou: nenhuma nota existe. Mostra o motivo normalmente.
       return {
         error: "O governo recusou a nota. Nenhuma nota foi gerada — corrija o que está abaixo e emita de novo.",
-        motivos: traduzirErrosSefin(resultado.erros ?? []),
+        motivos: [...traduzirErrosSefin(resultado.erros ?? []), ...avisoProcuracao],
       };
     }
     return {
@@ -409,10 +396,15 @@ export async function issueNfse(
       detalhes.map((erro) => (typeof erro === "string" ? erro : JSON.stringify(erro))).join(" | ") ||
       "Sefin Nacional recusou a DPS sem detalhe.";
     const motivos = traduzirErrosSefin(detalhes);
-    await logNfseError(companyId, dpsRow.id, mensagemTecnica, resumoErros(motivos));
+    await logNfseError(
+      companyId,
+      dpsRow.id,
+      viaProcuracao ? `[procuração SOMA] ${mensagemTecnica}` : mensagemTecnica,
+      resumoErros(motivos),
+    );
     return {
       error: "O governo recusou a nota. Nenhuma nota foi gerada — corrija o que está abaixo e emita de novo.",
-      motivos,
+      motivos: [...motivos, ...avisoProcuracao],
     };
   }
 
@@ -495,7 +487,7 @@ export async function cancelarNfse(
   const supabase = await createClient();
 
   const [{ data: company }, { data: nfseRow }] = await Promise.all([
-    supabase.from("companies").select("cnpj, cpf, nfse_ambiente").eq("id", companyId).single(),
+    supabase.from("companies").select("cnpj, cpf, nfse_ambiente, tax_regime").eq("id", companyId).single(),
     supabase.from("nfse").select("id, access_key, status").eq("dps_id", dpsId).maybeSingle(),
   ]);
 
@@ -507,25 +499,9 @@ export async function cancelarNfse(
   if (nfseRow.status === "CANCELADA") return { error: "Essa nota já está cancelada." };
 
   const admin = createAdminClient();
-  const { data: certificate } = await admin
-    .from("certificates")
-    .select("encrypted_file, encrypted_password, expires_at")
-    .eq("company_id", companyId)
-    .maybeSingle();
-
-  if (!certificate) return { error: "Essa empresa ainda não tem certificado digital cadastrado." };
-  if (new Date(certificate.expires_at).getTime() < Date.now()) {
-    return { error: "O certificado digital dessa empresa está vencido." };
-  }
-
-  let pfxBase64: string;
-  let senha: string;
-  try {
-    pfxBase64 = decryptSecret(fromBytea(certificate.encrypted_file)).toString("base64");
-    senha = decryptSecret(fromBytea(certificate.encrypted_password)).toString("utf8");
-  } catch {
-    return { error: "Não foi possível preparar o certificado para assinatura." };
-  }
+  const cert = await carregarCertificadoEmissao(admin, companyId, company.tax_regime);
+  if ("error" in cert) return { error: cert.error };
+  const { pfxBase64, senha } = cert;
 
   const payload = {
     certificado: { pfx_base64: pfxBase64, senha },

@@ -303,7 +303,8 @@ class ClienteSefinNacional:
         if resp.status_code == 403:
             raise ErroSefinNacional(
                 "403 Forbidden: certificado sem permissão para essa operação "
-                "(confira se o CNPJ do certificado é o prestador da DPS).",
+                "(confira se o CNPJ do certificado é o prestador da DPS ou, no certificado "
+                "da SOMA, se a empresa tem procuração eletrônica com o serviço NFS-e).",
                 status_code=403,
             )
         if not resp.ok:

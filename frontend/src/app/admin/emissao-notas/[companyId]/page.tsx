@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermissao } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { Alert } from "@/components/ui/Alert";
 import { carregarPrefillEmissao } from "@/lib/emissao-prefill";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +11,11 @@ import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { EmitirNotaForm } from "@/app/empresas/[companyId]/emitir/EmitirNotaForm";
 
 export const metadata = { title: "Emitir nota — Painel SOMA" };
+
+// Fora do componente (react-hooks/purity não aceita Date.now() no render).
+function naoVencido(expiresAt: string) {
+  return new Date(expiresAt).getTime() >= Date.now();
+}
 
 export default async function AdminEmitirNotaPage(props: PageProps<"/admin/emissao-notas/[companyId]">) {
   const { companyId } = await props.params;
@@ -36,6 +43,17 @@ export default async function AdminEmitirNotaPage(props: PageProps<"/admin/emiss
       .order("name"),
   ]);
   if (!company) notFound();
+
+  // Só pra avisar de onde vem a assinatura — a escolha de verdade é em
+  // lib/certificado-emissao.ts, no momento da emissão.
+  const { data: certificado } = await createAdminClient()
+    .from("certificates")
+    .select("expires_at")
+    .eq("company_id", companyId)
+    .maybeSingle();
+  const certificadoValido = !!certificado && naoVencido(certificado.expires_at);
+  const viaProcuracao = !certificadoValido && company.tax_regime === "SIMPLES_NACIONAL";
+  const semComoEmitir = !certificadoValido && company.tax_regime !== "SIMPLES_NACIONAL";
 
   const basePath = `/admin/emissao-notas/${companyId}`;
 
@@ -65,6 +83,19 @@ export default async function AdminEmitirNotaPage(props: PageProps<"/admin/emiss
           </Link>
         </div>
       </div>
+
+      {viaProcuracao && (
+        <Alert tone="success">
+          Essa empresa não tem certificado digital válido — a nota sai com o certificado da SOMA, por procuração
+          eletrônica. Precisa da procuração da empresa pra SOMA com o serviço NFS-e no portal da Receita.
+        </Alert>
+      )}
+      {semComoEmitir && (
+        <Alert tone="warning">
+          Essa empresa não tem certificado digital válido. Por procuração a Receita só libera a emissão para
+          Simples Nacional/MEI — cadastre o certificado da empresa pra emitir.
+        </Alert>
+      )}
 
       {!services || services.length === 0 ? (
         <Card className="p-10 text-center">
