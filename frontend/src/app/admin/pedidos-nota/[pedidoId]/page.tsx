@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermissao } from "@/lib/auth";
+import { hojeBrasilia } from "@/lib/competencia";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
@@ -41,8 +42,8 @@ export default async function PedidoNotaPage(props: { params: Promise<{ pedidoId
       .eq("pedido_id", pedidoId)
       .order("ordem"),
     companyId
-      ? supabase.from("services").select("id, name").eq("company_id", companyId).eq("active", true).order("name")
-      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      ? supabase.from("services").select("id, name, description").eq("company_id", companyId).eq("active", true).order("name")
+      : Promise.resolve({ data: [] as { id: string; name: string; description: string | null }[] }),
     companyId
       ? supabase.from("customers").select("id, name, cpf_cnpj").eq("company_id", companyId).order("name").limit(2000)
       : Promise.resolve({ data: [] as { id: string; name: string; cpf_cnpj: string | null }[] }),
@@ -80,7 +81,7 @@ export default async function PedidoNotaPage(props: { params: Promise<{ pedidoId
             {hora(pedido.created_at)} ·{" "}
             {empresa ? (
               <>
-                <Link href={`/empresas/${companyId}`} className="text-brand hover:underline">
+                <Link href={`/admin/emissao-notas/${companyId}`} className="text-brand hover:underline">
                   {empresa.trade_name || empresa.legal_name}
                 </Link>
                 {pedido.empresa_fonte ? ` (${FONTE_EMPRESA[pedido.empresa_fonte]})` : ""}
@@ -155,7 +156,8 @@ export default async function PedidoNotaPage(props: { params: Promise<{ pedidoId
                 key={it.id}
                 item={it}
                 companyId={companyId}
-                servicos={(servicosRes.data ?? []).map((s) => ({ id: s.id as string, nome: s.name as string }))}
+                servicos={(servicosRes.data ?? []).map((s) => ({ id: s.id as string, nome: s.name as string, descricao: (s.description as string | null) ?? null }))}
+                hoje={hojeBrasilia()}
                 tomadores={(tomadoresRes.data ?? []).map((t) => ({
                   id: t.id as string,
                   nome: `${t.name}${t.cpf_cnpj ? ` · ${t.cpf_cnpj}` : ""}`,

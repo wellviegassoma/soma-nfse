@@ -156,12 +156,22 @@ export async function salvarItem(_prev: AcaoState, formData: FormData): Promise<
   if (negado) return { error: negado };
   if (!["RASCUNHO", "ERRO"].includes(item.status)) return { error: "Esse rascunho já foi aprovado." };
 
+  const supabase = await createClient();
+  const serviceId = parsed.data.serviceId || null;
+  const { data: servico } = serviceId
+    ? await supabase.from("services").select("description").eq("id", serviceId).maybeSingle()
+    : { data: null };
+  // O painel já vem com a descrição padrão do serviço e a data de hoje
+  // preenchidas; esses valores padrão gravam como null (= "usar o padrão"),
+  // para não contar como edição do analista na métrica do piloto.
+  const descricao = parsed.data.descricao || null;
+  const competencia = parsed.data.competencia || null;
   const novo = {
     customer_id: parsed.data.customerId || null,
-    service_id: parsed.data.serviceId || null,
+    service_id: serviceId,
     valor: lerValor(parsed.data.valor),
-    descricao: parsed.data.descricao || null,
-    competencia: parsed.data.competencia || null,
+    descricao: descricao && descricao === (servico?.description ?? null) && !item.descricao ? null : descricao,
+    competencia: competencia === hojeBrasilia() && !item.competencia ? null : competencia,
   };
   const mudou =
     novo.customer_id !== item.customer_id ||
@@ -170,7 +180,6 @@ export async function salvarItem(_prev: AcaoState, formData: FormData): Promise<
     (novo.descricao ?? null) !== (item.descricao ?? null) ||
     (novo.competencia ?? null) !== (item.competencia ?? null);
 
-  const supabase = await createClient();
   await supabase
     .from("pedido_nota_itens")
     .update({ ...novo, ...(mudou ? { editado_pelo_humano: true } : {}) })

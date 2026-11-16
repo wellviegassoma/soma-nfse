@@ -37,16 +37,24 @@ export function ItemRascunho({
   companyId,
   servicos,
   tomadores,
+  hoje,
 }: {
   item: ItemView;
   companyId: string | null;
-  servicos: { id: string; nome: string }[];
+  servicos: { id: string; nome: string; descricao: string | null }[];
   tomadores: { id: string; nome: string }[];
+  hoje: string;
 }) {
   const [sEmitir, emitir, emitindo] = useActionState(aprovarEEmitirItem, undefined);
   const [sSalvar, salvar, salvando] = useActionState(salvarItem, undefined);
   const [sDesc, descartar, descartando] = useActionState(descartarItem, undefined);
   const [valor, setValor] = useState(item.valor != null ? Number(item.valor).toFixed(2).replace(".", ",") : "");
+  const descricaoDoServico = (id: string) => servicos.find((s) => s.id === id)?.descricao ?? "";
+  const [servicoId, setServicoId] = useState(item.service_id ?? "");
+  // Sem descrição da IA, já vem a descrição padrão do serviço (igual à tela
+  // Emitir Nota); trocar o serviço troca a descrição se ela ainda era a padrão.
+  const [descricao, setDescricao] = useState(item.descricao || descricaoDoServico(item.service_id ?? ""));
+  const [competencia, setCompetencia] = useState(item.competencia ?? hoje);
   const editavel = ["RASCUNHO", "ERRO"].includes(item.status);
   const estado = sEmitir ?? sSalvar ?? sDesc;
 
@@ -100,13 +108,23 @@ export function ItemRascunho({
           </Select>
         </Field>
         {!item.customer_id && editavel && companyId ? (
-          <Link href={`/empresas/${companyId}/tomadores`} target="_blank" className="-mt-1 text-xs text-brand hover:underline">
+          <Link href={`/admin/emissao-notas/${companyId}/tomadores/novo`} target="_blank" className="-mt-1 text-xs text-brand hover:underline">
             Cadastrar tomador novo (abre em outra aba; depois recarregue esta página)
           </Link>
         ) : null}
 
         <Field label="Serviço" htmlFor={`servico-${item.id}`}>
-          <Select id={`servico-${item.id}`} name="serviceId" defaultValue={item.service_id ?? ""} disabled={!editavel}>
+          <Select
+            id={`servico-${item.id}`}
+            name="serviceId"
+            value={servicoId}
+            onChange={(e) => {
+              const novo = e.target.value;
+              if (!descricao.trim() || descricao === descricaoDoServico(servicoId)) setDescricao(descricaoDoServico(novo));
+              setServicoId(novo);
+            }}
+            disabled={!editavel}
+          >
             <option value="">— escolher —</option>
             {servicos.map((s) => (
               <option key={s.id} value={s.id}>
@@ -120,16 +138,24 @@ export function ItemRascunho({
           <Field label="Valor (R$)" htmlFor={`valor-${item.id}`}>
             <Input id={`valor-${item.id}`} name="valor" inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} disabled={!editavel} />
           </Field>
-          <Field label="Competência" htmlFor={`comp-${item.id}`} hint="Em branco = hoje">
-            <Input id={`comp-${item.id}`} name="competencia" type="date" defaultValue={item.competencia ?? ""} disabled={!editavel} />
+          <Field label="Data (competência)" htmlFor={`comp-${item.id}`} hint={competencia === hoje ? "Hoje" : undefined}>
+            <Input
+              id={`comp-${item.id}`}
+              name="competencia"
+              type="date"
+              value={competencia}
+              onChange={(e) => setCompetencia(e.target.value)}
+              disabled={!editavel}
+            />
           </Field>
         </div>
 
-        <Field label="Descrição" htmlFor={`desc-${item.id}`} hint="Em branco = descrição padrão do serviço">
+        <Field label="Descrição" htmlFor={`desc-${item.id}`} hint={!item.descricao && descricao ? "Descrição padrão do serviço" : undefined}>
           <textarea
             id={`desc-${item.id}`}
             name="descricao"
-            defaultValue={item.descricao ?? ""}
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
             disabled={!editavel}
             rows={2}
             className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
@@ -153,7 +179,7 @@ export function ItemRascunho({
             </Button>
           </div>
         ) : item.dps_id && companyId ? (
-          <Link href={`/empresas/${companyId}/notas/${item.dps_id}`} className="text-sm text-brand hover:underline">
+          <Link href={`/admin/emissao-notas/${companyId}/notas/${item.dps_id}`} className="text-sm text-brand hover:underline">
             Ver nota emitida →
           </Link>
         ) : null}
