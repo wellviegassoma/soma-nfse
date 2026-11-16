@@ -266,6 +266,30 @@ campo, mais `pergunta_ao_cliente` quando faltar algo.
 
 ## Fase 3: painel de aprovação (3–4 dias)
 
+**Status (16/11/2026): código pronto, build de produção OK; não publicado nem testado no navegador.**
+
+- [x] `/admin/pedidos-nota` (aba "Pedidos de Nota", só com `notas.emitir`): filtros Para
+      resolver / Emitidos / Descartados / Todos; contato (grupo), empresa e de onde ela veio,
+      nº de notas e total.
+- [x] `/admin/pedidos-nota/[pedidoId]`: mensagens do cliente à esquerda (foto e áudio
+      inline, PDF/planilha por link via `/api/pedidos-nota/[id]/anexos/[i]`, Blob privado) e
+      um cartão por rascunho à direita, com alertas, pergunta ao cliente, tomador/serviço
+      (selects do cadastro), valor, competência e descrição.
+- [x] Escolher/trocar a empresa (busca por nome, código, CNPJ/CPF; candidatas primeiro):
+      grava o vínculo `PAINEL` e roda a IA na hora.
+- [x] Ações: **Aprovar e emitir**, Salvar sem emitir, Descartar nota, Descartar pedido (com
+      motivo), Ler de novo. `editado_pelo_humano` marca o que o analista mudou (métrica da
+      Fase 5).
+- [x] **Sem refatorar a emissão** (mudança de plano): `aprovarEEmitirItem` monta o mesmo
+      `FormData` da tela Emitir Nota e chama `issueNfse`, então valem as mesmas regras e
+      permissões. Trava `RASCUNHO/ERRO → APROVADO` antes de emitir (o duplo clique não emite
+      duas vezes). Retenções: sem informação explícita no pedido, ficam no padrão do serviço.
+- [ ] Tomador novo: hoje é link para cadastrar na tela de tomadores e recarregar. Cadastro
+      direto pelo CNPJ no painel fica para depois.
+- [ ] "Pedir dado ao cliente" pelo Digisac, atalhos de teclado, contador no menu.
+
+Plano original desta fase:
+
 `app/atendimento/pedidos-nota/` (ou `admin/`, conforme os papéis):
 
 - Fila por status, com contador no menu. Ordenação: mais antigos primeiro.
@@ -284,6 +308,13 @@ retroativa, retenções, inscrição municipal aprendida, emissão por procuraç
 `actions/lote-notas.ts`.
 
 ## Fase 4: devolução ao cliente (1–2 dias)
+
+**Status (16/11/2026): código pronto (`src/lib/pedido-nota/devolver.ts`), desligado por padrão.**
+Depois de emitir, gera o DANFSe pelo nfse-engine e manda o PDF e o XML no contato do Digisac
+(`POST /messages` com `file.base64`), mais um comentário para o atendente. Só envia ao cliente
+com `DIGISAC_ENVIAR_NOTA_CLIENTE=1`; desligado, só comenta (se
+`DIGISAC_RESPONDER_COMENTARIOS=1`). ⚠️ O envio de arquivo por `contactId` ainda não foi testado
+contra o Digisac real; os exemplos da documentação usam `number` + `serviceId`.
 
 - Após `ACCEPTED`: enviar o DANFSe (PDF) e o XML no chamado do Digisac, com texto padrão
   ("Sua nota nº X para Y, valor R$ Z, foi emitida."). Status `EMITIDA`.

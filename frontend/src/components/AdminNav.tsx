@@ -19,6 +19,8 @@ const TABS: Tab[] = [
 ];
 
 const TAB_EMISSAO_NOTAS: Tab = { href: "/admin/emissao-notas", label: "Emissão de Notas" };
+// Pedidos sinalizados com #nota no Digisac (docs/pedido-nota-ia.md).
+const TAB_PEDIDOS_NOTA: Tab = { href: "/admin/pedidos-nota", label: "Pedidos de Nota" };
 const TAB_COMERCIAL: Tab = { href: "/admin/comercial", label: "Comercial" };
 const TAB_USUARIOS: Tab = { href: "/admin/usuarios", label: "Usuários" };
 const TAB_SUPER_ADMIN: Tab = { href: "/admin/configuracoes/contador-responsavel", label: "Configurações" };
@@ -43,7 +45,7 @@ export function AdminNav({
   const pathname = usePathname();
   const tabs = [
     ...TABS,
-    ...(podeEmitirNotas ? [TAB_EMISSAO_NOTAS] : []),
+    ...(podeEmitirNotas ? [TAB_EMISSAO_NOTAS, TAB_PEDIDOS_NOTA] : []),
     ...(podeVerComercial ? [TAB_COMERCIAL] : []),
     ...(podeGerenciarUsuarios ? [TAB_USUARIOS] : []),
     ...(isSuperAdmin ? [TAB_SUPER_ADMIN] : []),

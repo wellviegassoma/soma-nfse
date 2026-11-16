@@ -125,6 +125,23 @@ export async function enviarComentario(contactId: string, texto: string): Promis
   });
 }
 
+/** Mensagem com arquivo para o cliente (vai para o WhatsApp dele). */
+export async function enviarArquivo(p: {
+  contactId: string;
+  serviceId: string | null;
+  texto: string;
+  arquivo: { base64: string; mimetype: string; nome: string };
+}): Promise<void> {
+  await chamar("POST", "/messages", {
+    contactId: p.contactId,
+    ...(p.serviceId ? { serviceId: p.serviceId } : {}),
+    userId: await idUsuarioIntegracao(),
+    origin: "bot",
+    text: p.texto,
+    file: { base64: p.arquivo.base64, mimetype: p.arquivo.mimetype, name: p.arquivo.nome },
+  });
+}
+
 const TAMANHO_MAX_ARQUIVO = 20 * 1024 * 1024;
 
 /**
