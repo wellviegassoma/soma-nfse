@@ -266,7 +266,10 @@ campo, mais `pergunta_ao_cliente` quando faltar algo.
 
 ## Fase 3: painel de aprovação (3–4 dias)
 
-**Status (16/11/2026): código pronto, build de produção OK; não publicado nem testado no navegador.**
+**Status (16/11/2026): no ar. Primeira NFS-e emitida pelo painel e autorizada.** Corrigidos depois do
+teste: os links iam para `/empresas/...` (portal do cliente) em vez de `/admin/emissao-notas/...`;
+a descrição padrão do serviço e a data de hoje vêm preenchidas (e gravam como null para não contar
+como edição).
 
 - [x] `/admin/pedidos-nota` (aba "Pedidos de Nota", só com `notas.emitir`): filtros Para
       resolver / Emitidos / Descartados / Todos; contato (grupo), empresa e de onde ela veio,
@@ -313,8 +316,9 @@ retroativa, retenções, inscrição municipal aprendida, emissão por procuraç
 Depois de emitir, gera o DANFSe pelo nfse-engine e manda o PDF e o XML no contato do Digisac
 (`POST /messages` com `file.base64`), mais um comentário para o atendente. Só envia ao cliente
 com `DIGISAC_ENVIAR_NOTA_CLIENTE=1`; desligado, só comenta (se
-`DIGISAC_RESPONDER_COMENTARIOS=1`). ⚠️ O envio de arquivo por `contactId` ainda não foi testado
-contra o Digisac real; os exemplos da documentação usam `number` + `serviceId`.
+`DIGISAC_RESPONDER_COMENTARIOS=1`). ✅ Testado em 16/11/2026: `POST /messages` com `contactId` + `serviceId` + `file` (XML da
+primeira nota emitida pelo painel) → 201, tipo `document`, chegou no WhatsApp do contato de teste.
+O PDF usa o mesmo gerador do botão "Baixar PDF" (não testado por este caminho).
 
 - Após `ACCEPTED`: enviar o DANFSe (PDF) e o XML no chamado do Digisac, com texto padrão
   ("Sua nota nº X para Y, valor R$ Z, foi emitida."). Status `EMITIDA`.
