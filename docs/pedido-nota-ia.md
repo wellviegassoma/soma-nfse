@@ -97,7 +97,10 @@ Isso decide o modelo (ver "Modelo e custo").
 
 ## Fase 1: receber o pedido (2–3 dias)
 
-**Status (16/11/2026): código pronto, ainda não publicado.**
+**Status (16/11/2026): no ar em produção e validado com um `#nota` real.** Migration
+aplicada à mão pelo SQL Editor; webhook `message.created` cadastrado
+(`nfse.somaintegrada.com.br/api/digisac/webhook`); primeiro pedido gravado em `pedidos_nota`.
+O formato `{ event, data }` do corpo do webhook (ou a mensagem solta) funcionou.
 
 - [x] Migration `supabase/migrations/20261116170000_fase_bj_pedidos_nota.sql`: `pedidos_nota`,
       `pedido_nota_itens`, `pedido_nota_empresas_por_telefone` (devolve **todas** as empresas do
@@ -115,10 +118,10 @@ Isso decide o modelo (ver "Modelo e custo").
       `#notas`, `message.updated` e corpo inválido → ignorados; id inexistente → descartado
       sem gravar nada; payload forjado com id de comentário real que não é `#nota` → recusado
       depois de rebuscar na API.
-- [ ] Aplicar a migration em produção.
-- [ ] Variáveis na Vercel: `DIGISAC_URL`, `DIGISAC_TOKEN`, `DIGISAC_WEBHOOK_SECRET`,
+- [x] Aplicar a migration em produção (SQL Editor; falta registrar no histórico com `supabase migration repair --status applied 20261116170000`).
+- [x] Variáveis na Vercel: `DIGISAC_URL`, `DIGISAC_TOKEN`, `DIGISAC_WEBHOOK_SECRET`,
       `DIGISAC_RESPONDER_COMENTARIOS=0` (ligar depois do primeiro teste).
-- [ ] Publicar, cadastrar o webhook e fazer o primeiro `#nota` real num chamado de teste.
+- [x] Publicar, cadastrar o webhook e fazer o primeiro `#nota` real num chamado de teste.
       Registrar aqui o formato real do corpo do webhook (a rota aceita `{event, data}` e a
       mensagem solta).
 
