@@ -216,8 +216,8 @@ export default async function ImpostosPage(
       dataAbertura: company.data_abertura,
     });
 
-    // Buscado sempre (não só quando sujeito_fator_r) — folhasSalario é um
-    // campo opcional útil no PGDAS-D independente do Anexo do serviço.
+    // Buscado sempre (não só quando sujeito_fator_r) — quem decide se a folha
+    // vai no PGDAS-D é a atividade das notas do mês (montarDeclaracaoPgdasD).
     const folhaMensal = await buscarFolhaMensal(supabase, companyId);
     const folhaPorMes = new Map(folhaMensal.map((f) => [f.competencia, totalFolhaComEncargos(f)]));
 

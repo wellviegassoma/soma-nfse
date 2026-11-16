@@ -117,9 +117,11 @@ export function montarDeclaracaoPgdasD(params: {
   // combinação vira uma entrada em `atividades[]`; sem segregação por
   // município (ver limitação em pgdas-declaracao.ts topo do arquivo).
   const valorPorIdAtividade = new Map<number, number>();
+  let temAtividadeFatorR = false;
   for (const nota of notasDoMes) {
     const atividade = buscarAtividade(nota.atividadeId!);
     if (!atividade) continue; // já filtrado acima, guarda de tipo
+    if (atividade.tratamento === "FATOR_R" && nota.valor > 0) temAtividadeFatorR = true;
     const idAtividade = resolverIdAtividade(atividade.tratamento, nota.tipoRetencaoIssqn);
     valorPorIdAtividade.set(idAtividade, (valorPorIdAtividade.get(idAtividade) ?? 0) + nota.valor);
   }
@@ -134,16 +136,54 @@ export function montarDeclaracaoPgdasD(params: {
     return { pa: a * 100 + mm, valorInterno: receitaPorMes(m), valorExterno: 0 };
   });
 
+  // Folha só vai quando o mês tem receita de atividade sujeita ao Fator R.
+  // O que vale é a atividade das notas do mês, não o "sujeito ao Fator R" do
+  // cadastro: empresa com serviços dos dois tipos que só faturou o Anexo III
+  // fixo é recusada se a folha for junto (MSG_ISN_045, AURUM e BMS, 10/2026).
+  //
   // Só os 12 meses ANTERIORES ao PA (mesma janela do RBT12/Fator R) — a Serpro
   // recusa com "Foi enviada folha de um período desnecessário" se a folha do
   // próprio mês de apuração for junto (visto em produção, HERA, 09/2026).
-  const folhasSalario = meses12
-    .map((m) => {
-      const [a, mm] = m.split("-").map(Number);
-      const valor = folhaPorMes(m);
-      return valor === undefined ? null : { pa: a * 100 + mm, valor };
-    })
-    .filter((f): f is { pa: number; valor: number } => f !== null);
+  const folhasSalario = temAtividadeFatorR
+    ? meses12
+        .map((m) => {
+          const [a, mm] = m.split("-").map(Number);
+          const valor = folhaPorMes(m);
+          return valor === undefined ? null : { pa: a * 100 + mm, valor };
+        })
+        .filter((f): f is { pa: number; valor: number } => f !== null)
+    : [];
+
+  // Com atividade de Fator R a folha passa a ser obrigatória desde o primeiro
+  // mês com receita na janela (MSG_ISN_029, LOUSADA, 10/2026: pediu 07 e 08,
+  // receita começou em 07). Barra antes de ir à Serpro, sem inventar zero.
+  if (temAtividadeFatorR) {
+    const cronologico = [...meses12].sort();
+    const primeiroComReceita = cronologico.find((m) => receitaPorMes(m) > 0);
+    const faltando = primeiroComReceita
+      ? cronologico.filter((m) => m >= primeiroComReceita && folhaPorMes(m) === undefined)
+      : [];
+    if (faltando.length > 0) {
+      const meses = faltando.map((m) => `${m.slice(5, 7)}/${m.slice(0, 4)}`);
+      const lista = meses.length > 1 ? `${meses.slice(0, -1).join(", ")} e ${meses.at(-1)}` : meses[0];
+      return {
+        dados: null,
+        bloqueios: [
+          `Tem nota de atividade sujeita ao Fator R e falta a folha de ${lista}. Informe na aba Fator R (coloque 0 se não houve folha nesses meses).`,
+        ],
+      };
+    }
+  }
+
+  // Sem receita no mês (sem movimento): a lista de atividades não vai — a
+  // Serpro recusa atividade com valor zero (MSG_ISN_023, SOMA CAPITAL, 10/2026).
+  const atividades = Array.from(valorPorIdAtividade.entries())
+    .filter(([, valor]) => valor > 0)
+    .map(([idAtividade, valor]) => ({
+      idAtividade,
+      valorAtividade: valor,
+      receitasAtividade: [{ valor }],
+    }));
 
   return {
     dados: {
@@ -160,11 +200,7 @@ export function montarDeclaracaoPgdasD(params: {
         estabelecimentos: [
           {
             cnpjCompleto: cnpjLimpo,
-            atividades: Array.from(valorPorIdAtividade.entries()).map(([idAtividade, valor]) => ({
-              idAtividade,
-              valorAtividade: valor,
-              receitasAtividade: [{ valor }],
-            })),
+            ...(atividades.length > 0 ? { atividades } : {}),
           },
         ],
       },
