@@ -41,12 +41,12 @@ const TRADUCOES: Record<string, Omit<ErroEmissaoTraduzido, "codigo">> = {
   },
   E0116: {
     mensagem: "A prefeitura exige a inscrição municipal da empresa na nota.",
-    acao: "Peça pra SOMA cadastrar a inscrição municipal em Dados fiscais.",
+    acao: "Se a inscrição já está em Dados fiscais, o sistema passa a enviá-la sozinho — emita de novo. Se não está, peça pra SOMA cadastrar.",
     onde: "empresa",
   },
   E0120: {
-    mensagem: "A prefeitura não usa inscrição municipal na NFS-e nacional, e ela foi enviada.",
-    acao: "Peça pra SOMA apagar a inscrição municipal em Dados fiscais.",
+    mensagem: "A prefeitura não usa inscrição municipal na NFS-e nacional pra essa empresa, e ela foi enviada.",
+    acao: "O sistema já parou de enviar a inscrição pra essa empresa — emita de novo.",
     onde: "empresa",
   },
   E0008: {

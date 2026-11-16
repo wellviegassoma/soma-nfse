@@ -17,8 +17,7 @@ import type { NfseAmbiente } from "@/lib/types";
 import { resumoErros, traduzirErrosSefin, type ErroEmissaoTraduzido } from "@/lib/nfse-erros";
 
 export type IssueNfseState =
-  | { error?: string; success?: boolean; dpsId?: string; motivos?: ErroEmissaoTraduzido[] }
-  | undefined;
+  { error?: string; success?: boolean; dpsId?: string; motivos?: ErroEmissaoTraduzido[] } | undefined;
 
 const AMBIENTE_MAP: Record<NfseAmbiente, string> = {
   HOMOLOGACAO: "producao_restrita",
@@ -58,10 +57,7 @@ async function logNfseError(
   });
 }
 
-export async function issueNfse(
-  _prevState: IssueNfseState,
-  formData: FormData,
-): Promise<IssueNfseState> {
+export async function issueNfse(_prevState: IssueNfseState, formData: FormData): Promise<IssueNfseState> {
   const companyIdRaw = formData.get("companyId");
   if (typeof companyIdRaw !== "string") return { error: "Empresa inválida." };
 
@@ -80,8 +76,7 @@ export async function issueNfse(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
-  const { companyId, customerId, serviceId, amount, description, competenceDate } =
-    parsed.data;
+  const { companyId, customerId, serviceId, amount, description, competenceDate } = parsed.data;
 
   const supabase = await createClient();
 
@@ -89,7 +84,7 @@ export async function issueNfse(
     supabase
       .from("companies")
       .select(
-        "cnpj, cpf, municipal_registration, municipality_ibge_code, nfse_ambiente, dps_series, tax_regime, regime_especial_tributacao, allow_retroactive_emission",
+        "cnpj, cpf, municipal_registration, nfse_envia_im, municipality_ibge_code, nfse_ambiente, dps_series, tax_regime, regime_especial_tributacao, allow_retroactive_emission",
       )
       .eq("id", companyId)
       .single(),
@@ -149,8 +144,7 @@ export async function issueNfse(
   const documentoPrestador = documentoEmpresa(company);
   if (!documentoPrestador || !company.municipality_ibge_code) {
     return {
-      error:
-        "Cadastro fiscal incompleto — peça pra SOMA configurar CNPJ/CPF e município antes de emitir.",
+      error: "Cadastro fiscal incompleto — peça pra SOMA configurar CNPJ/CPF e município antes de emitir.",
     };
   }
   if (!company.allow_retroactive_emission && competenceDate.slice(0, 7) !== mesCorrenteBrasilia()) {
@@ -186,7 +180,13 @@ export async function issueNfse(
     const cep = await buscarDadosCep(cepTomador);
     const motivoTomador = (mensagem: string) => ({
       error: "O cadastro do tomador precisa de ajuste antes de emitir. Nenhuma nota foi enviada.",
-      motivos: [{ mensagem, acao: "Abra o cadastro do tomador e corrija o CEP ou a cidade.", onde: "tomador" as const }],
+      motivos: [
+        {
+          mensagem,
+          acao: "Abra o cadastro do tomador e corrija o CEP ou a cidade.",
+          onde: "tomador" as const,
+        },
+      ],
     });
     if ("error" in cep) {
       if (cep.error === "CEP não encontrado." || cep.error.startsWith("CEP inválido")) {
@@ -194,7 +194,11 @@ export async function issueNfse(
       }
     } else {
       const norm = (v: string | null | undefined) =>
-        (v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+        (v ?? "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .trim();
       if (customer.city && cep.data.cidade && norm(customer.city) !== norm(cep.data.cidade)) {
         return motivoTomador(
           `O CEP ${cepTomador} é de ${cep.data.cidade}/${cep.data.uf}, mas o cadastro do tomador diz ${customer.city}.`,
@@ -215,11 +219,15 @@ export async function issueNfse(
     ? [{ mensagem: AVISO_PROCURACAO, acao: "Sem procuração, cadastre o certificado da empresa." }]
     : [];
 
+  // Inscrição municipal do prestador: vai se estiver cadastrada, a menos que
+  // o governo já tenha dito que essa empresa não usa (nfse_envia_im = false,
+  // aprendido com o E0120 — ver o reenvio automático mais abaixo).
+  const enviaIm = Boolean(company.municipal_registration) && company.nfse_envia_im !== false;
+
   // Numeração atômica — nunca reaproveitada, mesmo se a emissão falhar depois.
-  const { data: numeroDps, error: numeroError } = await supabase.rpc(
-    "claim_next_dps_number",
-    { p_company_id: companyId },
-  );
+  const { data: numeroDps, error: numeroError } = await supabase.rpc("claim_next_dps_number", {
+    p_company_id: companyId,
+  });
   if (numeroError || numeroDps == null) {
     return { error: "Não foi possível gerar o número da nota. Tente novamente." };
   }
@@ -229,7 +237,7 @@ export async function issueNfse(
       codigo_municipio_ibge: company.municipality_ibge_code,
       cnpj: documentoPrestador,
       ambiente: AMBIENTE_MAP[company.nfse_ambiente as NfseAmbiente],
-      inscricao_municipal: company.municipal_registration,
+      inscricao_municipal: enviaIm ? company.municipal_registration : null,
       serie_dps: company.dps_series,
       // CST 00 (Simples) x CST 01-07 (apuração própria) precisa bater com
       // isso — empresa fora do Simples não pode ir com opSimpNac=3.
@@ -339,7 +347,10 @@ export async function issueNfse(
     if (detalhe) {
       return {
         error: "A nota não foi enviada ao governo — há um dado a corrigir antes.",
-        motivos: [{ mensagem: detalhe, acao: "Se não souber o que corrigir, fale com a SOMA." }, ...avisoProcuracao],
+        motivos: [
+          { mensagem: detalhe, acao: "Se não souber o que corrigir, fale com a SOMA." },
+          ...avisoProcuracao,
+        ],
       };
     }
     return {
@@ -380,7 +391,8 @@ export async function issueNfse(
     if (!resultado.sucesso) {
       // O governo recusou: nenhuma nota existe. Mostra o motivo normalmente.
       return {
-        error: "O governo recusou a nota. Nenhuma nota foi gerada — corrija o que está abaixo e emita de novo.",
+        error:
+          "O governo recusou a nota. Nenhuma nota foi gerada — corrija o que está abaixo e emita de novo.",
         motivos: [...traduzirErrosSefin(resultado.erros ?? []), ...avisoProcuracao],
       };
     }
@@ -402,6 +414,31 @@ export async function issueNfse(
       viaProcuracao ? `[procuração SOMA] ${mensagemTecnica}` : mensagemTecnica,
       resumoErros(motivos),
     );
+
+    // Inscrição municipal: a exigência é do cadastro da empresa no CNC, não
+    // da cidade. Se o governo recusou só por ela (E0120 = não deve ir;
+    // E0116 = deve ir), guarda a resposta na empresa e reenvia uma vez com
+    // um novo número — sem precisar mexer no cadastro.
+    const codigos = new Set(motivos.map((m) => m.codigo).filter(Boolean));
+    const jaReenviou = formData.get("_reenvioIm") === "1";
+    const novoEnviaIm =
+      codigos.has("E0120") && enviaIm
+        ? false
+        : codigos.has("E0116") && !enviaIm && company.municipal_registration
+          ? true
+          : null;
+    if (novoEnviaIm !== null) {
+      await admin.from("companies").update({ nfse_envia_im: novoEnviaIm }).eq("id", companyId);
+    }
+    // Só reenvia se esse era o único problema — com outro erro junto, a
+    // recusa voltaria igual e gastaria mais um número.
+    if (novoEnviaIm !== null && !jaReenviou && codigos.size === 1) {
+      const reenvio = new FormData();
+      for (const [k, v] of formData.entries()) reenvio.append(k, v);
+      reenvio.set("_reenvioIm", "1");
+      return issueNfse(_prevState, reenvio);
+    }
+
     return {
       error: "O governo recusou a nota. Nenhuma nota foi gerada — corrija o que está abaixo e emita de novo.",
       motivos: [...motivos, ...avisoProcuracao],
