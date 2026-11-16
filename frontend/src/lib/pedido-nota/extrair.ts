@@ -12,6 +12,7 @@ import {
   type HistoricoTomador,
   type MensagemCliente,
 } from "@/lib/pedido-nota/extrair-core";
+import { empresasPorNome } from "@/lib/pedido-nota/empresa-core";
 
 // Fase 2 do pedido de nota (docs/pedido-nota-ia.md): lê o pedido gravado na
 // Fase 1, monta a entrada da IA com o catálogo da empresa, grava os rascunhos
@@ -60,7 +61,7 @@ export async function extrairPedido(pedidoId: string): Promise<{ itens: number; 
 
   const { data: pedido } = await admin
     .from("pedidos_nota")
-    .select("id, status, company_id, empresa_fonte, dica_atendente, mensagens, anexos")
+    .select("id, status, company_id, empresa_fonte, contato_nome, dica_atendente, mensagens, anexos")
     .eq("id", pedidoId)
     .maybeSingle();
   if (!pedido) return { itens: 0, motivo: "pedido não encontrado" };
@@ -155,7 +156,14 @@ export async function extrairPedido(pedidoId: string): Promise<{ itens: number; 
     };
     const temAudioSemTranscricao = anexosPreparados.some((a) => a?.tipo === "audio" && !a.transcricao);
 
+    // Empresa pelo nome do grupo: nome idêntico ao do sistema é o padrão
+    // "SOMA + nome" (aviso leve); só parecido pede conferência (aviso forte).
     const empresaPorNome = pedido.empresa_fonte === "NOME_CONTATO";
+    const nomeIdentico =
+      empresaPorNome &&
+      empresasPorNome(String(pedido.contato_nome ?? ""), [
+        { id: companyId, cnpj: null, cpf: null, legalName: empresa.legal_name as string, tradeName: (empresa.trade_name as string | null) ?? null },
+      ]).exatas.length === 1;
     const itensFinais = ia.resposta.eh_pedido_de_nota
       ? ia.resposta.itens.map((it) => {
           const final = posProcessar(it, {
@@ -167,10 +175,14 @@ export async function extrairPedido(pedidoId: string): Promise<{ itens: number; 
             temAudioSemTranscricao,
           });
           if (empresaPorNome) {
-            final.alertas.unshift({
-              codigo: "EMPRESA_PELO_NOME",
-              mensagem: `Empresa (${entrada.empresa.nome}) identificada pelo nome do grupo/contato no Digisac: confira antes de aprovar.`,
-            });
+            final.alertas.unshift(
+              nomeIdentico
+                ? { codigo: "EMPRESA_PELO_NOME_EXATO", mensagem: `Empresa identificada pelo nome do grupo (${entrada.empresa.nome}).` }
+                : {
+                    codigo: "EMPRESA_PELO_NOME",
+                    mensagem: `Empresa (${entrada.empresa.nome}) identificada por nome PARECIDO com o do grupo no Digisac: confira antes de aprovar.`,
+                  },
+            );
           }
           return final;
         })

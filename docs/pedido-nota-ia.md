@@ -181,10 +181,14 @@ Nova ordem (`src/lib/pedido-nota/empresa.ts` + `empresa-core.ts`, migration
 2. **Vínculo aprendido** (`pedido_nota_vinculos`: contato/grupo do Digisac → empresa). Gravado
    pelo passo 1 e, na Fase 3, pela escolha no painel.
 3. **Telefone** (`company_contatos_setor`), quando houver; nunca em grupo.
-4. **Nome do grupo/contato**: todas as palavras significativas do nome da empresa aparecem no
-   nome do contato. Se casar com **uma** empresa, usa essa e põe o alerta `EMPRESA_PELO_NOME` em
-   todos os rascunhos; com várias, elas vão para `companies_candidatas`. Medido nos contatos
-   ativos: casou com uma empresa em 12 de 25 grupos (4 ambíguos, 9 sem match).
+4. **Nome do grupo** (padrão da SOMA: **"SOMA + nome da empresa no sistema"**; 547 dos 619
+   grupos usam "SOMA +"). Tira o prefixo e compara as palavras significativas, ignorando
+   natureza jurídica, preposições, "Dr./Dra." e termos de ramo que só aparecem de um lado ("PSD",
+   "Livro Caixa", "Serviços Médicos", "Clínica"...). **Idêntico** a uma única empresa → usa, com aviso
+   leve `EMPRESA_PELO_NOME_EXATO`. **Muito parecido** (todas as palavras de um lado no outro, com 2+
+   em comum) e único → usa, com aviso forte `EMPRESA_PELO_NOME`. Senão, as mais parecidas vão
+   como sugestão no painel. Medido em 16/11/2026 nos 226 grupos com conversa nos últimos 90 dias:
+   111 idênticos, 34 muito parecidos, 32 ambíguos, 17 só com sugestões, 49 sem empresa parecida.
 
 `pedidos_nota.empresa_fonte` guarda de onde veio a empresa (`CNPJ_COMANDO`, `VINCULO`,
 `TELEFONE`, `NOME_CONTATO`, `PAINEL`). O comentário de retorno ao atendente explica como indicar

@@ -3,7 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarArquivo, enviarComentario } from "@/lib/digisac/client";
 
 // Fase 4 do pedido de nota (docs/pedido-nota-ia.md): depois da emissão,
-// manda o DANFSe (PDF) e o XML para o cliente no mesmo contato do Digisac,
+// manda o DANFSe (PDF) para o cliente no mesmo contato do Digisac (XML só com
+// DIGISAC_ENVIAR_XML_CLIENTE=1),
 // e um comentário interno para o atendente.
 //
 // Envio ao cliente só com DIGISAC_ENVIAR_NOTA_CLIENTE=1 — é mensagem de
@@ -61,13 +62,17 @@ export async function devolverNotaAoCliente(itemId: string): Promise<{ enviado: 
       texto: `Olá! Segue a nota fiscal ${rotulo} no valor de ${valor}.`,
       arquivo: { base64: pdf.toString("base64"), mimetype: "application/pdf", nome: `${nome}.pdf` },
     });
-    await enviarArquivo({
-      contactId,
-      serviceId: (pedido.origem_service_id as string | null) ?? null,
-      texto: "XML da nota fiscal.",
-      arquivo: { base64: Buffer.from(nfse.xml_nfse, "utf8").toString("base64"), mimetype: "application/xml", nome: `${nome}.xml` },
-    });
-    await comentar(`✅ SOMA Gestão: nota ${rotulo} de ${valor} emitida e enviada ao cliente (PDF + XML).`);
+    // O cliente precisa do PDF; o XML só com DIGISAC_ENVIAR_XML_CLIENTE=1.
+    const comXml = process.env.DIGISAC_ENVIAR_XML_CLIENTE === "1";
+    if (comXml) {
+      await enviarArquivo({
+        contactId,
+        serviceId: (pedido.origem_service_id as string | null) ?? null,
+        texto: "XML da nota fiscal.",
+        arquivo: { base64: Buffer.from(nfse.xml_nfse, "utf8").toString("base64"), mimetype: "application/xml", nome: `${nome}.xml` },
+      });
+    }
+    await comentar(`✅ SOMA Gestão: nota ${rotulo} de ${valor} emitida e enviada ao cliente (PDF${comXml ? " + XML" : ""}).`);
     return { enviado: true, motivo: "ok" };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "falha";

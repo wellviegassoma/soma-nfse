@@ -86,8 +86,15 @@ export async function resolverEmpresa(
     if (porTel.length > 1) return { companyId: null, fonte: null, candidatas: porTel, dica: resto, cnpjNaoEncontrado };
   }
 
-  // 4. Nome do grupo/contato
+  // 4. Nome do grupo ("SOMA + nome da empresa no sistema"): idêntico → usa;
+  //    muito parecido e único → usa com alerta; senão, só sugestões.
   const porNome = empresasPorNome(p.nomeContato, empresas);
-  if (porNome.length === 1) return { companyId: porNome[0], fonte: "NOME_CONTATO", candidatas: porNome, dica: resto, cnpjNaoEncontrado };
-  return { companyId: null, fonte: null, candidatas: porNome.slice(0, 10), dica: resto, cnpjNaoEncontrado };
+  if (porNome.exatas.length === 1) {
+    return { companyId: porNome.exatas[0], fonte: "NOME_CONTATO", candidatas: porNome.exatas, dica: resto, cnpjNaoEncontrado };
+  }
+  if (porNome.exatas.length === 0 && porNome.fortes.length === 1) {
+    return { companyId: porNome.fortes[0], fonte: "NOME_CONTATO", candidatas: porNome.fortes, dica: resto, cnpjNaoEncontrado };
+  }
+  const sugestoes = [...new Set([...porNome.exatas, ...porNome.fortes, ...porNome.candidatas])].slice(0, 10);
+  return { companyId: null, fonte: null, candidatas: sugestoes, dica: resto, cnpjNaoEncontrado };
 }

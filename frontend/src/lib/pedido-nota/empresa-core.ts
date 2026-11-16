@@ -37,14 +37,19 @@ export function digitos(s: string | null | undefined): string {
   return (s ?? "").replace(/\D/g, "");
 }
 
-// Palavras que não identificam empresa nenhuma (natureza jurídica, ramo
-// genérico, nome do próprio escritório nos grupos "SOMA x Cliente").
-const GENERICAS = new Set([
-  "ltda", "me", "epp", "eireli", "sa", "slu", "ss", "sociedade", "simples", "limitada", "unipessoal",
-  "servicos", "servico", "comercio", "industria", "empresa", "grupo", "cia", "companhia",
-  "clinica", "consultorio", "medica", "medicos", "odontologia", "odontologica", "saude",
-  "soma", "contabilidade", "contabil", "integrada", "financeiro", "fiscal", "dp", "atendimento",
-  "de", "da", "do", "das", "dos", "e", "x", "com", "brasil",
+// Palavras que não distinguem uma empresa de outra: natureza jurídica,
+// preposições, títulos ("Dr." no nome do grupo) e termos de ramo/serviço que
+// aparecem só de um dos lados (no cadastro: "PSD", "Livro Caixa",
+// "Serviços Médicos"; no grupo: "Dr.", "Clinic"). Medido em 16/11/2026 nos
+// 619 grupos "SOMA + nome" do Digisac.
+const IGNORAR = new Set([
+  "ltda", "me", "epp", "eireli", "sa", "slu", "ss", "sociedade", "simples", "limitada", "unipessoal", "cia", "companhia",
+  "de", "da", "do", "das", "dos", "e", "x", "com", "em", "a", "o",
+  "dr", "dra", "doutor", "doutora", "prof", "profa",
+  "servicos", "servico", "serv", "comercio", "industria", "empresa", "grupo", "brasil",
+  "clinica", "clinic", "consultorio", "medica", "medico", "medicos", "medicina", "odontologia", "odontologica", "odonto",
+  "saude", "instituto", "cei", "psd", "livro", "caixa", "pf", "mei", "representacoes", "producoes",
+  "soma", "contabilidade", "contabil", "integrada",
 ]);
 
 export function tokens(t: string | null | undefined): string[] {
@@ -54,25 +59,58 @@ export function tokens(t: string | null | undefined): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .split(" ")
-    .filter((w) => w.length >= 3 && !GENERICAS.has(w));
+    .filter((w) => w.length >= 2 && !IGNORAR.has(w));
+}
+
+/** "SOMA + Clínica Exemplo" → "Clínica Exemplo" (padrão dos grupos da SOMA). */
+export function nomeSemPrefixoSoma(nome: string): string {
+  return nome.replace(/^\s*soma\b[\s+\-–—x/!:|()]*/i, "").trim();
+}
+
+export type ResultadoNome = {
+  /** Mesmas palavras significativas (ignorando título, natureza jurídica e ramo). */
+  exatas: string[];
+  /** Todas as palavras de um lado estão no outro, com 2+ palavras em comum. */
+  fortes: string[];
+  /** As mais parecidas (para sugerir no painel), da mais para a menos. */
+  candidatas: string[];
+};
+
+function parecido(a: Set<string>, b: Set<string>) {
+  const comum = [...a].filter((w) => b.has(w)).length;
+  const uniao = new Set([...a, ...b]).size || 1;
+  return { comum, jaccard: comum / uniao, aDentroDeB: comum === a.size, bDentroDeA: comum === b.size };
 }
 
 /**
- * Empresas cujo nome (fantasia ou razão social) aparece inteiro no nome do
- * grupo/contato: todas as palavras significativas de um dos nomes da empresa
- * estão no nome do contato. Exige ao menos uma palavra significativa com 4+
- * letras para não casar por sigla curta.
+ * Empresas pelo nome do grupo/contato do Digisac. Exata = automática (é o
+ * padrão "SOMA + nome do sistema"); forte = provável, vai com alerta;
+ * candidatas = só sugestão no painel.
  */
-export function empresasPorNome(nomeContato: string, empresas: EmpresaRef[]): string[] {
-  const doContato = new Set(tokens(nomeContato));
-  if (!doContato.size) return [];
-  const achadas: string[] = [];
+export function empresasPorNome(nomeContato: string, empresas: EmpresaRef[]): ResultadoNome {
+  const g = new Set(tokens(nomeSemPrefixoSoma(nomeContato)));
+  const vazio = { exatas: [], fortes: [], candidatas: [] };
+  if (!g.size || ![...g].some((w) => w.length >= 4)) return vazio;
+
+  const exatas: string[] = [];
+  const fortes: string[] = [];
+  const pontuadas: { id: string; j: number }[] = [];
   for (const e of empresas) {
-    const casou = [e.tradeName, e.legalName].some((nome) => {
-      const t = tokens(nome);
-      return t.some((w) => w.length >= 4) && t.every((w) => doContato.has(w));
-    });
-    if (casou) achadas.push(e.id);
+    let melhor = 0;
+    let exata = false;
+    let forte = false;
+    for (const nome of [e.tradeName, e.legalName]) {
+      const c = new Set(tokens(nome));
+      if (!c.size) continue;
+      const p = parecido(g, c);
+      melhor = Math.max(melhor, p.jaccard);
+      if (p.jaccard === 1) exata = true;
+      else if ((p.aDentroDeB || p.bDentroDeA) && p.comum >= 2) forte = true;
+    }
+    if (exata) exatas.push(e.id);
+    else if (forte) fortes.push(e.id);
+    if (melhor >= 0.34) pontuadas.push({ id: e.id, j: melhor });
   }
-  return achadas;
+  const candidatas = pontuadas.sort((a, b) => b.j - a.j).slice(0, 8).map((x) => x.id);
+  return { exatas, fortes, candidatas };
 }
