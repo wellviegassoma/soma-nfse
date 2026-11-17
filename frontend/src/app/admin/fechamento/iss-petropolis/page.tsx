@@ -66,6 +66,7 @@ export default async function CentralIssPetropolisPage(props: PageProps<"/admin/
       return {
         id: company.id,
         nome: `${company.codigo_cliente ? `${company.codigo_cliente} ` : ""}${company.trade_name || company.legal_name}`,
+        cnpj: company.cnpj ?? null,
         prefixoArquivo: prefixoArquivoEmpresa(company),
         receitaSoma: receita,
         receitaRetidaSoma: retido,

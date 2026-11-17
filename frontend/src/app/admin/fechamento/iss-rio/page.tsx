@@ -68,6 +68,7 @@ export default async function CentralIssRioPage(props: PageProps<"/admin/fechame
       return {
         id: company.id,
         nome: `${company.codigo_cliente ? `${company.codigo_cliente} ` : ""}${company.trade_name || company.legal_name}`,
+        cnpj: company.cnpj ?? null,
         prefixoArquivo: prefixoArquivoEmpresa(company),
         issTipo: company.iss_tipo,
         receitaSoma: receita,

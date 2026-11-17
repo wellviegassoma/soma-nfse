@@ -1,5 +1,6 @@
 "use client";
 
+import { formatarCnpj } from "@/lib/formatters";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import JSZip from "jszip";
@@ -15,6 +16,7 @@ import type { ConferenciaIssSalva } from "@/lib/iss-conferencias";
 export type EmpresaIssPetropolis = {
   id: string;
   nome: string;
+  cnpj: string | null;
   prefixoArquivo: string;
   receitaSoma: number;
   receitaRetidaSoma: number;
@@ -477,6 +479,7 @@ export function CentralIssPetropolis({
                         sem acesso
                       </span>
                     )}
+                    {empresa.cnpj && <div className="text-xs text-foreground/50">{formatarCnpj(empresa.cnpj)}</div>}
                   </td>
                   <td className="px-3 py-2 text-right">
                     {formatMoney(empresa.receitaSoma)}
