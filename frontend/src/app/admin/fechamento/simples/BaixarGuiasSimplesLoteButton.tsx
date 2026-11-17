@@ -27,8 +27,10 @@ export function BaixarGuiasSimplesLoteButton({
   const [erro, setErro] = useState<string | null>(null);
   const [falhas, setFalhas] = useState<string[]>([]);
   const [concluido, setConcluido] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
 
   async function rodar() {
+    setConfirmando(false);
     setRodando(true);
     setErro(null);
     setFalhas([]);
@@ -78,11 +80,30 @@ export function BaixarGuiasSimplesLoteButton({
         type="button"
         variant="secondary"
         loading={rodando}
-        onClick={rodar}
-        disabled={empresas.length === 0}
+        onClick={() => setConfirmando(true)}
+        disabled={empresas.length === 0 || confirmando}
       >
-        Baixar guias em lote (ZIP)
+        Baixar guias em lote ({empresas.length})
       </Button>
+      {confirmando && (
+        <Alert tone="warning">
+          <div className="flex flex-col gap-2">
+            <span>
+              Vai gerar o DAS de <strong>{empresas.length} empresa(s)</strong> no Integra Contador — cada geração é
+              cobrada (repetir a mesma empresa no mesmo dia não cobra de novo). Entram só as empresas marcadas e visíveis
+              no filtro atual.
+            </span>
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" onClick={rodar}>
+                Gerar {empresas.length} guia(s)
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setConfirmando(false)}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </Alert>
+      )}
       {rodando && (
         <p className="text-xs text-foreground/60">
           {indice}/{empresas.length} — {empresaAtual}

@@ -209,12 +209,15 @@ export function SimplesLoteComSelecao({
         .map((l) => ({ id: l.id, nome: l.nome, assinatura: l.assinatura, motivos: l.conferencia.motivos })),
     [linhasVisiveis, selecionados],
   );
+  // Só as VISÍVEIS no filtro atual e marcadas (17/11/2026: com tudo marcado
+  // por padrão e o filtro "Já enviadas" na tela, o lote gerou o DAS das 147
+  // empresas marcadas — cada GERARDAS12 é cobrado).
   const empresasParaBaixar = useMemo(
     () =>
-      linhas
+      linhasVisiveis
         .filter((l) => selecionados.has(l.id))
         .map((l) => ({ id: l.id, nome: l.nome, prefixoArquivo: l.prefixoArquivo })),
-    [linhas, selecionados],
+    [linhasVisiveis, selecionados],
   );
   const empresasParaFechar = useMemo(
     () =>
@@ -251,7 +254,7 @@ export function SimplesLoteComSelecao({
             <FecharAntecipadoLoteButton competencia={competencia} empresas={empresasParaFechar} />
             <VerificarDasLote
               competencia={competencia}
-              empresas={linhas.filter((l) => l.jaEnviado && selecionados.has(l.id)).map((l) => ({ id: l.id, nome: l.nome }))}
+              empresas={linhasVisiveis.filter((l) => l.jaEnviado && selecionados.has(l.id)).map((l) => ({ id: l.id, nome: l.nome }))}
             />
             <ConferirPrefeituraLoteButton
               competencia={competencia}
