@@ -83,6 +83,30 @@ function parecido(a: Set<string>, b: Set<string>) {
 }
 
 /**
+ * Empresas que correspondem a um nome citado na conversa ("Empresa
+ * Rcbastos" → RCBASTOS SPORTS MEDICINE LTDA): o CPF/CNPJ citado, ou todas as
+ * palavras significativas do trecho dentro do nome da empresa (o cliente
+ * costuma abreviar o nome). Exige uma palavra com 4+ letras.
+ */
+export function empresasPorTrecho(trecho: string, empresas: EmpresaRef[]): string[] {
+  const doc = trecho.replace(/\D/g, "");
+  if (doc.length === 11 || doc.length === 14) {
+    const porDoc = empresas.filter((e) => digitos(doc.length === 14 ? e.cnpj : e.cpf) === doc).map((e) => e.id);
+    if (porDoc.length) return porDoc;
+  }
+  const t = tokens(trecho).filter((w) => !/^\d+$/.test(w));
+  if (!t.length || !t.some((w) => w.length >= 4)) return [];
+  return empresas
+    .filter((e) =>
+      [e.tradeName, e.legalName].some((nome) => {
+        const c = new Set(tokens(nome));
+        return c.size > 0 && t.every((w) => c.has(w));
+      }),
+    )
+    .map((e) => e.id);
+}
+
+/**
  * Empresas pelo nome do grupo/contato do Digisac. Exata = automática (é o
  * padrão "SOMA + nome do sistema"); forte = provável, vai com alerta;
  * candidatas = só sugestão no painel.

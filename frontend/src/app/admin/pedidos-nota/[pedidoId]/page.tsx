@@ -47,7 +47,7 @@ export default async function PedidoNotaPage(props: { params: Promise<{ pedidoId
     companyId
       ? supabase.from("customers").select("id, name, cpf_cnpj").eq("company_id", companyId).order("name").limit(2000)
       : Promise.resolve({ data: [] as { id: string; name: string; cpf_cnpj: string | null }[] }),
-    !companyId || pedido.status === "ERRO" || pedido.status === "RECEBIDO"
+    ["RECEBIDO", "ERRO", "AGUARDANDO_APROVACAO", "PARCIAL"].includes(pedido.status)
       ? supabase.from("companies").select("id, legal_name, trade_name, codigo_cliente, cnpj, cpf").eq("ativa", true).order("legal_name")
       : Promise.resolve({ data: [] }),
   ]);
@@ -109,10 +109,24 @@ export default async function PedidoNotaPage(props: { params: Promise<{ pedidoId
 
       {pedido.erro ? <Alert tone="warning">{pedido.erro}</Alert> : null}
 
-      {aberto && (!companyId || pedido.status === "RECEBIDO" || pedido.status === "ERRO") && empresas.length ? (
-        <Card className="p-5">
-          <EscolherEmpresa pedidoId={pedidoId} empresas={empresas} atual={companyId} />
-        </Card>
+      {aberto && empresas.length && !itens.some((i) => ["APROVADO", "EMITIDO"].includes(i.status)) ? (
+        !companyId || pedido.status === "RECEBIDO" || pedido.status === "ERRO" ? (
+          <Card className="p-5">
+            <EscolherEmpresa pedidoId={pedidoId} empresas={empresas} atual={companyId} />
+          </Card>
+        ) : (
+          // Empresa já definida (vínculo, nome do grupo, IA): dá para trocar
+          // se o pedido for de outra empresa — a IA lê de novo com a nova.
+          <details className="rounded-xl border border-border bg-surface p-5" open={candidatas.size > 1}>
+            <summary className="cursor-pointer text-sm font-medium text-brand">
+              Trocar a empresa deste pedido
+              {candidatas.size > 1 ? <span className="ml-2 text-xs font-normal text-warning">há outras empresas possíveis</span> : null}
+            </summary>
+            <div className="mt-4">
+              <EscolherEmpresa pedidoId={pedidoId} empresas={empresas} atual={companyId} />
+            </div>
+          </details>
+        )
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">

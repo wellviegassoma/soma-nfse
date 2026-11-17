@@ -66,6 +66,12 @@ export const RespostaIA = z.object({
     .string()
     .nullable()
     .describe("Se faltar dado essencial (tomador, valor, serviço), a pergunta curta que o atendente deve fazer ao cliente. Senão null."),
+  empresa_citada: z
+    .string()
+    .nullable()
+    .describe(
+      "Se a conversa indicar que a nota deve sair por OUTRA empresa prestadora, diferente da EMPRESA PRESTADORA indicada (ex.: 'empresa X', 'pela clínica Y', 'no CNPJ da Z', 'na minha PF'), o nome/documento dessa outra empresa como escrito. Se for a mesma empresa ou não houver indicação, null. Médico citado como quem fez o atendimento NÃO é empresa citada.",
+    ),
 });
 export type RespostaIA = z.infer<typeof RespostaIA>;
 

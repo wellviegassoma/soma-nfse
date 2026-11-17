@@ -12,7 +12,7 @@ import {
   type HistoricoTomador,
   type MensagemCliente,
 } from "@/lib/pedido-nota/extrair-core";
-import { empresasPorNome } from "@/lib/pedido-nota/empresa-core";
+import { empresasPorNome, empresasPorTrecho } from "@/lib/pedido-nota/empresa-core";
 
 // Fase 2 do pedido de nota (docs/pedido-nota-ia.md): lê o pedido gravado na
 // Fase 1, monta a entrada da IA com o catálogo da empresa, grava os rascunhos
@@ -56,7 +56,10 @@ async function prepararAnexo(a: AnexoGravado, orcamento: { bytes: number }): Pro
   return { tipo: "outro", nome, mimetype: a.mimetype };
 }
 
-export async function extrairPedido(pedidoId: string): Promise<{ itens: number; motivo: string }> {
+export async function extrairPedido(
+  pedidoId: string,
+  opcoes: { trocadaDe?: string; citada?: string } = {},
+): Promise<{ itens: number; motivo: string }> {
   const admin = createAdminClient();
 
   const { data: pedido } = await admin
@@ -187,6 +190,53 @@ export async function extrairPedido(pedidoId: string): Promise<{ itens: number; 
 
     const ia = await chamarIA(entrada, process.env.PEDIDO_NOTA_MODELO || MODELO_PADRAO);
 
+    // A conversa pede a nota em nome de OUTRA empresa (ex.: contato vinculado
+    // à Techbone escreve "Empresa Rcbastos")? Achou uma só no cadastro →
+    // troca a empresa e lê de novo (uma vez); várias → sugere no painel;
+    // nenhuma → só avisa. Visto em teste real em 17/11/2026.
+    let alertaEmpresaCitada: { codigo: string; mensagem: string } | null = null;
+    const citada = ia.resposta.empresa_citada?.trim();
+    if (citada) {
+      const { data: todas } = await admin.from("companies").select("id, cnpj, cpf, legal_name, trade_name").eq("ativa", true);
+      const refs = (todas ?? []).map((c) => ({
+        id: c.id as string,
+        cnpj: (c.cnpj as string | null) ?? null,
+        cpf: (c.cpf as string | null) ?? null,
+        legalName: c.legal_name as string,
+        tradeName: (c.trade_name as string | null) ?? null,
+      }));
+      const outras = empresasPorTrecho(citada, refs).filter((id) => id !== companyId);
+      const nomeDe = (id: string) => {
+        const r = refs.find((x) => x.id === id);
+        return r?.tradeName || r?.legalName || "?";
+      };
+      if (outras.length === 1 && !opcoes.trocadaDe) {
+        await admin
+          .from("pedidos_nota")
+          .update({ company_id: outras[0], empresa_fonte: "GRUPO_IA", companies_candidatas: [outras[0], companyId], status: "RECEBIDO" })
+          .eq("id", pedidoId);
+        return extrairPedido(pedidoId, { trocadaDe: entrada.empresa.nome, citada });
+      }
+      if (outras.length > 1) {
+        await admin.from("pedidos_nota").update({ companies_candidatas: [...outras.slice(0, 9), companyId] }).eq("id", pedidoId);
+        alertaEmpresaCitada = {
+          codigo: "EMPRESA_CITADA",
+          mensagem: `A conversa cita “${citada}”, que pode ser outra empresa (${outras.slice(0, 4).map(nomeDe).join(", ")}). Se for, use “Trocar a empresa” no topo.`,
+        };
+      } else if (!outras.length && !opcoes.trocadaDe) {
+        alertaEmpresaCitada = {
+          codigo: "EMPRESA_CITADA",
+          mensagem: `A conversa cita a empresa “${citada}”, que não encontrei no cadastro. Confira se a nota é mesmo de ${entrada.empresa.nome}.`,
+        };
+      }
+    }
+    if (opcoes.trocadaDe) {
+      alertaEmpresaCitada = {
+        codigo: "EMPRESA_CITADA",
+        mensagem: `A conversa pede a nota em nome de “${opcoes.citada}”: troquei de ${opcoes.trocadaDe} para ${entrada.empresa.nome}. Confira antes de aprovar.`,
+      };
+    }
+
     // Histórico por tomador para os alertas (média e duplicidade 7 dias).
     const seteDiasAtras = new Date(Date.now() - 7 * 86_400_000).toISOString();
     const historico = (customerId: string): HistoricoTomador | undefined => {
@@ -217,7 +267,8 @@ export async function extrairPedido(pedidoId: string): Promise<{ itens: number; 
             historico,
             temAudioSemTranscricao,
           });
-          if (pedido.empresa_fonte === "GRUPO_IA") {
+          if (alertaEmpresaCitada) final.alertas.unshift(alertaEmpresaCitada);
+          if (pedido.empresa_fonte === "GRUPO_IA" && !opcoes.trocadaDe) {
             final.alertas.unshift({
               codigo: "EMPRESA_ESCOLHIDA_IA",
               mensagem: `O grupo atende mais de uma empresa; a IA entendeu que o pedido é de ${entrada.empresa.nome}. Confira antes de aprovar.`,
