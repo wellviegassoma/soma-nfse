@@ -59,6 +59,8 @@ from schemas import (
     ListarApuracoesMitOut,
     ListarParcelamentosSnOut,
     ObterParcelamentoSnOut,
+    PagamentosOut,
+    ComprovantePagamentoOut,
     ParcelasParaGerarSnOut,
     ReciboDeclaracaoOut,
     SituacaoEncerramentoMitOut,
@@ -69,6 +71,8 @@ from serpro_client import ErroIntegraContador, chamar
 from sitfis import ErroSitfis, obter_situacao_fiscal
 
 app = FastAPI(title="integra-contador", docs_url=None, redoc_url=None)
+
+_DATA_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 @app.on_event("startup")
@@ -616,3 +620,53 @@ def gerar_guia_parcelamento(cnpj: str, modalidade: str, numero_parcelamento: int
         parcela_para_emitir=parcela_para_emitir,
         resposta=resposta,
     )
+
+
+@app.get(
+    "/contribuintes/{cnpj}/pagamentos",
+    response_model=PagamentosOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def consultar_pagamentos(cnpj: str, data_inicial: str, data_final: str):
+    """
+    Pagamentos federais (DAS, DARF) arrecadados no intervalo
+    (PAGTOWEB.PAGAMENTOS71) — UMA chamada por empresa traz todos os
+    documentos do período (até 100 por página; a resposta diz se encheu a
+    página). Datas AAAA-MM-DD. Serve do cache dentro do TTL do catálogo.
+    """
+    if not (_DATA_ISO.match(data_inicial) and _DATA_ISO.match(data_final)):
+        raise HTTPException(status_code=400, detail="Datas no formato AAAA-MM-DD.")
+    try:
+        resposta = chamar(
+            "PAGTOWEB",
+            "PAGAMENTOS71",
+            cnpj,
+            {
+                "intervaloDataArrecadacao": {"dataInicial": data_inicial, "dataFinal": data_final},
+                "primeiroDaPagina": 0,
+                "tamanhoDaPagina": 100,
+            },
+        )
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return PagamentosOut(contribuinte_cnpj=cnpj, data_inicial=data_inicial, data_final=data_final, resposta=resposta)
+
+
+@app.get(
+    "/contribuintes/{cnpj}/pagamentos/comprovante/{numero_documento}",
+    response_model=ComprovantePagamentoOut,
+    dependencies=[Depends(exigir_token_interno)],
+)
+def emitir_comprovante_pagamento(cnpj: str, numero_documento: str):
+    """
+    Comprovante de arrecadação (PDF) de um pagamento
+    (PAGTOWEB.COMPARRECADACAO72). Cada emissão é cobrada — o catálogo
+    guarda 180 dias, então baixar de novo não emite de novo.
+    """
+    if not re.fullmatch(r"[0-9A-Za-z.-]{1,17}", numero_documento):
+        raise HTTPException(status_code=400, detail="Número de documento inválido.")
+    try:
+        resposta = chamar("PAGTOWEB", "COMPARRECADACAO72", cnpj, {"numeroDocumento": numero_documento})
+    except ErroIntegraContador as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ComprovantePagamentoOut(contribuinte_cnpj=cnpj, numero_documento=numero_documento, resposta=resposta)

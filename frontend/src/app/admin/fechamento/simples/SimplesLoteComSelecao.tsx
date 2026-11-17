@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { EnviarSimplesLoteButton } from "./EnviarSimplesLoteButton";
+import { DasPagoCelula, VerificarDasLote, type DasPagamentoView } from "@/components/fechamento/PagamentosFederais";
 import { BaixarGuiasSimplesLoteButton } from "./BaixarGuiasSimplesLoteButton";
 import { FecharAntecipadoLoteButton } from "./FecharAntecipadoLoteButton";
 import { ConferirPrefeituraLoteButton } from "./ConferirPrefeituraLoteButton";
@@ -16,6 +17,8 @@ const IBGE_RIO = "3304557";
 
 export type LinhaSimples = {
   id: string;
+  // Última verificação do DAS no Integra Contador (PAGTOWEB) — "DAS pago?".
+  dasPagamento: DasPagamentoView | null;
   nome: string;
   prefixoArquivo: string;
   municipioIbge: string | null;
@@ -246,6 +249,10 @@ export function SimplesLoteComSelecao({
               empresas={empresasParaBaixar}
             />
             <FecharAntecipadoLoteButton competencia={competencia} empresas={empresasParaFechar} />
+            <VerificarDasLote
+              competencia={competencia}
+              empresas={linhas.filter((l) => l.jaEnviado && selecionados.has(l.id)).map((l) => ({ id: l.id, nome: l.nome }))}
+            />
             <ConferirPrefeituraLoteButton
               competencia={competencia}
               empresas={empresasParaConferirPrefeitura}
@@ -341,6 +348,9 @@ export function SimplesLoteComSelecao({
                 >
                   DAS líquido
                 </th>
+                <th rowSpan={2} className="border-b border-border px-3 py-2 text-left align-bottom">
+                  DAS pago?
+                </th>
               </tr>
               <tr className="text-xs text-foreground/50">
                 <th className="border-b border-border px-3 py-1 text-right">IRRF</th>
@@ -430,6 +440,18 @@ export function SimplesLoteComSelecao({
                   <td className="px-3 py-2 text-right">{formatMoney(linha.dasBruto)}</td>
                   <td className="px-3 py-2 text-right font-medium text-danger">
                     {formatMoney(linha.dasLiquido)}
+                  </td>
+                  <td className="px-3 py-2">
+                    {linha.jaEnviado ? (
+                      <DasPagoCelula
+                        key={linha.dasPagamento?.verificadoEm ?? "nunca"}
+                        companyId={linha.id}
+                        competencia={competencia}
+                        inicial={linha.dasPagamento}
+                      />
+                    ) : (
+                      <span className="text-[11px] text-foreground/40">não declarado</span>
+                    )}
                   </td>
                 </tr>
               ))}

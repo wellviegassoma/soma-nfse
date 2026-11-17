@@ -130,3 +130,16 @@ class GerarGuiaParcelamentoSnOut(BaseModel):
     numero_parcelamento: int
     parcela_para_emitir: int
     resposta: dict
+
+
+class PagamentosOut(BaseModel):
+    contribuinte_cnpj: str
+    data_inicial: str
+    data_final: str
+    resposta: dict
+
+
+class ComprovantePagamentoOut(BaseModel):
+    contribuinte_cnpj: str
+    numero_documento: str
+    resposta: dict

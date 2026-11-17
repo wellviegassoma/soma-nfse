@@ -203,7 +203,9 @@ _registrar(
 # --- Integra-Pagamento: PAGTOWEB (versão 1.0, confirmada) — procuração 00004 ---
 _registrar(
     _s("PAGTOWEB", "PAGAMENTOS71", "Consultar", "1.0", procuracao_codigo="00004"),
-    _s("PAGTOWEB", "COMPARRECADACAO72", "Emitir", "1.0", procuracao_codigo="00004"),
+    # O comprovante de um pagamento não muda — guardado 180 dias: baixar de
+    # novo não gera nova emissão (cobrada).
+    _s("PAGTOWEB", "COMPARRECADACAO72", "Emitir", "1.0", cache_ttl_segundos=CENTO_OITENTA_DIAS_SEGUNDOS, procuracao_codigo="00004"),
     _s("PAGTOWEB", "CONTACONSDOCARRPG73", "Consultar", "1.0", procuracao_codigo="00004"),
 )
 

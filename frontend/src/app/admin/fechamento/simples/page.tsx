@@ -13,6 +13,7 @@ import {
 } from "@/lib/simples-linha";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import { SimplesLoteComSelecao } from "./SimplesLoteComSelecao";
+import { buscarDasPagamentos } from "@/lib/pagamentos-federais";
 
 export const metadata = { title: "Central Simples Nacional — Painel SOMA" };
 export const maxDuration = 300;
@@ -48,7 +49,10 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
   // Última conferência com a Prefeitura (só Petrópolis hoje — ver
   // ConferirPrefeituraLoteButton) e aprovações da conferência do Simples
   // já dadas pra essa competência.
-  const extras = await buscarExtrasConferencia(supabase, competencia);
+  const [extras, dasPagamentos] = await Promise.all([
+    buscarExtrasConferencia(supabase, competencia),
+    buscarDasPagamentos(supabase, competencia),
+  ]);
 
   const linhas = await Promise.all(
     (companies ?? []).map(async (company) => {
@@ -98,6 +102,7 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
         jaEnviado,
         podeFecharAntes: !company.sujeito_fator_r,
         jaFechada: fechadasSet.has(company.id),
+        dasPagamento: dasPagamentos.get(company.id) ?? null,
       };
     }),
   );

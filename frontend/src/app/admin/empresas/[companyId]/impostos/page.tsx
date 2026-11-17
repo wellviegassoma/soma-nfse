@@ -39,6 +39,7 @@ import { DeclararMitCard } from "./DeclararMitCard";
 import { BuscarGuiaIssButton } from "./BuscarGuiaIssButton";
 import { BuscarGuiaIssPetropolisButton } from "./BuscarGuiaIssPetropolisButton";
 import { PetropolisCredencialForm } from "./PetropolisCredencialForm";
+import { PagamentosFederaisPainel } from "@/components/fechamento/PagamentosFederais";
 
 // Código IBGE do município do Rio de Janeiro — o Nota Carioca só existe
 // pra empresas estabelecidas nessa cidade, e só pra quem paga ISS por
@@ -129,6 +130,12 @@ export default async function ImpostosPage(
         </div>
         <Button type="submit">Aplicar</Button>
       </form>
+      {/* Pagamentos federais (DAS e DARF) pelo Integra Contador — só consulta quando clicar (cobrado). */}
+      {company.cnpj && (
+        <div className="mt-6 border-t border-border pt-5">
+          <PagamentosFederaisPainel companyId={companyId} competencia={competencia} />
+        </div>
+      )}
     </Card>
   );
 
