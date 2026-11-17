@@ -57,6 +57,43 @@ async function logNfseError(
   });
 }
 
+/**
+ * Próximo número de DPS livre na série, olhando também as notas que a
+ * empresa emitiu em OUTRO emissor (notas_distribuidas): quem já usava a
+ * mesma série lá fora bate em E0014 aqui (Nine Solutions, série 1 até 17).
+ */
+async function proximoNumeroDpsLivre(
+  admin: ReturnType<typeof createAdminClient>,
+  companyId: string,
+  serie: string,
+): Promise<number> {
+  const [{ data: notas }, { data: ultimaDps }] = await Promise.all([
+    admin
+      .from("notas_distribuidas")
+      .select("xml")
+      .eq("company_id", companyId)
+      .eq("direcao", "saida")
+      .order("data_emissao", { ascending: false })
+      .limit(300),
+    admin
+      .from("dps")
+      .select("numero_dps")
+      .eq("company_id", companyId)
+      .eq("serie", serie)
+      .order("numero_dps", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  let maior = Number(ultimaDps?.numero_dps ?? 0);
+  for (const n of notas ?? []) {
+    const xml = (n.xml as string | null) ?? "";
+    const serieXml = xml.match(/<serie>\s*(\d+)\s*<\/serie>/)?.[1];
+    const numero = xml.match(/<nDPS>\s*(\d+)\s*<\/nDPS>/)?.[1];
+    if (serieXml && numero && Number(serieXml) === Number(serie)) maior = Math.max(maior, Number(numero));
+  }
+  return maior + 1;
+}
+
 export async function issueNfse(_prevState: IssueNfseState, formData: FormData): Promise<IssueNfseState> {
   const companyIdRaw = formData.get("companyId");
   if (typeof companyIdRaw !== "string") return { error: "Empresa inválida." };
@@ -430,6 +467,23 @@ export async function issueNfse(_prevState: IssueNfseState, formData: FormData):
     if (novoEnviaIm !== null) {
       await admin.from("companies").update({ nfse_envia_im: novoEnviaIm }).eq("id", companyId);
     }
+    // Número de DPS já usado (E0014) — normalmente em outro emissor antes
+    // do sistema. Pula pro próximo livre e reenvia uma vez.
+    if (codigos.has("E0014")) {
+      const livre = await proximoNumeroDpsLivre(admin, companyId, company.dps_series);
+      await admin
+        .from("companies")
+        .update({ dps_next_number: livre })
+        .eq("id", companyId)
+        .lt("dps_next_number", livre);
+      if (formData.get("_reenvioNumero") !== "1" && codigos.size === 1) {
+        const reenvio = new FormData();
+        for (const [k, v] of formData.entries()) reenvio.append(k, v);
+        reenvio.set("_reenvioNumero", "1");
+        return issueNfse(_prevState, reenvio);
+      }
+    }
+
     // Só reenvia se esse era o único problema — com outro erro junto, a
     // recusa voltaria igual e gastaria mais um número.
     if (novoEnviaIm !== null && !jaReenviou && codigos.size === 1) {

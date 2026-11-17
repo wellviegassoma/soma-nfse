@@ -49,6 +49,11 @@ const TRADUCOES: Record<string, Omit<ErroEmissaoTraduzido, "codigo">> = {
     acao: "O sistema já parou de enviar a inscrição pra essa empresa — emita de novo.",
     onde: "empresa",
   },
+  E0014: {
+    mensagem: "O número dessa nota já foi usado em outra nota da empresa (provavelmente emitida em outro emissor).",
+    acao: "O sistema já pulou pro próximo número livre — emita de novo. Se repetir, confira o próximo número em Dados fiscais.",
+    onde: "empresa",
+  },
   E0008: {
     mensagem: "O horário da nota ficou à frente do horário do governo.",
     acao: "Espere um minuto e tente de novo.",
