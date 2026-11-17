@@ -92,6 +92,16 @@ export default async function PedidoNotaPage(props: { params: Promise<{ pedidoId
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {companyId ? (
+            <a
+              href={`/admin/pedidos-nota/notas/${companyId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-foreground hover:bg-surface-muted"
+            >
+              Notas emitidas ↗
+            </a>
+          ) : null}
           <Selo s={pedido.status} mapa={STATUS_PEDIDO} />
           {aberto ? <AcoesPedido pedidoId={pedidoId} podeReler={Boolean(companyId)} /> : null}
         </div>

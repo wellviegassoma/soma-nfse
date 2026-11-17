@@ -188,6 +188,16 @@ export function ItemRascunho({
             className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
           />
         </Field>
+        {companyId && editavel ? (
+          <a
+            href={`/admin/pedidos-nota/notas/${companyId}${novoNome || item.tomador_nome ? `?q=${encodeURIComponent(novoNome || item.tomador_nome || "")}` : ""}`}
+            target="_blank"
+            rel="noreferrer"
+            className="-mt-1 self-start text-xs text-brand hover:underline"
+          >
+            Consultar notas já emitidas desta empresa ↗
+          </a>
+        ) : null}
 
         {item.iss_retido != null ? (
           <p className="text-xs text-foreground/60">ISS retido pelo tomador: {item.iss_retido ? "sim" : "não"} (informado na mensagem).</p>
