@@ -501,6 +501,65 @@ class ClientePetropolis:
                 linhas.append(textos)
         return linhas[:60]
 
+    # Páginas que o diagnóstico pode abrir — só GET, só leitura. Nada de
+    # emissao_boleto.php nem iss-consolidar_periodo.php (ações reais).
+    _PAGINAS_DIAGNOSTICO = {
+        "iss-levantamento_debitos.php",
+        "iss-consulta_periodos.php",
+        "index.php",
+    }
+
+    def diagnosticar(self, cnpj: str, cmc: str | None, pagina: str, params: dict[str, str]) -> dict:
+        """SÓ LEITURA: abre uma página da lista acima (GET) e descreve a
+        estrutura — selects com opções, campos de formulário, tabelas e
+        links do menu — pra descobrir onde o site mostra guia paga."""
+        if pagina not in self._PAGINAS_DIAGNOSTICO:
+            raise ErroPetropolis(f"Página não permitida no diagnóstico: {pagina}")
+        if not self._login_proprio:
+            if cmc:
+                self._selecionar_empresa_por_cmc(cmc, cnpj)
+            else:
+                self._selecionar_empresa_por_cnpj(cnpj)
+        resp = self._sessao.get(f"{BASE_URL}/{pagina}", params=params, timeout=45)
+        tree = lxml_html.fromstring(resp.text)
+        selects = [
+            {
+                "name": sel.get("name") or sel.get("id"),
+                "opcoes": [
+                    f"{o.get('value')}:{' '.join(o.text_content().split())}"[:60]
+                    for o in sel.xpath(".//option")
+                ][:30],
+            }
+            for sel in tree.xpath("//select")
+        ]
+        campos = sorted(
+            {f"{i.get('name')}[{i.get('type', 'text')}]" for i in tree.xpath("//input[@name]")}
+        )[:80]
+        links = sorted(
+            {
+                f"{' '.join(a.text_content().split())[:40]} -> {a.get('href')}"
+                for a in tree.xpath("//a[@href]")
+                if a.get("href") and not a.get("href").startswith("javascript")
+            }
+        )[:150]
+        tabelas = []
+        for t in tree.xpath("//table[not(.//table)]"):
+            linhas = [
+                " | ".join(" ".join(c.text_content().split())[:40] for c in tr.xpath("./td|./th"))
+                for tr in t.xpath(".//tr")
+            ]
+            linhas = [l for l in linhas if l.strip(" |")]
+            if linhas:
+                tabelas.append(linhas[:25])
+        return {
+            "url": resp.url.replace(BASE_URL, ""),
+            "status": resp.status_code,
+            "selects": selects,
+            "campos": campos,
+            "links": links,
+            "tabelas": tabelas[:20],
+        }
+
     def buscar_guia_iss(
         self, cnpj: str, competencia: str | None = None, cmc: str | None = None
     ) -> tuple[bytes, dict[str, float]]:

@@ -50,6 +50,7 @@ from schemas import (
     EmitirNotaRequest,
     EmitirNotaResponse,
     GuiaIssPetropolisRequest,
+    DiagnosticoPetropolisRequest,
     NotaEncontradaOut,
     ParametrosServicoRequest,
     RelatorioFaturamentoRequest,
@@ -311,6 +312,17 @@ def consultar_faturamento_petropolis(req: GuiaIssPetropolisRequest):
         "cancelada": round(resumo["cancelada"], 2),
         "linhas": resumo.get("linhas", []),
     }
+
+
+@app.post("/petropolis/diagnostico", dependencies=[Depends(exigir_token_interno)])
+def diagnosticar_petropolis(req: DiagnosticoPetropolisRequest):
+    """SÓ LEITURA — descreve uma página do ISS de Petrópolis (lista fixa,
+    só GET) pra achar onde o site mostra a guia paga."""
+    try:
+        with ClientePetropolis(req.login, req.senha_md5) as cliente:
+            return cliente.diagnosticar(req.cnpj, req.cmc, req.pagina, req.params or {})
+    except ErroPetropolis as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @app.post("/petropolis/consolidar-e-emitir-guia", dependencies=[Depends(exigir_token_interno)])

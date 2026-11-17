@@ -208,3 +208,12 @@ class GuiaIssPetropolisRequest(BaseModel):
     # descoberto) — pula a busca por CNPJ, que não filtra de verdade
     # (ver docstring de _selecionar_empresa em petropolis_client.py).
     cmc: Optional[str] = None
+
+
+class DiagnosticoPetropolisRequest(BaseModel):
+    cnpj: str
+    cmc: Optional[str] = None
+    login: Optional[str] = None
+    senha_md5: Optional[str] = None
+    pagina: str = "iss-levantamento_debitos.php"
+    params: Optional[dict[str, str]] = None
