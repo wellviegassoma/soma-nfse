@@ -31,6 +31,14 @@ export default async function AdminLayout({
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {podeVerComercial && (
+              <Link
+                href="/admin/comercial"
+                className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
+              >
+                Comercial
+              </Link>
+            )}
             <Link
               href="/legalizacao"
               className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
@@ -76,7 +84,6 @@ export default async function AdminLayout({
           isSuperAdmin={superAdmin}
           podeGerenciarUsuarios={podeGerenciarUsuarios}
           podeEmitirNotas={podeEmitirNotas}
-          podeVerComercial={podeVerComercial}
           pedidosPendentes={pedidosPendentes}
         />
         <div className="pt-6">{children}</div>

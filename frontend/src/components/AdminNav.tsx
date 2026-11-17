@@ -8,13 +8,17 @@ import { cn } from "@/lib/cn";
 
 type Tab = { href: string; label: string; exact?: boolean };
 
-const TABS: Tab[] = [
-  { href: "/admin", label: "Visão geral", exact: true },
-  { href: "/admin/empresas", label: "Empresas" },
-  { href: "/admin/certificados", label: "Certificados" },
-  { href: "/admin/precificacao-modelos", label: "Modelos de Precificação" },
-  { href: "/admin/fechamento", label: "Fechamento" },
-  { href: "/admin/automacao", label: "Automação" },
+// Ordem pelo uso do dia a dia (17/11/2026). "Modelos de Precificação" saiu
+// do menu (sem uso por enquanto — a página continua em
+// /admin/precificacao-modelos). Comercial foi para a barra de cima, ao lado
+// de Legalização (app/admin/layout.tsx).
+const TAB_VISAO_GERAL: Tab = { href: "/admin", label: "Visão geral", exact: true };
+const TAB_EMPRESAS: Tab = { href: "/admin/empresas", label: "Empresas" };
+const TAB_FECHAMENTO: Tab = { href: "/admin/fechamento", label: "Fechamento" };
+const TAB_CERTIFICADOS: Tab = { href: "/admin/certificados", label: "Certificados" };
+const TAB_AUTOMACAO: Tab = { href: "/admin/automacao", label: "Automação" };
+// Pouco usadas: no fim, depois de um separador, mais apagadas.
+const TABS_SECUNDARIAS: Tab[] = [
   { href: "/admin/erros", label: "Erros" },
   { href: "/admin/logs", label: "Logs" },
   { href: "/admin/chat", label: "Chat IA" },
@@ -23,7 +27,6 @@ const TABS: Tab[] = [
 const TAB_EMISSAO_NOTAS: Tab = { href: "/admin/emissao-notas", label: "Emissão de Notas" };
 // Pedidos sinalizados com #nota no Digisac (docs/pedido-nota-ia.md).
 const TAB_PEDIDOS_NOTA: Tab = { href: "/admin/pedidos-nota", label: "Pedidos de Nota" };
-const TAB_COMERCIAL: Tab = { href: "/admin/comercial", label: "Comercial" };
 const TAB_USUARIOS: Tab = { href: "/admin/usuarios", label: "Usuários" };
 const TAB_SUPER_ADMIN: Tab = { href: "/admin/configuracoes/contador-responsavel", label: "Configurações" };
 
@@ -67,21 +70,22 @@ export function AdminNav({
   isSuperAdmin,
   podeGerenciarUsuarios,
   podeEmitirNotas,
-  podeVerComercial,
   pedidosPendentes = 0,
 }: {
   isSuperAdmin: boolean;
   podeGerenciarUsuarios: boolean;
   podeEmitirNotas: boolean;
-  podeVerComercial: boolean;
   pedidosPendentes?: number;
 }) {
   const pathname = usePathname();
   const pendentes = usePedidosPendentes(podeEmitirNotas, pedidosPendentes, pathname);
   const tabs = [
-    ...TABS,
+    TAB_VISAO_GERAL,
+    TAB_EMPRESAS,
     ...(podeEmitirNotas ? [TAB_EMISSAO_NOTAS, TAB_PEDIDOS_NOTA] : []),
-    ...(podeVerComercial ? [TAB_COMERCIAL] : []),
+    TAB_FECHAMENTO,
+    TAB_CERTIFICADOS,
+    TAB_AUTOMACAO,
     ...(podeGerenciarUsuarios ? [TAB_USUARIOS] : []),
     ...(isSuperAdmin ? [TAB_SUPER_ADMIN] : []),
   ];
@@ -90,8 +94,9 @@ export function AdminNav({
     // Fixa logo abaixo do header (h-16, também sticky) pra trocar de tela sem
     // rolar até o topo; quebra em mais de uma linha em vez de rolar de lado.
     <nav className="sticky top-16 z-[9] -mx-4 flex flex-wrap gap-x-1 border-b border-border bg-background/95 px-4 backdrop-blur">
-      {tabs.map((tab) => {
+      {[...tabs, ...TABS_SECUNDARIAS].map((tab) => {
         const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
+        const secundaria = TABS_SECUNDARIAS.includes(tab);
         return (
           <Link
             key={tab.href}
@@ -100,7 +105,10 @@ export function AdminNav({
               "shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
               active
                 ? "border-brand text-brand"
-                : "border-transparent text-foreground/55 hover:text-foreground",
+                : secundaria
+                  ? "border-transparent text-foreground/35 hover:text-foreground/70"
+                  : "border-transparent text-foreground/55 hover:text-foreground",
+              secundaria && tab === TABS_SECUNDARIAS[0] && "ml-auto",
             )}
           >
             {tab.label}
