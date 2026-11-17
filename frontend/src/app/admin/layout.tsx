@@ -3,6 +3,7 @@ import { requireSomaStaff, getCurrentProfileName, isSuperAdmin, temPermissao } f
 import { Logo } from "@/components/Logo";
 import { LogoutButton } from "@/components/LogoutButton";
 import { AdminNav } from "@/components/AdminNav";
+import { contarPedidosPendentes } from "@/lib/actions/pedidos-nota";
 
 export default async function AdminLayout({
   children,
@@ -15,6 +16,8 @@ export default async function AdminLayout({
     (await temPermissao("usuarios.gerenciar_clientes"));
   const podeEmitirNotas = await temPermissao("notas.emitir");
   const podeVerComercial = await temPermissao("comercial.ver");
+  // Selo da aba Pedidos de Nota (o AdminNav atualiza sozinho a cada minuto).
+  const pedidosPendentes = podeEmitirNotas ? await contarPedidosPendentes().catch(() => 0) : 0;
 
   return (
     <div className="min-h-dvh bg-background">
@@ -74,6 +77,7 @@ export default async function AdminLayout({
           podeGerenciarUsuarios={podeGerenciarUsuarios}
           podeEmitirNotas={podeEmitirNotas}
           podeVerComercial={podeVerComercial}
+          pedidosPendentes={pedidosPendentes}
         />
         <div className="pt-6">{children}</div>
       </div>

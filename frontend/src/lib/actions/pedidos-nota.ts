@@ -31,6 +31,24 @@ async function exigirEmissor(companyId: string | null): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
+// Contador da aba "Pedidos de Nota"
+// ---------------------------------------------------------------------------
+
+/** Status que esperam alguém do time (o filtro "Para resolver", menos "IA lendo"). */
+const STATUS_PENDENTE = ["RECEBIDO", "AGUARDANDO_APROVACAO", "PARCIAL", "ERRO"];
+
+/** Quantos pedidos esperam o time. Usado pelo selo da aba (atualiza a cada minuto). */
+export async function contarPedidosPendentes(): Promise<number> {
+  if (!(await temPermissao("notas.emitir"))) return 0;
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("pedidos_nota")
+    .select("id", { count: "exact", head: true })
+    .in("status", STATUS_PENDENTE);
+  return count ?? 0;
+}
+
+// ---------------------------------------------------------------------------
 // Empresa
 // ---------------------------------------------------------------------------
 
