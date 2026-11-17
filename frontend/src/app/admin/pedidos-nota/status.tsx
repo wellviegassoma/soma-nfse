@@ -23,6 +23,7 @@ export const FONTE_EMPRESA: Record<string, string> = {
   TELEFONE: "telefone",
   NOME_CONTATO: "nome do grupo (confira)",
   PAINEL: "escolhida no painel",
+  GRUPO_IA: "grupo com várias empresas (IA escolheu)",
 };
 
 export function Selo({ s, mapa }: { s: string; mapa: Record<string, { rotulo: string; classe: string }> }) {

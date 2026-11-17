@@ -10,6 +10,7 @@ import {
   type DigisacMensagem,
 } from "@/lib/digisac/client";
 import { resolverEmpresa } from "@/lib/pedido-nota/empresa";
+import { escolherEmpresaDoGrupo } from "@/lib/pedido-nota/escolher-empresa";
 import { extrairPedido } from "@/lib/pedido-nota/extrair";
 
 // Fase 1 do pedido de nota (docs/pedido-nota-ia.md): o atendente manda um
@@ -153,7 +154,30 @@ export async function receberComandoNota(messageId: string): Promise<{ pedidoId:
     const candidatas = empresa.candidatas;
 
     const semMensagem = mensagens.length === 0;
+
+    // Grupo cadastrado em várias empresas: a IA escolhe pela conversa.
+    let escolhaIa: string | null = null;
+    if (empresa.grupoComVarias && !semMensagem) {
+      try {
+        const texto = [
+          ...mensagens.map((m) => `[${m.timestamp.slice(0, 16)}] ${m.texto ?? `(${m.tipo})`}`),
+          empresa.dica ? `Dica do atendente: ${empresa.dica}` : "",
+        ].join("\n");
+        const r = await escolherEmpresaDoGrupo(empresa.candidatas, texto);
+        if (r.companyId) {
+          empresa.companyId = r.companyId;
+          empresa.fonte = "GRUPO_IA";
+        }
+        escolhaIa = r.motivo;
+      } catch (e) {
+        console.error("[pedido-nota] escolha de empresa falhou:", e instanceof Error ? e.message : e);
+      }
+    }
+
     const avisos = [
+      empresa.grupoComVarias && !empresa.companyId
+        ? `Grupo cadastrado em ${empresa.candidatas.length} empresas e a conversa não deixou claro qual${escolhaIa ? ` (${escolhaIa})` : ""}: escolha abaixo.`
+        : null,
       falhasAnexo.length ? `Alguns anexos não foram copiados: ${falhasAnexo.join("; ")}` : null,
       empresa.cnpjNaoEncontrado && !empresa.companyId
         ? `O documento ${empresa.cnpjNaoEncontrado} do #nota não é de nenhuma empresa cadastrada (se for do tomador, tudo bem).`

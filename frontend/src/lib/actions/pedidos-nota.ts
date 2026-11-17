@@ -47,7 +47,7 @@ export async function definirEmpresaPedido(_prev: AcaoState, formData: FormData)
   const supabase = await createClient();
   const { data: pedido } = await supabase
     .from("pedidos_nota")
-    .select("id, status, origem, origem_contact_id")
+    .select("id, status, origem, origem_contact_id, contato_nome")
     .eq("id", pedidoId)
     .maybeSingle();
   if (!pedido) return { error: "Pedido não encontrado." };
@@ -65,10 +65,18 @@ export async function definirEmpresaPedido(_prev: AcaoState, formData: FormData)
     .from("pedidos_nota")
     .update({ company_id: companyId, empresa_fonte: "PAINEL", status: pedido.status === "ERRO" ? "RECEBIDO" : pedido.status })
     .eq("id", pedidoId);
-  // Aprende: próximo "#nota" desse contato/grupo já sai com a empresa.
+  // Aprende: soma a empresa ao grupo/contato (aparece em Dados fiscais →
+  // Grupos do WhatsApp). Um grupo pode ter várias empresas.
   await supabase.from("pedido_nota_vinculos").upsert(
-    { origem: pedido.origem, origem_contact_id: pedido.origem_contact_id, company_id: companyId, fonte: "PAINEL", pedido_id: pedidoId },
-    { onConflict: "origem,origem_contact_id" },
+    {
+      origem: pedido.origem,
+      origem_contact_id: pedido.origem_contact_id,
+      company_id: companyId,
+      fonte: "PAINEL",
+      pedido_id: pedidoId,
+      grupo_nome: pedido.contato_nome,
+    },
+    { onConflict: "origem,origem_contact_id,company_id", ignoreDuplicates: true },
   );
 
   try {

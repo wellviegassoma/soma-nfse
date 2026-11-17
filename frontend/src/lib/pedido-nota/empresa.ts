@@ -13,7 +13,7 @@ import { digitos, empresaPelaDica, empresasPorNome, type EmpresaRef } from "@/li
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Supa = SupabaseClient<any, any, any>;
 
-export type FonteEmpresa = "CNPJ_COMANDO" | "VINCULO" | "TELEFONE" | "NOME_CONTATO";
+export type FonteEmpresa = "CNPJ_COMANDO" | "VINCULO" | "GRUPO_IA" | "TELEFONE" | "NOME_CONTATO";
 
 export type EmpresaResolvida = {
   companyId: string | null;
@@ -23,6 +23,8 @@ export type EmpresaResolvida = {
   dica: string | null;
   /** Havia CPF/CNPJ na dica, mas de nenhuma empresa (pode ser do tomador). */
   cnpjNaoEncontrado: string | null;
+  /** O grupo está cadastrado em mais de uma empresa (candidatas = elas). */
+  grupoComVarias: boolean;
 };
 
 async function carregarEmpresas(admin: Supa): Promise<EmpresaRef[]> {
@@ -55,25 +57,37 @@ export async function resolverEmpresa(
   const resto = pelaDica.resto;
   const cnpjNaoEncontrado = pelaDica.documentoSemEmpresa;
   if (pelaDica.companyId) {
+    // Soma a empresa ao grupo (um grupo pode atender várias empresas).
     const { error } = await admin
       .from("pedido_nota_vinculos")
       .upsert(
-        { origem: "DIGISAC", origem_contact_id: p.contactId, company_id: pelaDica.companyId, fonte: "CNPJ_COMANDO", pedido_id: p.pedidoId },
-        { onConflict: "origem,origem_contact_id" },
+        {
+          origem: "DIGISAC",
+          origem_contact_id: p.contactId,
+          company_id: pelaDica.companyId,
+          fonte: "CNPJ_COMANDO",
+          pedido_id: p.pedidoId,
+          grupo_nome: p.nomeContato || null,
+        },
+        { onConflict: "origem,origem_contact_id,company_id", ignoreDuplicates: true },
       );
     if (error) console.error("[pedido-nota] falha ao gravar vínculo:", error.message);
-    return { companyId: pelaDica.companyId, fonte: "CNPJ_COMANDO", candidatas: [pelaDica.companyId], dica: resto, cnpjNaoEncontrado: null };
+    return { companyId: pelaDica.companyId, fonte: "CNPJ_COMANDO", candidatas: [pelaDica.companyId], dica: resto, cnpjNaoEncontrado: null, grupoComVarias: false };
   }
 
-  // 2. Vínculo aprendido
-  const { data: vinculo } = await admin
+  // 2. Grupo cadastrado na empresa (ou aprendido pelo #nota/painel).
+  //    Várias empresas no mesmo grupo → quem decide é a IA (receber.ts).
+  const { data: vinculos } = await admin
     .from("pedido_nota_vinculos")
     .select("company_id")
     .eq("origem", "DIGISAC")
-    .eq("origem_contact_id", p.contactId)
-    .maybeSingle();
-  if (vinculo?.company_id) {
-    return { companyId: vinculo.company_id as string, fonte: "VINCULO", candidatas: [vinculo.company_id as string], dica: resto, cnpjNaoEncontrado };
+    .eq("origem_contact_id", p.contactId);
+  const doGrupo = [...new Set((vinculos ?? []).map((v) => v.company_id as string))];
+  if (doGrupo.length === 1) {
+    return { companyId: doGrupo[0], fonte: "VINCULO", candidatas: doGrupo, dica: resto, cnpjNaoEncontrado, grupoComVarias: false };
+  }
+  if (doGrupo.length > 1) {
+    return { companyId: null, fonte: null, candidatas: doGrupo, dica: resto, cnpjNaoEncontrado, grupoComVarias: true };
   }
 
   // 3. Telefone
@@ -82,19 +96,19 @@ export async function resolverEmpresa(
     const porTel = ((data ?? []) as unknown[]).map((v) =>
       typeof v === "string" ? v : String((v as Record<string, unknown>).pedido_nota_empresas_por_telefone),
     );
-    if (porTel.length === 1) return { companyId: porTel[0], fonte: "TELEFONE", candidatas: porTel, dica: resto, cnpjNaoEncontrado };
-    if (porTel.length > 1) return { companyId: null, fonte: null, candidatas: porTel, dica: resto, cnpjNaoEncontrado };
+    if (porTel.length === 1) return { companyId: porTel[0], fonte: "TELEFONE", candidatas: porTel, dica: resto, cnpjNaoEncontrado, grupoComVarias: false };
+    if (porTel.length > 1) return { companyId: null, fonte: null, candidatas: porTel, dica: resto, cnpjNaoEncontrado, grupoComVarias: false };
   }
 
   // 4. Nome do grupo ("SOMA + nome da empresa no sistema"): idêntico → usa;
   //    muito parecido e único → usa com alerta; senão, só sugestões.
   const porNome = empresasPorNome(p.nomeContato, empresas);
   if (porNome.exatas.length === 1) {
-    return { companyId: porNome.exatas[0], fonte: "NOME_CONTATO", candidatas: porNome.exatas, dica: resto, cnpjNaoEncontrado };
+    return { companyId: porNome.exatas[0], fonte: "NOME_CONTATO", candidatas: porNome.exatas, dica: resto, cnpjNaoEncontrado, grupoComVarias: false };
   }
   if (porNome.exatas.length === 0 && porNome.fortes.length === 1) {
-    return { companyId: porNome.fortes[0], fonte: "NOME_CONTATO", candidatas: porNome.fortes, dica: resto, cnpjNaoEncontrado };
+    return { companyId: porNome.fortes[0], fonte: "NOME_CONTATO", candidatas: porNome.fortes, dica: resto, cnpjNaoEncontrado, grupoComVarias: false };
   }
   const sugestoes = [...new Set([...porNome.exatas, ...porNome.fortes, ...porNome.candidatas])].slice(0, 10);
-  return { companyId: null, fonte: null, candidatas: sugestoes, dica: resto, cnpjNaoEncontrado };
+  return { companyId: null, fonte: null, candidatas: sugestoes, dica: resto, cnpjNaoEncontrado, grupoComVarias: false };
 }

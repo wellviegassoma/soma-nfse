@@ -174,6 +174,12 @@ export async function extrairPedido(pedidoId: string): Promise<{ itens: number; 
             historico,
             temAudioSemTranscricao,
           });
+          if (pedido.empresa_fonte === "GRUPO_IA") {
+            final.alertas.unshift({
+              codigo: "EMPRESA_ESCOLHIDA_IA",
+              mensagem: `O grupo atende mais de uma empresa; a IA entendeu que o pedido é de ${entrada.empresa.nome}. Confira antes de aprovar.`,
+            });
+          }
           if (empresaPorNome) {
             final.alertas.unshift(
               nomeIdentico

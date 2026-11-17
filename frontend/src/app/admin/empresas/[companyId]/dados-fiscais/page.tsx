@@ -6,6 +6,7 @@ import type { Company } from "@/lib/types";
 import { FiscalForm } from "./FiscalForm";
 import { CompanyNameForm } from "./CompanyNameForm";
 import { StatusSomaForm } from "./StatusSomaForm";
+import { GruposWhatsappForm, type GrupoVinculado } from "./GruposWhatsappForm";
 
 export const metadata = { title: "Dados fiscais — Painel SOMA" };
 
@@ -24,6 +25,33 @@ export default async function AdminCompanyFiscalPage(
     .single();
 
   if (!company) notFound();
+
+  // Grupos do WhatsApp (Digisac) desta empresa + outras empresas no mesmo grupo.
+  const { data: vinculos } = await supabase
+    .from("pedido_nota_vinculos")
+    .select("id, origem_contact_id, grupo_nome, fonte")
+    .eq("company_id", companyId)
+    .order("created_at");
+  const contatos = (vinculos ?? []).map((v) => v.origem_contact_id as string);
+  const { data: outros } = contatos.length
+    ? await supabase
+        .from("pedido_nota_vinculos")
+        .select("origem_contact_id, company:companies(legal_name, trade_name)")
+        .in("origem_contact_id", contatos)
+        .neq("company_id", companyId)
+    : { data: [] };
+  const gruposVinculados: GrupoVinculado[] = (vinculos ?? []).map((v) => ({
+    id: v.id as string,
+    contactId: v.origem_contact_id as string,
+    nome: (v.grupo_nome as string | null) ?? null,
+    fonte: v.fonte as string,
+    outrasEmpresas: (outros ?? [])
+      .filter((o) => o.origem_contact_id === v.origem_contact_id)
+      .map((o) => {
+        const c = Array.isArray(o.company) ? o.company[0] : o.company;
+        return (c?.trade_name || c?.legal_name || "?") as string;
+      }),
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -44,6 +72,9 @@ export default async function AdminCompanyFiscalPage(
       </Card>
       <Card className="max-w-2xl p-6 sm:p-8">
         <FiscalForm company={company as Company} />
+      </Card>
+      <Card className="max-w-2xl p-6 sm:p-8">
+        <GruposWhatsappForm companyId={company.id} vinculados={gruposVinculados} />
       </Card>
       <Card className="max-w-2xl p-6 sm:p-8">
         <StatusSomaForm

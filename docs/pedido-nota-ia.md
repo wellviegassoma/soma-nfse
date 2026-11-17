@@ -190,6 +190,18 @@ Nova ordem (`src/lib/pedido-nota/empresa.ts` + `empresa-core.ts`, migration
    como sugestão no painel. Medido em 16/11/2026 nos 226 grupos com conversa nos últimos 90 dias:
    111 idênticos, 34 muito parecidos, 32 ambíguos, 17 só com sugestões, 49 sem empresa parecida.
 
+**Grupos do WhatsApp no cadastro (fase_bl, 16/11/2026, pedido do usuário):** a tela Dados fiscais da
+empresa tem o cartão "Grupos do WhatsApp" (busca nos grupos do Digisac, vincular/remover, mostra outras
+empresas do mesmo grupo). `pedido_nota_vinculos` passou a ser muitos-para-muitos (único por contato +
+empresa): um grupo pode atender várias empresas (ex.: BFM Diagnóstico + BFM Participações + Dr. Bruno
+PF) e uma empresa pode ter vários grupos. No `#nota`, o passo 2 (vínculo) virou "grupo cadastrado":
+com 1 empresa usa direto; com várias, `escolher-empresa.ts` pede à IA para decidir pela conversa
+(nome, serviços e tomadores de cada empresa) → `empresa_fonte = GRUPO_IA` + aviso forte
+`EMPRESA_ESCOLHIDA_IA`; sem certeza, o painel mostra só as empresas do grupo. Escolha no painel e
+`#nota` com CNPJ **somam** a empresa ao grupo. Preenchimento inicial:
+`node scripts/vincular-grupos-iniciais.mjs [--aplicar]` — só nomes idênticos a uma única empresa
+(182 grupos, 111 com conversa em 90 dias, 119 empresas), fonte `NOME_INICIAL`.
+
 `pedidos_nota.empresa_fonte` guarda de onde veio a empresa (`CNPJ_COMANDO`, `VINCULO`,
 `TELEFONE`, `NOME_CONTATO`, `PAINEL`). O comentário de retorno ao atendente explica como indicar
 a empresa quando ela não for achada.

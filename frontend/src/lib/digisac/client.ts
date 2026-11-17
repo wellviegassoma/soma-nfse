@@ -104,6 +104,31 @@ export async function buscarContato(id: string): Promise<DigisacContato> {
   return chamar<DigisacContato>("GET", `/contacts/${encodeURIComponent(id)}`);
 }
 
+export type DigisacGrupo = { id: string; nome: string; ultimaMensagem: string | null };
+
+let cacheGrupos: { em: number; grupos: DigisacGrupo[] } | null = null;
+/** Todos os grupos de WhatsApp da conta (cache de 10 min por instância). */
+export async function listarGrupos(): Promise<DigisacGrupo[]> {
+  if (cacheGrupos && Date.now() - cacheGrupos.em < 10 * 60_000) return cacheGrupos.grupos;
+  const grupos: DigisacGrupo[] = [];
+  for (let pagina = 1; pagina <= 50; pagina++) {
+    const r = await chamar<Pagina<DigisacContato & { lastMessageAt?: string | null }>>(
+      "GET",
+      `/contacts?where[isGroup]=true&perPage=100&page=${pagina}`,
+    );
+    grupos.push(
+      ...(r.data ?? []).map((c) => ({
+        id: c.id,
+        nome: c.internalName || c.name || "(sem nome)",
+        ultimaMensagem: c.lastMessageAt ?? null,
+      })),
+    );
+    if (!r.data?.length || pagina >= (r.lastPage ?? 1)) break;
+  }
+  cacheGrupos = { em: Date.now(), grupos };
+  return grupos;
+}
+
 let usuarioIntegracaoId: string | null = null;
 /** Id do usuário dono do token (autor das mensagens que o SOMA Gestão envia). */
 export async function idUsuarioIntegracao(): Promise<string> {
