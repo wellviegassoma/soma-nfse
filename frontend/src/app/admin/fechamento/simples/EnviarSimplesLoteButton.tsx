@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 
@@ -20,6 +21,7 @@ type Resumo = { sucessos: number; jaDeclaradas: string[]; falhas: { nome: string
 // o motivo; a rota recusa (409) uma segunda declaração original da mesma
 // competência e também barra quem não passou na conferência.
 export function EnviarSimplesLoteButton({ competencia, empresas }: { competencia: string; empresas: Empresa[] }) {
+  const router = useRouter();
   const [confirmando, setConfirmando] = useState(false);
   const [rodando, setRodando] = useState(false);
   const [indice, setIndice] = useState(0);
@@ -58,6 +60,10 @@ export function EnviarSimplesLoteButton({ competencia, empresas }: { competencia
     setEmpresaAtual(null);
     setRodando(false);
     setConfirmando(false);
+    // Atualiza a lista: sem isso as já transmitidas continuavam como
+    // "liberadas" e um segundo clique tentava de novo (17/11/2026 — a
+    // trava do servidor pulou, mas a tela confundia).
+    router.refresh();
   }
 
   return (
@@ -105,7 +111,7 @@ export function EnviarSimplesLoteButton({ competencia, empresas }: { competencia
           {resumo.sucessos} empresa(s) declarada(s).
           {resumo.jaDeclaradas.length > 0 && (
             <span className="mt-1 block">
-              {resumo.jaDeclaradas.length} já tinham declaração e foram puladas: {resumo.jaDeclaradas.join(", ")}.
+              {resumo.jaDeclaradas.length} já estavam transmitidas (num envio anterior) e não foram enviadas de novo: {resumo.jaDeclaradas.join(", ")}.
             </span>
           )}
           {resumo.falhas.length > 0 && (

@@ -171,6 +171,20 @@ export async function POST(
   }
 
   if (!response.ok) {
+    const detalhe = String(body?.detail ?? "");
+    // E0022: a Receita só aceita a declaração depois das competências
+    // anteriores em aberto (visto em 17/11/2026 — Ramos Martins, cliente
+    // novo sem PGDAS-D de 05 a 09/2026 do escritório anterior).
+    const pendentes = /MSG_E0022/.test(detalhe) ? detalhe.match(/\d{2}\/\d{4}/g) : null;
+    if (pendentes?.length) {
+      return NextResponse.json(
+        {
+          error: `A Receita só aceita ${competencia.split("-").reverse().join("/")} depois das declarações em aberto de ${pendentes.join(", ")}. Transmita essas competências primeiro, da mais antiga para a mais nova (aba Impostos da empresa), e depois esta.`,
+          competenciasPendentes: pendentes,
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: body?.detail ?? "A Serpro recusou a declaração." },
       { status: 502 },
