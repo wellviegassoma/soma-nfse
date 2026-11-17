@@ -119,7 +119,7 @@ export function ServiceForm({
   return (
     <form action={formAction} className="flex flex-col gap-5">
       <input type="hidden" name="companyId" value={companyId} />
-      {service && <input type="hidden" name="serviceId" value={service.id} />}
+      {service?.id ? <input type="hidden" name="serviceId" value={service.id} /> : null}
 
       {state?.error && <Alert tone="danger">{state.error}</Alert>}
 

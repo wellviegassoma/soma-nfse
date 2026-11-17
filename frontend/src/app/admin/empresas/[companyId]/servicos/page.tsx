@@ -37,10 +37,10 @@ export default async function AdminCompanyServicesPage(
       ) : (
         <Card className="divide-y divide-border overflow-hidden">
           {services.map((service) => (
+            <div key={service.id} className="flex items-center transition-colors hover:bg-surface-muted">
             <Link
-              key={service.id}
               href={`/admin/empresas/${companyId}/servicos/${service.id}`}
-              className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-surface-muted"
+              className="flex min-w-0 flex-1 items-center justify-between gap-4 py-4 pl-5 pr-3"
             >
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-foreground">
@@ -67,6 +67,15 @@ export default async function AdminCompanyServicesPage(
                 active={service.active}
               />
             </Link>
+            {/* Novo serviço já preenchido com os dados deste (o nome ganha "(cópia)"). */}
+            <Link
+              href={`/admin/empresas/${companyId}/servicos/novo?copiar=${service.id}`}
+              className="mr-4 shrink-0 rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-foreground/70 hover:bg-surface-muted hover:text-foreground"
+              title="Criar um serviço novo a partir deste"
+            >
+              Copiar
+            </Link>
+            </div>
           ))}
         </Card>
       )}
