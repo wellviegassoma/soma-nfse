@@ -11,6 +11,7 @@ import { uuidLike } from "@/lib/zod-helpers";
 import { issueNfse } from "@/lib/actions/notas";
 import { extrairPedido } from "@/lib/pedido-nota/extrair";
 import { devolverNotaAoCliente } from "@/lib/pedido-nota/devolver";
+import { cadastrarTomadorNovo } from "@/lib/pedido-nota/tomador-novo";
 
 // Fase 3 do pedido de nota (docs/pedido-nota-ia.md): ações do painel
 // /admin/pedidos-nota. A emissão NÃO tem caminho próprio: "Aprovar e emitir"
@@ -150,6 +151,10 @@ const itemSchema = z.object({
   valor: z.string().trim().optional(),
   descricao: z.string().trim().optional(),
   competencia: z.string().trim().optional(),
+  // Tomador novo (sem cadastro): nome e documento vindos da mensagem,
+  // editáveis no painel; cadastrado na hora de aprovar.
+  tomadorNome: z.string().trim().optional(),
+  tomadorDocumento: z.string().trim().optional(),
 });
 
 function lerValor(v: string | undefined): number | null {
@@ -163,7 +168,7 @@ async function carregarItem(itemId: string) {
   const { data } = await supabase
     .from("pedido_nota_itens")
     .select(
-      "id, pedido_id, status, customer_id, service_id, valor, descricao, competencia, iss_retido, aliquota_iss, irrf_pct, csrf_pct, inss_pct, pedido:pedidos_nota(company_id)",
+      "id, pedido_id, status, customer_id, tomador_nome, tomador_documento, service_id, valor, descricao, competencia, iss_retido, aliquota_iss, irrf_pct, csrf_pct, inss_pct, pedido:pedidos_nota(company_id)",
     )
     .eq("id", itemId)
     .maybeSingle();
@@ -198,8 +203,16 @@ export async function salvarItem(_prev: AcaoState, formData: FormData): Promise<
     valor: lerValor(parsed.data.valor),
     descricao: descricao && descricao === (servico?.description ?? null) && !item.descricao ? null : descricao,
     competencia: competencia === hojeBrasilia() && !item.competencia ? null : competencia,
+    ...(formData.has("tomadorDocumento")
+      ? {
+          tomador_nome: parsed.data.tomadorNome || null,
+          tomador_documento: (parsed.data.tomadorDocumento ?? "").replace(/\D/g, "") || null,
+        }
+      : {}),
   };
   const mudou =
+    ("tomador_nome" in novo && (novo.tomador_nome ?? null) !== (item.tomador_nome ?? null)) ||
+    ("tomador_documento" in novo && (novo.tomador_documento ?? null) !== (item.tomador_documento ?? null)) ||
     novo.customer_id !== item.customer_id ||
     novo.service_id !== item.service_id ||
     novo.valor !== (item.valor == null ? null : Number(item.valor)) ||
@@ -238,12 +251,26 @@ export async function aprovarEEmitirItem(prev: AcaoState, formData: FormData): P
 
   const item = await carregarItem(String(formData.get("itemId") ?? ""));
   if (!item || !item.companyId) return { error: "Rascunho sem empresa." };
-  if (!item.customer_id) return { error: "Escolha o tomador (cadastre antes, se for novo)." };
   if (!item.service_id) return { error: "Escolha o serviço." };
   if (item.valor == null) return { error: "Informe o valor." };
 
   const user = await requireUser();
   const supabase = await createClient();
+
+  // Tomador novo com nome + CPF/CNPJ válidos (vindos da mensagem): cadastra
+  // agora, sem passar pela tela de tomadores.
+  if (!item.customer_id) {
+    if (formData.get("cadastrarTomador") !== "1" || !item.tomador_documento) {
+      return { error: "Escolha o tomador, ou confira o nome e o CPF/CNPJ do tomador novo para cadastrá-lo." };
+    }
+    const novo = await cadastrarTomadorNovo(supabase, item.companyId, item.tomador_nome, item.tomador_documento);
+    if ("error" in novo) return { error: novo.error };
+    await supabase
+      .from("pedido_nota_itens")
+      .update({ customer_id: novo.customerId, tomador_nome: null, tomador_documento: null })
+      .eq("id", item.id);
+    item.customer_id = novo.customerId;
+  }
   const { data: travado } = await supabase
     .from("pedido_nota_itens")
     .update({ status: "APROVADO", aprovado_por: user.id, aprovado_em: new Date().toISOString(), erro: null })

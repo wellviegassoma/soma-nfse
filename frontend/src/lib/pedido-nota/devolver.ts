@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enviarArquivo, enviarComentario } from "@/lib/digisac/client";
+import { resumirNota, textoParaCliente } from "@/lib/pedido-nota/resumo-nota";
 
 // Fase 4 do pedido de nota (docs/pedido-nota-ia.md): depois da emissão,
 // manda o DANFSe (PDF) para o cliente no mesmo contato do Digisac (XML só com
@@ -36,7 +37,8 @@ export async function devolverNotaAoCliente(itemId: string): Promise<{ enviado: 
   const { data: nfse } = await admin.from("nfse").select("xml_nfse, access_key").eq("dps_id", item.dps_id).maybeSingle();
   if (!nfse?.xml_nfse) return { enviado: false, motivo: "NFS-e sem XML" };
 
-  const numero = /<nNFSe>(\d+)<\/nNFSe>/.exec(nfse.xml_nfse)?.[1] ?? null;
+  const resumo = resumirNota(nfse.xml_nfse, nfse.access_key);
+  const numero = resumo.numero;
   const valor = Number(item.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   const rotulo = numero ? `nº ${numero}` : "";
   const contactId = pedido.origem_contact_id as string;
@@ -59,7 +61,9 @@ export async function devolverNotaAoCliente(itemId: string): Promise<{ enviado: 
     await enviarArquivo({
       contactId,
       serviceId: (pedido.origem_service_id as string | null) ?? null,
-      texto: `Olá! Segue a nota fiscal ${rotulo} no valor de ${valor}.`,
+      // Mesmo conteúdo do DANFSe no corpo da mensagem (tomador, CPF/CNPJ,
+      // valores, retenções, descrição, competência, chave).
+      texto: textoParaCliente(resumo),
       arquivo: { base64: pdf.toString("base64"), mimetype: "application/pdf", nome: `${nome}.pdf` },
     });
     // O cliente precisa do PDF; o XML só com DIGISAC_ENVIAR_XML_CLIENTE=1.

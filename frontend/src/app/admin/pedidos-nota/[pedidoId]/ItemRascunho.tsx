@@ -58,6 +58,16 @@ export function ItemRascunho({
   const editavel = ["RASCUNHO", "ERRO"].includes(item.status);
   const estado = sEmitir ?? sSalvar ?? sDesc;
 
+  // Tomador: do cadastro, ou novo com nome + CPF/CNPJ vindos da mensagem.
+  const [tomadorId, setTomadorId] = useState(item.customer_id ?? "");
+  const temTomadorNovo = Boolean(item.tomador_nome || item.tomador_documento);
+  const [novoNome, setNovoNome] = useState(item.tomador_nome ?? "");
+  const [novoDoc, setNovoDoc] = useState(item.tomador_documento ?? "");
+  const [cadastrar, setCadastrar] = useState(temTomadorNovo);
+  const digitosDoc = novoDoc.replace(/\D/g, "");
+  const problemaDoc =
+    !digitosDoc ? null : digitosDoc.length === 11 ? null : digitosDoc.length === 14 ? null : "CPF tem 11 dígitos e CNPJ, 14.";
+
   return (
     <Card className="flex flex-col gap-4 p-5">
       <div className="flex items-center justify-between gap-2">
@@ -89,17 +99,15 @@ export function ItemRascunho({
 
       <form action={emitir} className="flex flex-col gap-3">
         <input type="hidden" name="itemId" value={item.id} />
-        <Field
-          label="Tomador"
-          htmlFor={`tomador-${item.id}`}
-          hint={
-            !item.customer_id && (item.tomador_nome || item.tomador_documento)
-              ? `Citado na mensagem: ${[item.tomador_nome, item.tomador_documento].filter(Boolean).join(" · ")}`
-              : undefined
-          }
-        >
-          <Select id={`tomador-${item.id}`} name="customerId" defaultValue={item.customer_id ?? ""} disabled={!editavel}>
-            <option value="">— escolher —</option>
+        <Field label="Tomador" htmlFor={`tomador-${item.id}`}>
+          <Select
+            id={`tomador-${item.id}`}
+            name="customerId"
+            value={tomadorId}
+            onChange={(e) => setTomadorId(e.target.value)}
+            disabled={!editavel}
+          >
+            <option value="">{temTomadorNovo ? "— tomador novo (abaixo) —" : "— escolher —"}</option>
             {tomadores.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.nome}
@@ -107,10 +115,29 @@ export function ItemRascunho({
             ))}
           </Select>
         </Field>
-        {!item.customer_id && editavel && companyId ? (
-          <Link href={`/admin/emissao-notas/${companyId}/tomadores/novo`} target="_blank" className="-mt-1 text-xs text-brand hover:underline">
-            Cadastrar tomador novo (abre em outra aba; depois recarregue esta página)
-          </Link>
+        {!tomadorId && editavel ? (
+          <div className="flex flex-col gap-3 rounded-lg border border-brand/30 bg-brand/5 p-3">
+            <p className="text-xs font-medium text-foreground">
+              Tomador novo{temTomadorNovo ? " (dados da mensagem do cliente)" : ""}: confira e ele é cadastrado ao emitir.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Nome" htmlFor={`tnome-${item.id}`}>
+                <Input id={`tnome-${item.id}`} name="tomadorNome" value={novoNome} onChange={(e) => setNovoNome(e.target.value)} />
+              </Field>
+              <Field label="CPF ou CNPJ" htmlFor={`tdoc-${item.id}`} hint={problemaDoc ?? undefined}>
+                <Input id={`tdoc-${item.id}`} name="tomadorDocumento" inputMode="numeric" value={novoDoc} onChange={(e) => setNovoDoc(e.target.value)} />
+              </Field>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-foreground/80">
+              <input type="checkbox" name="cadastrarTomador" value="1" checked={cadastrar} onChange={(e) => setCadastrar(e.target.checked)} />
+              Cadastrar este tomador ao aprovar (CNPJ: completa endereço pela Receita)
+            </label>
+            {companyId ? (
+              <Link href={`/admin/emissao-notas/${companyId}/tomadores/novo`} target="_blank" className="text-xs text-brand hover:underline">
+                Prefiro cadastrar com todos os dados (abre em outra aba; depois recarregue)
+              </Link>
+            ) : null}
+          </div>
         ) : null}
 
         <Field label="Serviço" htmlFor={`servico-${item.id}`}>
