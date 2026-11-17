@@ -431,8 +431,12 @@ class ClienteNotaCarioca:
             if alvo.get_attribute("type") == "checkbox":
                 alvo.check()
             else:
+                # Radio com AutoPostBack (ex.: Quitadas na grade de guias)
+                # dispara o postback por setTimeout — "load" voltava antes
+                # da navegação começar e a tela lida era a antiga.
                 alvo.click()
-                self._page.wait_for_load_state("load", timeout=60_000)
+                self._page.wait_for_timeout(1500)
+                self._page.wait_for_load_state("networkidle", timeout=60_000)
         # Com cliques o alvo costuma ser uma lista longa (notas da guia).
         max_linhas, max_celula, max_total = (500, 60, 60_000) if cliques else (15, 25, 6000)
         tree = lxml_html.fromstring(self._page.content())
