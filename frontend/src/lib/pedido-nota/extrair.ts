@@ -84,28 +84,71 @@ export async function extrairPedido(pedidoId: string): Promise<{ itens: number; 
     const companyId = pedido.company_id as string;
     const hoje = hojeBrasilia();
 
-    const [empresaRes, servicosRes, tomadoresRes, notasRes] = await Promise.all([
+    const [empresaRes, servicosRes, tomadoresRes, notasRes, distRes] = await Promise.all([
       admin.from("companies").select("legal_name, trade_name, tax_regime, allow_retroactive_emission").eq("id", companyId).single(),
       admin.from("services").select("id, name, description").eq("company_id", companyId).eq("active", true).order("name"),
       admin.from("customers").select("id, name, cpf_cnpj").eq("company_id", companyId).order("updated_at", { ascending: false }).limit(MAX_TOMADORES),
       admin
         .from("dps")
-        .select("customer_id, valor, descricao, data_competencia, created_at, customer:customers(name)")
+        .select("customer_id, valor, descricao, data_competencia, created_at, customer:customers(name), nfse(access_key)")
         .eq("company_id", companyId)
         .eq("status", "ACCEPTED")
         .order("created_at", { ascending: false })
         .limit(60),
+      // Notas emitidas em OUTROS emissores (prefeitura, Emissor Nacional),
+      // sincronizadas do ADN: muitas empresas ainda não emitiram nada pelo
+      // SOMA Gestão, e sem isso a IA não conhece tomador nem descrição habituais.
+      admin
+        .from("notas_distribuidas")
+        .select("chave_acesso, tomador_nome, tomador_cnpj, valor_servico, descricao_servico, competencia, data_emissao")
+        .eq("company_id", companyId)
+        .eq("direcao", "saida")
+        .eq("cancelada", false)
+        .order("data_emissao", { ascending: false })
+        .limit(80),
     ]);
     const empresa = empresaRes.data;
     if (!empresa) throw new Error("empresa não encontrada");
 
-    type NotaDb = { customer_id: string; valor: number | string; descricao: string | null; data_competencia: string | null; created_at: string; customer: { name: string } | { name: string }[] | null };
-    const notas = (notasRes.data ?? []) as NotaDb[];
-    const nomeDe = (c: NotaDb["customer"]) => (Array.isArray(c) ? c[0]?.name : c?.name) ?? "?";
+    const tomadoresTodos = (tomadoresRes.data ?? []).map((t) => ({ id: t.id as string, nome: t.name as string, documento: (t.cpf_cnpj as string | null) ?? null }));
+    const porDocumento = new Map(tomadoresTodos.filter((t) => t.documento).map((t) => [(t.documento as string).replace(/\D/g, ""), t]));
+
+    // Histórico único (SOMA Gestão + outros emissores), sem repetir a mesma
+    // nota (chave de acesso), do mais recente para o mais antigo.
+    type NotaHist = { customerId: string | null; tomadorNome: string; valor: number; descricao: string; data: string; criadaEm: string };
+    const umDe = <T,>(v: T | T[] | null | undefined) => (Array.isArray(v) ? v[0] : v);
+    const chaves = new Set<string>();
+    const notas: NotaHist[] = [];
+    for (const n of notasRes.data ?? []) {
+      const chave = umDe(n.nfse as { access_key: string | null } | { access_key: string | null }[] | null)?.access_key;
+      if (chave) chaves.add(chave);
+      notas.push({
+        customerId: n.customer_id as string,
+        tomadorNome: umDe(n.customer as { name: string } | { name: string }[] | null)?.name ?? "?",
+        valor: Number(n.valor),
+        descricao: (n.descricao as string | null) ?? "",
+        data: (n.data_competencia as string | null) ?? (n.created_at as string).slice(0, 10),
+        criadaEm: n.created_at as string,
+      });
+    }
+    for (const n of distRes.data ?? []) {
+      if (n.chave_acesso && chaves.has(n.chave_acesso as string)) continue;
+      const doc = ((n.tomador_cnpj as string | null) ?? "").replace(/\D/g, "");
+      const cadastrado = doc ? porDocumento.get(doc) : undefined;
+      const criadaEm = (n.data_emissao as string | null) ?? (n.competencia as string | null) ?? "";
+      notas.push({
+        customerId: cadastrado?.id ?? null,
+        tomadorNome: (n.tomador_nome as string | null) ?? cadastrado?.nome ?? "?",
+        valor: Number(n.valor_servico ?? 0),
+        descricao: (n.descricao_servico as string | null) ?? "",
+        data: ((n.competencia as string | null) ?? criadaEm).slice(0, 10),
+        criadaEm,
+      });
+    }
+    notas.sort((a, b) => b.criadaEm.localeCompare(a.criadaEm));
 
     // Tomadores: os das últimas notas primeiro (mais prováveis), depois o resto.
-    const tomadoresTodos = (tomadoresRes.data ?? []).map((t) => ({ id: t.id as string, nome: t.name as string, documento: (t.cpf_cnpj as string | null) ?? null }));
-    const idsRecentes = new Set(notas.map((n) => n.customer_id));
+    const idsRecentes = new Set(notas.map((n) => n.customerId).filter(Boolean));
     const tomadores = [...tomadoresTodos.filter((t) => idsRecentes.has(t.id)), ...tomadoresTodos.filter((t) => !idsRecentes.has(t.id))];
 
     const anexosGravados = (pedido.anexos ?? []) as AnexoGravado[];
@@ -131,12 +174,12 @@ export async function extrairPedido(pedidoId: string): Promise<{ itens: number; 
       hojeBrasilia: hoje,
       servicos: (servicosRes.data ?? []).map((s) => ({ id: s.id as string, nome: s.name as string, descricao: (s.description as string | null) ?? null })),
       tomadores,
-      ultimasNotas: notas.slice(0, 15).map((n) => ({
-        tomadorId: n.customer_id,
-        tomadorNome: nomeDe(n.customer),
-        valor: Number(n.valor),
-        descricao: n.descricao ?? "",
-        data: n.data_competencia ?? n.created_at.slice(0, 10),
+      ultimasNotas: notas.slice(0, 20).map((n) => ({
+        tomadorId: n.customerId,
+        tomadorNome: n.tomadorNome,
+        valor: n.valor,
+        descricao: n.descricao,
+        data: n.data,
       })),
       dicaAtendente: (pedido.dica_atendente as string | null) ?? null,
       mensagens,
@@ -147,11 +190,11 @@ export async function extrairPedido(pedidoId: string): Promise<{ itens: number; 
     // Histórico por tomador para os alertas (média e duplicidade 7 dias).
     const seteDiasAtras = new Date(Date.now() - 7 * 86_400_000).toISOString();
     const historico = (customerId: string): HistoricoTomador | undefined => {
-      const doTomador = notas.filter((n) => n.customer_id === customerId);
+      const doTomador = notas.filter((n) => n.customerId === customerId);
       if (!doTomador.length) return undefined;
       return {
-        valores: doTomador.slice(0, 10).map((n) => Number(n.valor)),
-        ultimos7Dias: doTomador.filter((n) => n.created_at >= seteDiasAtras).map((n) => ({ valor: Number(n.valor), data: n.created_at.slice(0, 10) })),
+        valores: doTomador.slice(0, 10).map((n) => n.valor),
+        ultimos7Dias: doTomador.filter((n) => n.criadaEm >= seteDiasAtras).map((n) => ({ valor: n.valor, data: n.criadaEm.slice(0, 10) })),
       };
     };
     const temAudioSemTranscricao = anexosPreparados.some((a) => a?.tipo === "audio" && !a.transcricao);
