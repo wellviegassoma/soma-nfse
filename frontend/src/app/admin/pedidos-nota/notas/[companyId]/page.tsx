@@ -22,6 +22,8 @@ type Linha = {
   descricao: string;
   cancelada: boolean;
   origem: "sistema" | "outro emissor";
+  /** Onde abrir o PDF (DANFSe). */
+  pdf: string | null;
 };
 
 const LIMITE = 300;
@@ -43,14 +45,14 @@ export default async function NotasEmitidasConsulta(props: {
     supabase.from("companies").select("legal_name, trade_name").eq("id", companyId).maybeSingle(),
     supabase
       .from("notas_distribuidas")
-      .select("chave_acesso, numero, data_emissao, tomador_nome, tomador_cnpj, valor_servico, descricao_servico, cancelada")
+      .select("id, chave_acesso, numero, data_emissao, tomador_nome, tomador_cnpj, valor_servico, descricao_servico, cancelada")
       .eq("company_id", companyId)
       .eq("direcao", "saida")
       .order("data_emissao", { ascending: false })
       .limit(LIMITE),
     supabase
       .from("dps")
-      .select("valor, descricao, created_at, customer:customers(name, cpf_cnpj), nfse(access_key, status)")
+      .select("id, valor, descricao, created_at, customer:customers(name, cpf_cnpj), nfse(access_key, status)")
       .eq("company_id", companyId)
       .eq("status", "ACCEPTED")
       .order("created_at", { ascending: false })
@@ -74,6 +76,8 @@ export default async function NotasEmitidasConsulta(props: {
     descricao: (n.descricao_servico as string | null) ?? "",
     cancelada: Boolean(n.cancelada),
     origem: chavesSistema.has(n.chave_acesso as string) ? "sistema" : "outro emissor",
+    // DANFSe gerado do XML já sincronizado (mesma rota do Fechamento).
+    pdf: `/admin/empresas/${companyId}/fechamento/notas/${n.id as string}/pdf`,
   }));
   const chaves = new Set(linhas.map((l) => l.chave).filter(Boolean));
   for (const d of dpsRes.data ?? []) {
@@ -91,6 +95,8 @@ export default async function NotasEmitidasConsulta(props: {
       descricao: (d.descricao as string | null) ?? "",
       cancelada: nfse?.status === "CANCELADA",
       origem: "sistema",
+      // Ainda não sincronizada: tela da nota em Emissão de Notas (tem o PDF).
+      pdf: `/admin/emissao-notas/${companyId}/notas/${d.id as string}`,
     });
   }
   linhas.sort((a, b) => (b.data ?? "").localeCompare(a.data ?? ""));
@@ -134,6 +140,7 @@ export default async function NotasEmitidasConsulta(props: {
                 <th className="px-3 py-2">Tomador</th>
                 <th className="px-3 py-2 text-right">Valor</th>
                 <th className="px-3 py-2">Descrição</th>
+                <th className="px-3 py-2">PDF</th>
               </tr>
             </thead>
             <tbody>
@@ -156,6 +163,18 @@ export default async function NotasEmitidasConsulta(props: {
                       <span className="whitespace-pre-wrap">{l.descricao || "—"}</span>
                       {l.descricao ? <CopiarTexto texto={l.descricao} /> : null}
                     </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    {l.pdf ? (
+                      <a
+                        href={l.pdf}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-block whitespace-nowrap rounded-md border border-border px-2 py-0.5 text-xs text-brand hover:bg-surface-muted"
+                      >
+                        Abrir PDF
+                      </a>
+                    ) : null}
                   </td>
                 </tr>
               ))}
