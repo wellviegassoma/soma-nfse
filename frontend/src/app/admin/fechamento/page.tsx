@@ -16,6 +16,46 @@ export const maxDuration = 300;
 
 const COMPETENCIA_REGEX = /^\d{4}-\d{2}$/;
 
+// Centrais do Fechamento agrupadas por área (17/11/2026 — o topo tinha
+// virado uma fileira de botões iguais).
+const GRUPOS_CENTRAIS: {
+  titulo: string;
+  descricao: string;
+  cor: string;
+  centrais: { nome: string; detalhe: string; href: string; semCompetencia?: boolean }[];
+}[] = [
+  {
+    titulo: "Tributos federais",
+    descricao: "Receita Federal via Integra Contador",
+    cor: "bg-brand",
+    centrais: [
+      { nome: "Simples Nacional", detalhe: "Apuração, PGDAS-D, DAS e pagamento", href: "/admin/fechamento/simples" },
+      { nome: "MIT · Lucro Presumido", detalhe: "PIS, COFINS, IRPJ e CSLL na DCTFWeb", href: "/admin/fechamento/mit" },
+      { nome: "Situação Fiscal", detalhe: "Relatório de pendências na Receita", href: "/admin/fechamento/situacao-fiscal", semCompetencia: true },
+      { nome: "Parcelamentos", detalhe: "Parcelas em aberto e guias", href: "/admin/fechamento/parcelamentos", semCompetencia: true },
+    ],
+  },
+  {
+    titulo: "ISS municipal",
+    descricao: "Conferência com a Prefeitura, guia e pagamento",
+    cor: "bg-success",
+    centrais: [
+      { nome: "ISS Rio de Janeiro", detalhe: "Nota Carioca", href: "/admin/fechamento/iss-rio" },
+      { nome: "ISS Petrópolis", detalhe: "Prefeitura de Petrópolis", href: "/admin/fechamento/iss-petropolis" },
+    ],
+  },
+  {
+    titulo: "Retenções e pessoal",
+    descricao: "Obrigações de quem toma serviço ou tem folha",
+    cor: "bg-warning",
+    centrais: [
+      { nome: "Reinf", detalhe: "Retenções nas notas recebidas (R-4020, R-2010)", href: "/admin/fechamento/reinf" },
+      { nome: "FGTS", detalhe: "Guias do FGTS Digital", href: "/admin/fechamento/fgts" },
+      { nome: "Importar folha", detalhe: "Folha do mês para o Fator R e encargos", href: "/admin/fechamento/folha", semCompetencia: true },
+    ],
+  },
+];
+
 const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   sucesso: { label: "OK", className: "bg-success-soft text-success" },
   erro: { label: "Erro", className: "bg-danger-soft text-danger" },
@@ -70,77 +110,65 @@ export default async function AdminFechamentoIndexPage(props: PageProps<"/admin/
         </p>
       </div>
 
+      {/* Notas do mês: competência + busca/exportação (o que alimenta todas as centrais). */}
       <Card className="p-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <form className="flex flex-wrap items-end gap-3">
-            <div className="w-[160px]">
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <form className="flex items-end gap-3">
+            <div className="w-[170px]">
               <Field label="Competência" htmlFor="competencia">
                 <Input id="competencia" name="competencia" type="month" defaultValue={competencia} />
               </Field>
             </div>
-            <Button type="submit">Aplicar</Button>
+            <Button type="submit" variant="secondary">
+              Aplicar
+            </Button>
+          </form>
+          <div className="flex flex-wrap items-start gap-3">
+            <BuscarTodasButton competencia={competencia} empresas={empresasParaBuscar} />
             <ExportarZipButton competencia={competencia} />
             <a href="/admin/fechamento/importar">
-              <Button type="button" variant="secondary">
+              <Button type="button" variant="ghost">
                 Importar XML
               </Button>
             </a>
-            <a href="/admin/fechamento/folha">
-              <Button type="button" variant="secondary">
-                Importar folha
-              </Button>
-            </a>
-            <a href="/admin/fechamento/mit">
-              <Button type="button" variant="secondary">
-                Central MIT
-              </Button>
-            </a>
-            <a href="/admin/fechamento/simples">
-              <Button type="button" variant="secondary">
-                Central Simples Nacional
-              </Button>
-            </a>
-            <a href="/admin/fechamento/situacao-fiscal">
-              <Button type="button" variant="secondary">
-                Central Situação Fiscal
-              </Button>
-            </a>
-            <a href="/admin/fechamento/parcelamentos">
-              <Button type="button" variant="secondary">
-                Central Parcelamentos
-              </Button>
-            </a>
-            <a href="/admin/fechamento/fgts">
-              <Button type="button" variant="secondary">
-                Central FGTS
-              </Button>
-            </a>
-            <a href="/admin/fechamento/iss-rio">
-              <Button type="button" variant="secondary">
-                Central ISS Rio
-              </Button>
-            </a>
-            <a href="/admin/fechamento/iss-petropolis">
-              <Button type="button" variant="secondary">
-                Central ISS Petrópolis
-              </Button>
-            </a>
-            <a href="/admin/fechamento/reinf">
-              <Button type="button" variant="secondary">
-                Central Reinf
-              </Button>
-            </a>
-          </form>
-          <BuscarTodasButton competencia={competencia} empresas={empresasParaBuscar} />
+          </div>
         </div>
-        <p className="mt-3 text-xs text-foreground/50">
-          O ZIP traz, por empresa: XML e PDF (DANFSe) de cada nota da competência, mais o
-          relatório mensal consolidado. Pode demorar um pouco dependendo do volume.
-        </p>
-        <div className="mt-4 flex justify-end border-t border-border pt-4">
+        <div className="mt-5 flex flex-wrap items-start justify-between gap-4 border-t border-border pt-4">
+          <p className="max-w-xl text-xs text-foreground/50">
+            “Buscar todas agora” traz as notas da competência no Sefin Nacional (o agendamento diário já faz isso
+            sozinho). O ZIP traz, por empresa, XML e PDF de cada nota mais o relatório mensal consolidado.
+          </p>
           <BuscarHistoricoTodasButton empresas={empresasParaBuscar} />
         </div>
       </Card>
+
+      {/* Centrais por área — cada uma abre já na competência escolhida. */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {GRUPOS_CENTRAIS.map((grupo) => (
+          <Card key={grupo.titulo} className="flex flex-col gap-3 p-5">
+            <div className="flex items-center gap-2">
+              <span className={`h-2.5 w-2.5 rounded-full ${grupo.cor}`} />
+              <h2 className="text-sm font-semibold text-foreground">{grupo.titulo}</h2>
+            </div>
+            <p className="-mt-1 text-xs text-foreground/50">{grupo.descricao}</p>
+            <div className="flex flex-col gap-2">
+              {grupo.centrais.map((c) => (
+                <Link
+                  key={c.href}
+                  href={`${c.href}${c.semCompetencia ? "" : `?competencia=${competencia}`}`}
+                  className="group flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3.5 py-2.5 transition hover:border-brand/50 hover:bg-brand/5"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-foreground group-hover:text-brand">{c.nome}</span>
+                    <span className="block truncate text-xs text-foreground/50">{c.detalhe}</span>
+                  </span>
+                  <span className="text-foreground/30 transition group-hover:translate-x-0.5 group-hover:text-brand">→</span>
+                </Link>
+              ))}
+            </div>
+          </Card>
+        ))}
+      </div>
 
       {notasDivergentesRaw && notasDivergentesRaw.length > 0 && (
         <Card className="border-warning/30 bg-warning-soft/40 p-6">
