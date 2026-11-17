@@ -42,6 +42,30 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+/**
+ * IM do prestador nas notas de saída que o governo já aceitou desta empresa
+ * (até 5 mais recentes, não canceladas). Só devolve se todas trouxerem o
+ * mesmo número — divergência fica para conferência humana.
+ */
+async function imDasNotasAceitas(admin: ReturnType<typeof createAdminClient>, companyId: string): Promise<string | null> {
+  const { data } = await admin
+    .from("notas_distribuidas")
+    .select("xml")
+    .eq("company_id", companyId)
+    .eq("direcao", "saida")
+    .eq("cancelada", false)
+    .order("data_emissao", { ascending: false })
+    .limit(5);
+  const ims = (data ?? [])
+    .map((n) => {
+      const prest = /<prest>[\s\S]*?<\/prest>/.exec((n.xml as string | null) ?? "")?.[0] ?? "";
+      return /<IM>([^<]*)<\/IM>/.exec(prest)?.[1]?.replace(/\D/g, "") || null;
+    })
+    .filter((v): v is string => Boolean(v));
+  if (!ims.length || new Set(ims).size > 1) return null;
+  return ims[0];
+}
+
 async function logNfseError(
   companyId: string,
   dpsId: string | null,
@@ -467,6 +491,28 @@ export async function issueNfse(_prevState: IssueNfseState, formData: FormData):
     if (novoEnviaIm !== null) {
       await admin.from("companies").update({ nfse_envia_im: novoEnviaIm }).eq("id", companyId);
     }
+    // E0116 com a IM errada (ou sem IM no cadastro): o CNC pode ter outro
+    // número — na RRAD era o próprio CNPJ, não o CMC de Petrópolis. A fonte
+    // confiável é a IM das notas que o governo já aceitou dessa empresa
+    // (notas_distribuidas). Achou uma diferente → corrige o cadastro e
+    // reenvia uma vez. Visto em produção em 17/11/2026.
+    let imCorrigida = false;
+    if (codigos.has("E0116") && novoEnviaIm === null) {
+      const im = await imDasNotasAceitas(admin, companyId);
+      const atual = (company.municipal_registration ?? "").replace(/\D/g, "");
+      if (im && im !== atual) {
+        await admin.from("companies").update({ municipal_registration: im, nfse_envia_im: true }).eq("id", companyId);
+        await logAudit({
+          companyId,
+          action: "UPDATE",
+          entity: "companies",
+          entityId: companyId,
+          oldValue: { municipal_registration: company.municipal_registration },
+          newValue: { municipal_registration: im, motivo: "E0116: IM das notas já aceitas pelo governo" },
+        });
+        imCorrigida = true;
+      }
+    }
     // Número de DPS já usado (E0014) — normalmente em outro emissor antes
     // do sistema. Pula pro próximo livre e reenvia uma vez.
     if (codigos.has("E0014")) {
@@ -486,7 +532,7 @@ export async function issueNfse(_prevState: IssueNfseState, formData: FormData):
 
     // Só reenvia se esse era o único problema — com outro erro junto, a
     // recusa voltaria igual e gastaria mais um número.
-    if (novoEnviaIm !== null && !jaReenviou && codigos.size === 1) {
+    if ((novoEnviaIm !== null || imCorrigida) && !jaReenviou && codigos.size === 1) {
       const reenvio = new FormData();
       for (const [k, v] of formData.entries()) reenvio.append(k, v);
       reenvio.set("_reenvioIm", "1");
