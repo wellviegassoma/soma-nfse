@@ -17,7 +17,7 @@ import {
   receitaComManual,
   resolverRbt12,
   somarFaturamento,
-  somarReceitaIssRetido,
+  somarReceitaIssRetido, somarReceitaExportacao,
   somarFaturamentoPorEquiparacao,
   somarFaturamentoIssRetido,
   somarRetencoes,
@@ -251,6 +251,7 @@ export default async function ImpostosPage(
       sujeitoFatorR: company.sujeito_fator_r,
       fatorRPercentual,
       receitaIssRetido: somarReceitaIssRetido(notasPorAtividade, competencia),
+      receitaExportacao: somarReceitaExportacao(notasPorAtividade, [competencia]),
     });
 
     const retencoesSimples = await buscarRetencoesMensal(supabase, companyId);

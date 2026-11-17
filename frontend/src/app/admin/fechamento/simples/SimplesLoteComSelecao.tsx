@@ -21,6 +21,7 @@ export type LinhaSimples = {
   municipioIbge: string | null;
   prefeitura: { valor: number | null; erro: string | null; consultadoEm: string } | null;
   receitaMes: number;
+  receitaExportacao: number;
   rbt12: number;
   rbt12Estimado: boolean;
   anexo: string;
@@ -74,19 +75,25 @@ function CelulaPrefeitura({
   if (!c) return <span className="text-xs text-foreground/40">não consultada</span>;
   const quando = new Date(c.consultadoEm).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
   if (c.valor == null) {
+    // "sem acesso" só quando falta CMC/login; outras falhas da consulta não
+    // são problema de cadastro (antes tudo aparecia como "sem acesso").
+    const semAcesso = /sem acesso|cmc|login/i.test(c.erro ?? "");
     return (
       <span
         className="rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-medium text-danger"
         title={`${c.erro ?? "erro"} — ${quando}`}
       >
-        sem acesso
+        {semAcesso ? "sem acesso" : "erro na consulta"}
       </span>
     );
   }
-  const diferenca = c.valor - linha.receitaMes;
+  // Exportação não aparece no quadro da Prefeitura — compara só o mercado interno.
+  const diferenca = c.valor - (linha.receitaMes - linha.receitaExportacao);
   const bate = Math.abs(diferenca) < 0.01;
   return (
-    <span title={`Consultado em ${quando}`}>
+    <span
+      title={`Consultado em ${quando}${linha.receitaExportacao ? ` — exportação de ${formatMoney(linha.receitaExportacao)} fica fora da Prefeitura` : ""}`}
+    >
       {formatMoney(c.valor)}
       {bate ? (
         <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">

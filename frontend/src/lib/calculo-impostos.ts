@@ -45,6 +45,8 @@ export type ResultadoSimplesNacional = {
   receitaMes: number;
   // Parte da receita do mês com ISS retido pelo tomador (já descontada do ISS do DAS).
   receitaIssRetido: number;
+  // Parte da receita do mês que é exportação de serviço (mercado externo).
+  receitaExportacao: number;
   dasTotal: number;
   partilha: {
     irpj: number;
@@ -73,9 +75,14 @@ export function calcularSimplesNacional(params: {
   // Parte de `receitaMes` cujo ISS foi retido pelo tomador — essa receita
   // não leva a parcela de ISS no DAS (as demais parcelas continuam).
   receitaIssRetido?: number;
+  // Parte de `receitaMes` que é exportação de serviço (mercado externo, LC
+  // 123 art. 18 §14): paga só IRPJ, CSLL e CPP — sem PIS, COFINS nem ISS.
+  receitaExportacao?: number;
 }): ResultadoSimplesNacional {
   const { receitaMes, rbt12, rbt12Estimado, sujeitoFatorR, fatorRPercentual } = params;
-  const receitaIssRetido = Math.min(Math.max(params.receitaIssRetido ?? 0, 0), receitaMes);
+  const receitaExportacao = Math.min(Math.max(params.receitaExportacao ?? 0, 0), receitaMes);
+  // Exportação não tem ISS (nem retido): a retenção só vale sobre o mercado interno.
+  const receitaIssRetido = Math.min(Math.max(params.receitaIssRetido ?? 0, 0), receitaMes - receitaExportacao);
 
   const anexo: Anexo = decidirAnexoFatorR(sujeitoFatorR, fatorRPercentual);
 
@@ -93,7 +100,22 @@ export function calcularSimplesNacional(params: {
       ? 0 // faixas acima de R$3,6mi: ISS sai do Simples, recolhido à parte do município — fora do escopo aqui
       : Math.min(Math.max(aliquotaEfetiva * faixaInfo.partilha.iss, ISS_MINIMO), ISS_MAXIMO);
 
-  const dasTotal = dasSemRetencaoIss - receitaIssRetido * percentualIss;
+  // Mercado interno paga a partilha inteira; a exportação só IRPJ, CSLL e CPP.
+  const receitaInterna = receitaMes - receitaExportacao;
+  const dasInterno = receitaInterna * aliquotaEfetiva;
+  const partilha = {
+    irpj: dasSemRetencaoIss * faixaInfo.partilha.irpj,
+    csll: dasSemRetencaoIss * faixaInfo.partilha.csll,
+    cofins: dasInterno * faixaInfo.partilha.cofins,
+    pis: dasInterno * faixaInfo.partilha.pis,
+    cpp: dasSemRetencaoIss * faixaInfo.partilha.cpp,
+    iss: (receitaInterna - receitaIssRetido) * percentualIss,
+  };
+  // Sem exportação, igual ao cálculo de sempre (DAS cheio menos o ISS retido).
+  const dasTotal =
+    receitaExportacao > 0
+      ? partilha.irpj + partilha.csll + partilha.cofins + partilha.pis + partilha.cpp + partilha.iss
+      : dasSemRetencaoIss - receitaIssRetido * percentualIss;
 
   return {
     anexo,
@@ -104,15 +126,9 @@ export function calcularSimplesNacional(params: {
     aliquotaEfetiva,
     receitaMes,
     receitaIssRetido,
+    receitaExportacao,
     dasTotal,
-    partilha: {
-      irpj: dasSemRetencaoIss * faixaInfo.partilha.irpj,
-      csll: dasSemRetencaoIss * faixaInfo.partilha.csll,
-      cofins: dasSemRetencaoIss * faixaInfo.partilha.cofins,
-      pis: dasSemRetencaoIss * faixaInfo.partilha.pis,
-      cpp: dasSemRetencaoIss * faixaInfo.partilha.cpp,
-      iss: (receitaMes - receitaIssRetido) * percentualIss,
-    },
+    partilha,
   };
 }
 

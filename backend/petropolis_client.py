@@ -139,6 +139,33 @@ def _competencia_do_vencimento(vencimento: str) -> tuple[int, int] | None:
     return ano_vencimento - 1, 12
 
 
+
+def _periodo_sem_movimento(tree, texto: str) -> bool:
+    """
+    Mês sem nenhuma nota: o site não mostra o quadro-resumo (nenhuma linha
+    TRIB.M/ISENTO/...). Antes isso virava "o layout da tela pode ter mudado"
+    e a Central do Simples mostrava erro em empresa sem faturamento (relato
+    do time, 17/11/2026). Só conta como "sem movimento" se a página é a tela
+    logada (sem campo de senha = não caiu no login) e não há rótulo de
+    tributação nenhum; se houver rótulo e não deu para ler, aí sim é layout.
+    """
+    if tree.xpath("//input[@type='password']"):
+        return False
+    return re.search(r"TRIB.M|TRIB.F|ISENTO|IMUNE|SUSP.[JA]", texto) is None
+
+
+def _resumo_zerado() -> dict[str, float]:
+    return {
+        "valor_servicos": 0.0,
+        "valor_iss": 0.0,
+        "servicos_normais": 0.0,
+        "servicos_retidos": 0.0,
+        "iss_retido": 0.0,
+        "normal": 0.0,
+        "retida": 0.0,
+        "cancelada": 0.0,
+    }
+
 class ClientePetropolis:
     """
     Sessão autenticada no ISS de Petrópolis. Por padrão usa o login único
@@ -364,6 +391,8 @@ class ClientePetropolis:
             iss_retido += ir
             linhas_resumo += 1
         if linhas_resumo == 0:
+            if _periodo_sem_movimento(tree, resp.text):
+                return _resumo_zerado()
             raise ErroPetropolis(
                 "Não consegui ler o quadro-resumo do período no ISS de Petrópolis "
                 "(o layout da tela pode ter mudado)."
@@ -435,6 +464,8 @@ class ClientePetropolis:
                 continue
             linhas_resumo += 1
         if linhas_resumo == 0:
+            if _periodo_sem_movimento(tree, resp.text):
+                return _resumo_zerado()
             raise ErroPetropolis(
                 "Não consegui ler o quadro-resumo do período no ISS de Petrópolis "
                 "(o layout da tela pode ter mudado)."

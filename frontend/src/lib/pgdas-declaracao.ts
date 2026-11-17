@@ -10,19 +10,23 @@ import { competenciasRbt12, type NotaPorAtividade } from "@/lib/faturamento";
 //
 // Cobre só o caso de 100% dos clientes atuais (clínicas — serviço
 // prestado no mercado interno, no próprio município do estabelecimento).
-// NÃO cobre: mercado externo, ISS devido a outro município, construção
+// Exportação de serviço (nota com tribISSQN 3) vai como "Prestação de
+// serviços para o exterior" (ids 29/30/31) e receita no mercado externo —
+// incluído em 17/11/2026 (MC GLOBAL, KWC SPORTS).
+// NÃO cobre: ISS devido a outro município, construção
 // civil (subitens 7.02/7.05), transporte/comunicação — se um cliente
 // futuro cair nesses casos, esse mapeamento precisa crescer antes de
 // declarar pra ele.
-const ID_ATIVIDADE_POR_TRATAMENTO_E_RETENCAO: Record<TratamentoAtividade, { semRetencao: number; comRetencao: number }> = {
-  FATOR_R: { semRetencao: 11, comRetencao: 12 },
-  ANEXO_III_FIXO: { semRetencao: 14, comRetencao: 15 },
-  ANEXO_IV_FIXO: { semRetencao: 17, comRetencao: 18 },
+const ID_ATIVIDADE_POR_TRATAMENTO_E_RETENCAO: Record<TratamentoAtividade, { semRetencao: number; comRetencao: number; exterior: number }> = {
+  FATOR_R: { semRetencao: 11, comRetencao: 12, exterior: 29 },
+  ANEXO_III_FIXO: { semRetencao: 14, comRetencao: 15, exterior: 30 },
+  ANEXO_IV_FIXO: { semRetencao: 17, comRetencao: 18, exterior: 31 },
 };
 
-function resolverIdAtividade(tratamento: TratamentoAtividade, tipoRetencaoIssqn: number): number {
-  const retido = tipoRetencaoIssqn !== 1;
+function resolverIdAtividade(tratamento: TratamentoAtividade, tipoRetencaoIssqn: number, exportacao = false): number {
   const par = ID_ATIVIDADE_POR_TRATAMENTO_E_RETENCAO[tratamento];
+  if (exportacao) return par.exterior;
+  const retido = tipoRetencaoIssqn !== 1;
   return retido ? par.comRetencao : par.semRetencao;
 }
 
@@ -122,18 +126,23 @@ export function montarDeclaracaoPgdasD(params: {
     const atividade = buscarAtividade(nota.atividadeId!);
     if (!atividade) continue; // já filtrado acima, guarda de tipo
     if (atividade.tratamento === "FATOR_R" && nota.valor > 0) temAtividadeFatorR = true;
-    const idAtividade = resolverIdAtividade(atividade.tratamento, nota.tipoRetencaoIssqn);
+    const idAtividade = resolverIdAtividade(atividade.tratamento, nota.tipoRetencaoIssqn, nota.exportacao);
     valorPorIdAtividade.set(idAtividade, (valorPorIdAtividade.get(idAtividade) ?? 0) + nota.valor);
   }
 
   const receitaTotal = notasDoMes.reduce((acc, n) => acc + n.valor, 0);
+  // Mercado externo = notas de exportação de serviço (tribISSQN 3).
+  const receitaExterna = (m: string) =>
+    notas.filter((n) => !n.cancelada && n.exportacao && n.competencia === m).reduce((acc, n) => acc + n.valor, 0);
+  const receitaExternaMes = receitaExterna(competencia);
 
   // mais recente primeiro, sem incluir o mês atual; só meses desde a abertura
   // da empresa (quando ela tem menos de 12 meses).
   const meses12 = competenciasRbt12(competencia).filter((m) => !inicioAtividade || m >= inicioAtividade);
   const receitasBrutasAnteriores = meses12.map((m) => {
     const [a, mm] = m.split("-").map(Number);
-    return { pa: a * 100 + mm, valorInterno: receitaPorMes(m), valorExterno: 0 };
+    const externo = Math.min(receitaExterna(m), receitaPorMes(m));
+    return { pa: a * 100 + mm, valorInterno: receitaPorMes(m) - externo, valorExterno: externo };
   });
 
   // Folha só vai quando o mês tem receita de atividade sujeita ao Fator R.
@@ -193,8 +202,8 @@ export function montarDeclaracaoPgdasD(params: {
       indicadorComparacao: false,
       declaracao: {
         tipoDeclaracao,
-        receitaPaCompetenciaInterno: receitaTotal,
-        receitaPaCompetenciaExterno: 0,
+        receitaPaCompetenciaInterno: receitaTotal - receitaExternaMes,
+        receitaPaCompetenciaExterno: receitaExternaMes,
         receitasBrutasAnteriores,
         ...(folhasSalario.length > 0 ? { folhasSalario } : {}),
         estabelecimentos: [

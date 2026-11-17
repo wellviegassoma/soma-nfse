@@ -65,6 +65,8 @@ export type EntradaConferencia = {
   bloqueiosDeclaracao: string[];
   municipioIbge: string | null;
   prefeitura: { valor: number | null; erro: string | null } | null;
+  // Exportação de serviço não aparece no quadro da Prefeitura — sai da comparação.
+  receitaExportacao?: number;
   dasBruto: number;
   dasLiquido: number;
 };
@@ -171,10 +173,10 @@ export function conferirSimples(e: EntradaConferencia): ResultadoConferencia {
         "PREFEITURA_SEM_ACESSO",
         `Não foi possível consultar a Prefeitura${e.prefeitura.erro ? `: ${e.prefeitura.erro}` : ""}.`,
       );
-    } else if (Math.abs(e.prefeitura.valor - e.receitaMes) >= 0.01) {
+    } else if (Math.abs(e.prefeitura.valor - (e.receitaMes - (e.receitaExportacao ?? 0))) >= 0.01) {
       revisar(
         "PREFEITURA_DIVERGENTE",
-        `Prefeitura mostra ${moeda(e.prefeitura.valor)} e o sistema tem ${moeda(e.receitaMes)} (diferença de ${moeda(e.prefeitura.valor - e.receitaMes)}).`,
+        `Prefeitura mostra ${moeda(e.prefeitura.valor)} e o sistema tem ${moeda(e.receitaMes - (e.receitaExportacao ?? 0))}${e.receitaExportacao ? " no mercado interno" : ""} (diferença de ${moeda(e.prefeitura.valor - (e.receitaMes - (e.receitaExportacao ?? 0)))}).`,
       );
     }
   }

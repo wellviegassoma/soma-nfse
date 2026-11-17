@@ -116,16 +116,30 @@ export default async function CentralSituacaoFiscalPage() {
                       <span className="text-foreground/40">nunca consultada</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    {linha.fetchedAt && (
+                  <td className="whitespace-nowrap px-3 py-2 text-right">
+                    <div className="flex items-center justify-end gap-3">
+                      {linha.fetchedAt && (
+                        <a
+                          href={`/admin/empresas/${linha.id}/integra-contador/situacao-fiscal/historico`}
+                          target="_blank"
+                          className="font-medium text-brand hover:underline"
+                        >
+                          Ver PDF
+                        </a>
+                      )}
+                      {/* Consulta individual (sem rodar o lote): mesma rota do lote, uma
+                          empresa só; abre o PDF numa aba nova. Com cache de hoje não gera
+                          chamada paga ao Integra Contador. */}
                       <a
-                        href={`/admin/empresas/${linha.id}/integra-contador/situacao-fiscal/historico`}
+                        href={`/admin/empresas/${linha.id}/integra-contador/situacao-fiscal`}
                         target="_blank"
-                        className="font-medium text-brand hover:underline"
+                        rel="noreferrer"
+                        title={linha.cacheFresco ? "Já consultada hoje: abre o relatório do cache, sem custo" : "Consulta a Receita agora (chamada paga) e abre o PDF"}
+                        className="rounded-md border border-border px-2 py-0.5 text-xs font-medium text-foreground/80 hover:bg-surface-muted"
                       >
-                        Ver PDF
+                        {linha.cacheFresco ? "Baixar de novo" : "Consultar só esta"}
                       </a>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))}

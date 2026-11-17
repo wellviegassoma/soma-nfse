@@ -13,6 +13,9 @@ export type NotaFaturamento = {
   // ISS retido pelo tomador/intermediário (tpRetISSQN 2 ou 3) — essa
   // receita não entra no ISS que a própria empresa recolhe.
   issRetido: boolean;
+  // Exportação de serviço (tribISSQN 3): no Simples é mercado externo —
+  // só IRPJ, CSLL e CPP; e a Prefeitura não lança no quadro de tributação.
+  exportacao: boolean;
 };
 
 type DpsRow = {
@@ -30,6 +33,7 @@ type NotaDistribuidaRow = {
   direcao: string;
   equiparacao_hospitalar: boolean;
   tipo_retencao_issqn: number | null;
+  exportacao?: boolean | null;
 };
 
 type ServicoRetencao = { tipo_retencao_issqn: number | null };
@@ -68,7 +72,7 @@ export async function buscarFaturamentoMensal(
     paginado((from, to) =>
       supabase
         .from("notas_distribuidas")
-        .select("chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar, tipo_retencao_issqn")
+        .select("chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar, tipo_retencao_issqn, exportacao")
         .eq("company_id", companyId)
         .eq("direcao", "saida")
         .order("id")
@@ -84,10 +88,12 @@ export async function buscarFaturamentoMensal(
   // Retenção: o XML distribuído é a fonte mais confiável; nota emitida por
   // aqui ainda não espelhada usa o cadastro do serviço.
   const retencaoPorChave = new Map<string, number | null>();
+  const exportacaoPorChave = new Map<string, boolean>();
   for (const d of (distribuidas ?? []) as NotaDistribuidaRow[]) {
     if (d.chave_acesso) {
       equiparacaoPorChave.set(d.chave_acesso, d.equiparacao_hospitalar);
       retencaoPorChave.set(d.chave_acesso, d.tipo_retencao_issqn);
+      exportacaoPorChave.set(d.chave_acesso, d.exportacao === true);
     }
   }
 
@@ -120,6 +126,7 @@ export async function buscarFaturamentoMensal(
       issRetido: retido(
         (chaveAcesso ? retencaoPorChave.get(chaveAcesso) : null) ?? servico?.tipo_retencao_issqn,
       ),
+      exportacao: chaveAcesso ? (exportacaoPorChave.get(chaveAcesso) ?? false) : false,
     });
   }
 
@@ -132,6 +139,7 @@ export async function buscarFaturamentoMensal(
       cancelada: nota.cancelada,
       equiparacaoHospitalar: nota.equiparacao_hospitalar,
       issRetido: retido(nota.tipo_retencao_issqn),
+      exportacao: nota.exportacao === true,
     });
   }
 
@@ -183,6 +191,9 @@ export type NotaPorAtividade = {
   // com e sem retenção de ISS. Notas distribuídas sem serviço cadastrado
   // aqui não têm como saber isso — default 1 (não retido).
   tipoRetencaoIssqn: number;
+  // Exportação de serviço (tribISSQN 3) — PGDAS-D: atividade "para o
+  // exterior" e receita no mercado externo.
+  exportacao: boolean;
 };
 
 // Resolve a atividade do Simples Nacional de uma nota que não está
@@ -245,7 +256,7 @@ export async function buscarFaturamentoPorAtividade(
       supabase
         .from("notas_distribuidas")
         .select(
-          "chave_acesso, valor_servico, competencia, cancelada, direcao, codigo_trib_nacional, descricao_servico, tipo_retencao_issqn",
+          "chave_acesso, valor_servico, competencia, cancelada, direcao, codigo_trib_nacional, descricao_servico, tipo_retencao_issqn, exportacao",
         )
         .eq("company_id", companyId)
         .eq("direcao", "saida")
@@ -272,8 +283,10 @@ export async function buscarFaturamentoPorAtividade(
   }
 
   const canceladaPorChave = new Map<string, boolean>();
-  for (const d of (distribuidas ?? []) as { chave_acesso: string | null; cancelada: boolean }[]) {
+  const exportacaoPorChave = new Map<string, boolean>();
+  for (const d of (distribuidas ?? []) as { chave_acesso: string | null; cancelada: boolean; exportacao?: boolean | null }[]) {
     if (d.chave_acesso) canceladaPorChave.set(d.chave_acesso, d.cancelada);
+    if (d.chave_acesso) exportacaoPorChave.set(d.chave_acesso, d.exportacao === true);
   }
 
   const vistos = new Set<string>();
@@ -304,6 +317,7 @@ export async function buscarFaturamentoPorAtividade(
       atividadeId: atividadeDoServico,
       viaSugestao: false,
       tipoRetencaoIssqn: servico?.tipo_retencao_issqn ?? 1,
+      exportacao: chaveAcesso ? (exportacaoPorChave.get(chaveAcesso) ?? false) : false,
     });
   }
 
@@ -326,6 +340,7 @@ export async function buscarFaturamentoPorAtividade(
       // tpRetISSQN lido do XML na sincronização (1 = não retido, 2/3 =
       // retido). Nota antiga sem o dado cai em "não retido".
       tipoRetencaoIssqn: nota.tipo_retencao_issqn ?? 1,
+      exportacao: nota.exportacao === true,
     });
   }
 
@@ -337,6 +352,14 @@ export async function buscarFaturamentoPorAtividade(
 export function somarReceitaIssRetido(notas: NotaPorAtividade[], competencia: string): number {
   return notas
     .filter((n) => !n.cancelada && n.competencia === competencia && n.tipoRetencaoIssqn !== 1)
+    .reduce((acc, n) => acc + n.valor, 0);
+}
+
+// Receita de exportação de serviço do mês (mercado externo no Simples).
+export function somarReceitaExportacao(notas: { cancelada: boolean; competencia: string; valor: number; exportacao: boolean }[], competencias: string[]): number {
+  const alvo = new Set(competencias);
+  return notas
+    .filter((n) => !n.cancelada && n.exportacao && alvo.has(n.competencia))
     .reduce((acc, n) => acc + n.valor, 0);
 }
 

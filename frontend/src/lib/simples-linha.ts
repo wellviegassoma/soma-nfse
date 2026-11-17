@@ -9,7 +9,7 @@ import {
   receitaComManual,
   resolverRbt12,
   somarFaturamento,
-  somarReceitaIssRetido,
+  somarReceitaIssRetido, somarReceitaExportacao,
   somarRetencoes,
 } from "@/lib/faturamento";
 import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
@@ -50,6 +50,8 @@ export type AprovacaoConferencia = {
 
 export type CalculoSimples = {
   receitaMes: number;
+  // Parte de receitaMes que é exportação de serviço (mercado externo).
+  receitaExportacao: number;
   rbt12: number;
   rbt12Estimado: boolean;
   anexo: string;
@@ -113,6 +115,7 @@ export async function calcularSimplesEmpresa(
     sujeitoFatorR: company.sujeito_fator_r,
     fatorRPercentual,
     receitaIssRetido: somarReceitaIssRetido(notasPorAtividade, competencia),
+    receitaExportacao: somarReceitaExportacao(notasPorAtividade, [competencia]),
   });
 
   const retencaoMes = somarRetencoes(retencoes, [competencia]);
@@ -150,6 +153,7 @@ export async function calcularSimplesEmpresa(
     bloqueiosDeclaracao: declaracao.bloqueios,
     municipioIbge: company.municipality_ibge_code,
     prefeitura: extras.prefeitura ? { valor: extras.prefeitura.valor, erro: extras.prefeitura.erro } : null,
+    receitaExportacao: resultado.receitaExportacao,
     dasBruto: resultado.dasTotal,
     dasLiquido: liquido.dasTotal,
   };
@@ -158,6 +162,7 @@ export async function calcularSimplesEmpresa(
 
   return {
     receitaMes,
+    receitaExportacao: resultado.receitaExportacao,
     rbt12,
     rbt12Estimado,
     anexo: resultado.anexo,

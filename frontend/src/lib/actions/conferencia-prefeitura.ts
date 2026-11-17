@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSomaStaff, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { buscarFaturamentoMensal, somarFaturamento } from "@/lib/faturamento";
+import { buscarFaturamentoMensal, somarFaturamento, somarReceitaExportacao } from "@/lib/faturamento";
 import { consultarFaturamentoPetropolis } from "@/lib/iss-petropolis";
 
 export type ResultadoConferenciaPrefeitura = {
@@ -29,7 +29,10 @@ export async function conferirPrefeituraPetropolis(
     consultarFaturamentoPetropolis(supabase, companyId, competencia),
     buscarFaturamentoMensal(supabase, companyId),
   ]);
-  const valorNotas = somarFaturamento(notas, [competencia]);
+  // Nota de exportação (tribISSQN 3) não entra no quadro de tributação da
+  // Prefeitura (fica como lançamento sem vínculo com município) — compara só
+  // o mercado interno, senão toda empresa exportadora aparece divergente.
+  const valorNotas = somarFaturamento(notas, [competencia]) - somarReceitaExportacao(notas, [competencia]);
 
   await supabase.from("conferencia_prefeitura").upsert(
     {

@@ -80,6 +80,7 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
         municipioIbge: company.municipality_ibge_code,
         prefeitura,
         receitaMes: calculo.receitaMes,
+        receitaExportacao: calculo.receitaExportacao,
         rbt12: calculo.rbt12,
         rbt12Estimado: calculo.rbt12Estimado,
         anexo: calculo.anexo,
