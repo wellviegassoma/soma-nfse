@@ -404,3 +404,20 @@ edição". A diferença em reais é pequena; o que pesa é o erro.
 
 Cerca de 2,5 semanas de desenvolvimento até o piloto e cerca de 4–5 semanas até estar em toda a
 carteira.
+
+## Ajustes depois do uso real (17/11/2026)
+
+- **Tomador novo no painel:** nome + CPF/CNPJ da mensagem vêm editáveis e o tomador é cadastrado ao
+  aprovar (`tomador-novo.ts`, dígitos validados; CNPJ completa pela Receita).
+- **Mensagem ao cliente:** só o PDF, com o conteúdo do DANFSe no texto (`resumo-nota.ts`); XML só com
+  `DIGISAC_ENVIAR_XML_CLIENTE=1`.
+- **Consulta de notas emitidas** (`/admin/pedidos-nota/notas/[companyId]`, abre em outra aba): notas do
+  SOMA Gestão + `notas_distribuidas` (outros emissores), busca, copiar descrição, abrir PDF.
+- **IA usa as notas de outros emissores** como histórico (tomador e descrição habituais, alertas).
+- **Serviço escolhido traz a descrição padrão**, com "voltar" e "juntar" com a anterior.
+- **Empresa citada na conversa:** a IA devolve `empresa_citada` ("Empresa Rcbastos" num contato
+  vinculado à Techbone); bate com uma só empresa (`empresasPorTrecho`) → troca e lê de novo com aviso
+  `EMPRESA_CITADA`. Todo pedido aberto tem "Trocar a empresa deste pedido". Validado com o caso real.
+- **Inscrição municipal (fora do fluxo, mas achado nele):** E0116 com IM errada. O CNC pode ter outra
+  IM (RRAD: o CNPJ). A IM de 43 empresas foi preenchida pelas notas aceitas, e `issueNfse` passou a
+  corrigir a IM pelas notas aceitas e reenviar uma vez.
