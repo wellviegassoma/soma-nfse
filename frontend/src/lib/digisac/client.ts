@@ -34,6 +34,8 @@ export type DigisacMensagem = {
   serviceId: string | null;
   userId: string | null;
   file?: DigisacArquivo | null;
+  /** softRevoked: o cliente apagou a mensagem no WhatsApp. */
+  data?: { softRevoked?: boolean } | null;
 };
 
 export type DigisacContato = {
@@ -98,6 +100,29 @@ export async function listarMensagensDoChamado(ticketId: string, limite = 300): 
     .filter((m) => m.ticketId === ticketId)
     .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
     .slice(0, limite);
+}
+
+/**
+ * Mensagens do contato (todos os chamados) a partir de `desde`, em ordem
+ * cronológica. Usado quando o cliente escreveu num chamado que foi
+ * encerrado e o "#nota" caiu no chamado seguinte.
+ */
+export async function listarMensagensDoContato(contactId: string, desde: number, limite = 300): Promise<DigisacMensagem[]> {
+  const todas: DigisacMensagem[] = [];
+  for (let pagina = 1; pagina <= 10 && todas.length < limite; pagina++) {
+    const r = await chamar<Pagina<DigisacMensagem>>(
+      "GET",
+      `/messages?where[contactId]=${encodeURIComponent(contactId)}&order[0][0]=timestamp&order[0][1]=DESC&perPage=100&page=${pagina}`,
+    );
+    const lote = r.data ?? [];
+    todas.push(...lote);
+    if (!lote.length || pagina >= (r.lastPage ?? 1)) break;
+    if (lote.every((m) => Date.parse(m.timestamp) < desde)) break;
+  }
+  return todas
+    .filter((m) => m.contactId === contactId && Date.parse(m.timestamp) >= desde)
+    .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
+    .slice(-limite);
 }
 
 export async function buscarContato(id: string): Promise<DigisacContato> {

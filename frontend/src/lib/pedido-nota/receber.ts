@@ -7,6 +7,7 @@ import {
   buscarMensagem,
   enviarComentario,
   listarMensagensDoChamado,
+  listarMensagensDoContato,
   type DigisacMensagem,
 } from "@/lib/digisac/client";
 import { resolverEmpresa } from "@/lib/pedido-nota/empresa";
@@ -110,23 +111,21 @@ export async function receberComandoNota(messageId: string): Promise<{ pedidoId:
     ]);
 
     const limiteTempo = Date.parse(comando.timestamp);
-    // Um chamado pode ter vários pedidos: mensagens antes do "#nota" anterior
-    // já foram atendidas por ele (visto no teste real — o 3º #nota do mesmo
-    // chamado gerou rascunhos repetidos dos pedidos anteriores).
-    const anterior = mensagensChamado
-      .filter((m) => m.id !== comando.id && m.isComment && lerComando(m.text).ehComando && Date.parse(m.timestamp) < limiteTempo)
-      .at(-1);
-    const inicio = Math.max(limiteTempo - JANELA_MS, anterior ? Date.parse(anterior.timestamp) : -Infinity);
-    const doCliente = mensagensChamado
-      .filter(
-        (m) =>
-          !m.isFromMe &&
-          !m.isComment &&
-          TIPOS_CLIENTE.has(m.type) &&
-          Date.parse(m.timestamp) <= limiteTempo &&
-          Date.parse(m.timestamp) > inicio,
-      )
-      .slice(-MAX_MENSAGENS);
+    // "#nota" anterior que não capturou nenhuma mensagem (ex.: mandado no
+    // chamado errado) não marca o início — senão um #nota repetido também
+    // não acharia nada.
+    const vazios = await comandosSemMensagem(admin, comando.contactId, comando.id);
+    let doCliente = mensagensDoCliente(mensagensChamado, comando.id, limiteTempo, vazios);
+    if (!doCliente.length) {
+      // O cliente escreveu num chamado que já foi encerrado e o "#nota" caiu
+      // no chamado seguinte (visto em 17/11 — TecRadio: pedido às 12:37,
+      // chamado encerrado às 13:55, #nota às 15:00 num chamado novo). Pega o
+      // chamado anterior mais recente do contato que tenha mensagem dele.
+      const doContato = await listarMensagensDoContato(comando.contactId, limiteTempo - JANELA_MS);
+      const candidatas = mensagensDoCliente(doContato, comando.id, limiteTempo, vazios);
+      const ticketAnterior = candidatas.at(-1)?.ticketId ?? null;
+      doCliente = ticketAnterior ? candidatas.filter((m) => m.ticketId === ticketAnterior) : [];
+    }
 
     const mensagens: MensagemGravada[] = [];
     const anexos: AnexoGravado[] = [];
@@ -197,7 +196,7 @@ export async function receberComandoNota(messageId: string): Promise<{ pedidoId:
         anexos,
         status: semMensagem ? "ERRO" : "RECEBIDO",
         erro: semMensagem
-          ? "Nenhuma mensagem nova do cliente neste chamado (desde o #nota anterior, no máximo 72h)."
+          ? "Nenhuma mensagem nova do cliente neste chamado nem no anterior (desde o #nota anterior, no máximo 72h)."
           : avisos.join(" ") || null,
       })
       .eq("id", pedidoId);
@@ -235,6 +234,55 @@ export async function receberComandoNota(messageId: string): Promise<{ pedidoId:
     );
     throw e;
   }
+}
+
+/**
+ * Mensagens do cliente antes do "#nota", depois do "#nota" anterior (um
+ * chamado pode ter vários pedidos — visto no teste real: o 3º #nota do mesmo
+ * chamado gerou rascunhos repetidos dos anteriores) e no máximo 72h.
+ * Mensagem que o cliente apagou no WhatsApp não conta.
+ */
+function mensagensDoCliente(
+  mensagens: DigisacMensagem[],
+  comandoId: string,
+  limiteTempo: number,
+  ignorar: Set<string>,
+): DigisacMensagem[] {
+  const anterior = mensagens
+    .filter((m) => m.id !== comandoId && !ignorar.has(m.id) && m.isComment && lerComando(m.text).ehComando && Date.parse(m.timestamp) < limiteTempo)
+    .at(-1);
+  const inicio = Math.max(limiteTempo - JANELA_MS, anterior ? Date.parse(anterior.timestamp) : -Infinity);
+  return mensagens
+    .filter(
+      (m) =>
+        !m.isFromMe &&
+        !m.isComment &&
+        !m.data?.softRevoked &&
+        TIPOS_CLIENTE.has(m.type) &&
+        Date.parse(m.timestamp) <= limiteTempo &&
+        Date.parse(m.timestamp) > inicio,
+    )
+    .slice(-MAX_MENSAGENS);
+}
+
+/** Ids dos "#nota" deste contato (últimos 3 dias) cujo pedido saiu sem mensagem. */
+async function comandosSemMensagem(
+  admin: ReturnType<typeof createAdminClient>,
+  contactId: string,
+  comandoId: string,
+): Promise<Set<string>> {
+  const { data } = await admin
+    .from("pedidos_nota")
+    .select("origem_comando_message_id, mensagens")
+    .eq("origem", "DIGISAC")
+    .eq("origem_contact_id", contactId)
+    .neq("origem_comando_message_id", comandoId)
+    .gte("created_at", new Date(Date.now() - JANELA_MS - 3_600_000).toISOString());
+  return new Set(
+    (data ?? [])
+      .filter((p) => !Array.isArray(p.mensagens) || p.mensagens.length === 0)
+      .map((p) => p.origem_comando_message_id as string),
+  );
 }
 
 async function copiarAnexo(pedidoId: string, m: DigisacMensagem): Promise<AnexoGravado> {

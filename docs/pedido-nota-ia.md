@@ -421,3 +421,7 @@ carteira.
 - **Inscrição municipal (fora do fluxo, mas achado nele):** E0116 com IM errada. O CNC pode ter outra
   IM (RRAD: o CNPJ). A IM de 43 empresas foi preenchida pelas notas aceitas, e `issueNfse` passou a
   corrigir a IM pelas notas aceitas e reenviar uma vez.
+
+### Pedido em chamado anterior (17/11/2026, TecRadio)
+
+O cliente pediu num chamado que foi encerrado e o `#nota` caiu no chamado seguinte, sem mensagem do cliente. Agora, se o chamado do `#nota` não tem mensagem nova, o sistema lê o chamado anterior mais recente do contato (ainda dentro de 72h e depois do `#nota` anterior). Um `#nota` que não capturou nada não conta como marco, então repetir o `#nota` funciona. Mensagem apagada pelo cliente (`data.softRevoked`) é ignorada.
