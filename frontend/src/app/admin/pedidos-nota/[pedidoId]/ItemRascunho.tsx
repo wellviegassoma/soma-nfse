@@ -54,6 +54,7 @@ export function ItemRascunho({
   // Sem descrição da IA, já vem a descrição padrão do serviço (igual à tela
   // Emitir Nota); trocar o serviço troca a descrição se ela ainda era a padrão.
   const [descricao, setDescricao] = useState(item.descricao || descricaoDoServico(item.service_id ?? ""));
+  const [descricaoAnterior, setDescricaoAnterior] = useState<string | null>(null);
   const [competencia, setCompetencia] = useState(item.competencia ?? hoje);
   const editavel = ["RASCUNHO", "ERRO"].includes(item.status);
   const estado = sEmitir ?? sSalvar ?? sDesc;
@@ -147,7 +148,13 @@ export function ItemRascunho({
             value={servicoId}
             onChange={(e) => {
               const novo = e.target.value;
-              if (!descricao.trim() || descricao === descricaoDoServico(servicoId)) setDescricao(descricaoDoServico(novo));
+              // Escolher o serviço traz a descrição padrão dele. Se havia outra
+              // descrição (da IA ou digitada), ela fica guardada para "voltar".
+              const padrao = descricaoDoServico(novo);
+              if (padrao && padrao !== descricao) {
+                if (descricao.trim() && descricao !== descricaoDoServico(servicoId)) setDescricaoAnterior(descricao);
+                setDescricao(padrao);
+              }
               setServicoId(novo);
             }}
             disabled={!editavel}
@@ -184,10 +191,34 @@ export function ItemRascunho({
             value={descricao}
             onChange={(e) => setDescricao(e.target.value)}
             disabled={!editavel}
-            rows={2}
+            rows={3}
             className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
           />
         </Field>
+        {descricaoAnterior && editavel ? (
+          <div className="-mt-1 flex flex-wrap gap-3 text-xs">
+            <button
+              type="button"
+              className="text-brand hover:underline"
+              onClick={() => {
+                setDescricao(descricaoAnterior);
+                setDescricaoAnterior(null);
+              }}
+            >
+              ↩ Voltar para a descrição anterior
+            </button>
+            <button
+              type="button"
+              className="text-brand hover:underline"
+              onClick={() => {
+                setDescricao(`${descricao.trim()} ${descricaoAnterior.trim()}`.trim());
+                setDescricaoAnterior(null);
+              }}
+            >
+              + Juntar com a descrição anterior
+            </button>
+          </div>
+        ) : null}
         {companyId && editavel ? (
           <a
             href={`/admin/pedidos-nota/notas/${companyId}${novoNome || item.tomador_nome ? `?q=${encodeURIComponent(novoNome || item.tomador_nome || "")}` : ""}`}
