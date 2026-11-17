@@ -95,7 +95,7 @@ export function lerPagamentos(dados: unknown): PagamentoFederal[] {
       const r = receita(x.receitaPrincipal);
       return {
         numeroDocumento: texto(x.numeroDocumento)!,
-        tipo: texto(tipo.descricaoAbreviada) ?? texto(tipo.descricao) ?? texto(tipo.codigo) ?? "",
+        tipo: abreviarTipo(texto(tipo.descricaoAbreviada) ?? texto(tipo.descricao) ?? texto(tipo.codigo) ?? ""),
         periodoApuracao: normalizarPeriodo(x.periodoApuracao),
         dataArrecadacao: normalizarData(x.dataArrecadacao),
         dataVencimento: normalizarData(x.dataVencimento),
@@ -113,9 +113,20 @@ export function lerPagamentos(dados: unknown): PagamentoFederal[] {
     });
 }
 
-/** DAS do Simples: o tipo do documento diz "DAS" (DAS-MEI também). */
+/**
+ * A Receita devolve o tipo por extenso (visto em 17/11/2026: "DOCUMENTO DE
+ * ARRECADAÇÃO DO SIMPLES NACIONAL", "... DE RECEITAS FEDERAIS") — vira a sigla.
+ */
+export function abreviarTipo(tipo: string): string {
+  if (/SIMPLES NACIONAL/i.test(tipo)) return /MEI/i.test(tipo) ? "DAS-MEI" : "DAS";
+  if (/RECEITAS FEDERAIS/i.test(tipo)) return "DARF";
+  if (/PREVIDENCI/i.test(tipo)) return "GPS";
+  return tipo;
+}
+
+/** DAS do Simples: sigla DAS ou receita 3333 (Simples Nacional). */
 export function ehDas(p: PagamentoFederal): boolean {
-  return /\bDAS\b/i.test(p.tipo) || /simples nacional/i.test(p.receitaDescricao ?? "");
+  return /^DAS\b/i.test(p.tipo) || /simples nacional/i.test(p.tipo) || p.receitaCodigo === "3333";
 }
 
 /** Procura recursivamente o PDF (base64 começando com "JVBER") na resposta. */
