@@ -282,7 +282,7 @@ export async function aprovarEEmitirItem(prev: AcaoState, formData: FormData): P
 
   const { data: servico } = await supabase
     .from("services")
-    .select("description, retencao_irrf_aliquota, retencao_pis_cofins_csll_aliquota")
+    .select("description, retencao_irrf_aliquota, retencao_pis_cofins_csll_aliquota, tipo_retencao_issqn, iss_rate")
     .eq("id", item.service_id)
     .single();
 
@@ -293,18 +293,20 @@ export async function aprovarEEmitirItem(prev: AcaoState, formData: FormData): P
   fd.set("amount", Number(item.valor).toFixed(2));
   fd.set("description", item.descricao || servico?.description || "Prestação de serviços");
   fd.set("competenceDate", item.competencia || hojeBrasilia());
-  // Retenções: sem informação explícita no pedido, deixa issueNfse usar o
-  // padrão do serviço (não manda os campos). Com ISS retido/não retido
-  // explícito, manda o resto com o padrão do serviço.
-  if (item.iss_retido != null) {
-    fd.set("issRetido", item.iss_retido ? "1" : "0");
-    if (item.aliquota_iss != null) fd.set("aliquotaIss", String(item.aliquota_iss));
-    const irrf = item.irrf_pct ?? servico?.retencao_irrf_aliquota;
-    const csrf = item.csrf_pct ?? servico?.retencao_pis_cofins_csll_aliquota;
-    if (irrf != null) fd.set("irrfPct", String(irrf));
-    if (csrf != null) fd.set("csrfPct", String(csrf));
-    if (item.inss_pct != null) fd.set("inssPct", String(item.inss_pct));
-  }
+  // Retenções: o que o pedido disser; o resto, o padrão do serviço — igual
+  // à tela de emissão, que já vem preenchida com ele. Antes, sem ISS
+  // explícito no pedido, a alíquota não ia e serviço "com ISS retido" de
+  // empresa do Simples falhava (TecRadio, 17/11/2026). issueNfse ignora
+  // tudo isso quando o tomador é pessoa física.
+  const issRetido = item.iss_retido ?? (servico?.tipo_retencao_issqn ?? 1) !== 1;
+  fd.set("issRetido", issRetido ? "1" : "0");
+  const aliquotaIss = item.aliquota_iss ?? servico?.iss_rate ?? null;
+  if (aliquotaIss != null) fd.set("aliquotaIss", String(aliquotaIss));
+  const irrf = item.irrf_pct ?? servico?.retencao_irrf_aliquota;
+  const csrf = item.csrf_pct ?? servico?.retencao_pis_cofins_csll_aliquota;
+  if (irrf != null) fd.set("irrfPct", String(irrf));
+  if (csrf != null) fd.set("csrfPct", String(csrf));
+  if (item.inss_pct != null) fd.set("inssPct", String(item.inss_pct));
 
   const r = await issueNfse(undefined, fd);
   if (!r?.success || !r.dpsId) {
