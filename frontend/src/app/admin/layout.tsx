@@ -51,18 +51,8 @@ export default async function AdminLayout({
             >
               Extratos
             </Link>
-            <Link
-              href="/financeiro"
-              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
-            >
-              Financeiro
-            </Link>
-            <Link
-              href="/atendimento"
-              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
-            >
-              Atendimento
-            </Link>
+            {/* Financeiro e Atendimento saíram da barra (17/11/2026, sem uso por
+                enquanto) — as páginas /financeiro e /atendimento continuam. */}
             <div className="hidden h-8 w-px bg-border sm:block" />
             <Link
               href="/"
