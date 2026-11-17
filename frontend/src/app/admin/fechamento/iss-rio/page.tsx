@@ -10,6 +10,7 @@ import { resolverIssMensal } from "@/lib/calculo-impostos";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import { temPermissao } from "@/lib/auth";
 import { buscarFechamentosIss } from "@/lib/iss-fechamentos";
+import { buscarPagamentosIss } from "@/lib/iss-pagamentos";
 import { assinaturaFaturamentoIss, buscarConferenciasIss } from "@/lib/iss-conferencias";
 import { CentralIssRio, type EmpresaIssRio } from "./CentralIssRio";
 
@@ -88,9 +89,11 @@ export default async function CentralIssRioPage(props: PageProps<"/admin/fechame
     competencia,
     new Map(empresasSemConferencia.map((e) => [e.id, e.assinaturaSoma])),
   );
+  const pagamentos = await buscarPagamentosIss(supabase, "rio", competencia);
   const empresas: EmpresaIssRio[] = empresasSemConferencia.map((e) => ({
     ...e,
     conferenciaSalva: conferencias.get(e.id) ?? null,
+    pagamento: pagamentos.get(e.id) ?? null,
   }));
 
   return (

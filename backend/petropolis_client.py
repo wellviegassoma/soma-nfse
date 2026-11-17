@@ -560,6 +560,76 @@ class ClientePetropolis:
             "tabelas": tabelas[:20],
         }
 
+    def _linhas_debitos(self, st_parcela: str) -> list[dict[str, str]]:
+        """Linhas do Levantamento de Débitos (st_parcela 1 = Aberta,
+        2 = Paga — confirmado ao vivo em 17/11/2026), por nome de coluna:
+        Identif. | Exercício | Dívida | Ref. | Parc. | Notifica | Vencimento |
+        Valor | Correção | Multa | Juros | Total | Pago."""
+        resp = self._sessao.get(
+            f"{BASE_URL}/iss-levantamento_debitos.php",
+            params={"st_divida": "0", "st_parcela": st_parcela},
+            timeout=45,
+        )
+        if "não foram localizados" in resp.text.lower():
+            return []
+        tree = lxml_html.fromstring(resp.text)
+        for tabela in tree.xpath("//table[not(.//table)]"):
+            trs = tabela.xpath(".//tr")
+            if not trs:
+                continue
+            cab = [" ".join(c.text_content().split()) for c in trs[0].xpath("./td|./th")]
+            if "Identif." not in cab or "Vencimento" not in cab:
+                continue
+            linhas = []
+            for tr in trs[1:]:
+                cel = [" ".join(c.text_content().split()) for c in tr.xpath("./td|./th")]
+                if len(cel) < len(cab) - 1:
+                    continue
+                linha = {cab[i]: cel[i] for i in range(min(len(cab), len(cel))) if cab[i]}
+                if linha.get("Identif."):
+                    linhas.append(linha)
+            return linhas
+        return []
+
+    def verificar_pagamento_iss(self, cnpj: str, competencia: str, cmc: str | None = None) -> dict:
+        """SÓ LEITURA: situação da guia de ISS da competência — procura a
+        dívida de ISS (código começando com "I", ex.: "IV." = ISS variável)
+        cujo vencimento corresponde à competência (dia 10 do mês seguinte)
+        nas parcelas pagas e nas em aberto."""
+        ano_mes = _ano_mes_da_competencia(competencia)
+        if not self._login_proprio:
+            if cmc:
+                self._selecionar_empresa_por_cmc(cmc, cnpj)
+            else:
+                self._selecionar_empresa_por_cnpj(cnpj)
+
+        def da_competencia(linhas: list[dict[str, str]]) -> list[dict]:
+            achadas = []
+            for l in linhas:
+                divida = l.get("Dívida", "").upper()
+                if not divida.startswith("I"):
+                    continue
+                if _competencia_do_vencimento(l.get("Vencimento", "")) != ano_mes:
+                    continue
+                total = l.get("Total") or l.get("Valor") or "0"
+                try:
+                    valor = _valor_para_float(total)
+                except ValueError:
+                    valor = None
+                achadas.append({
+                    "identificador": l.get("Identif."),
+                    "divida": l.get("Dívida"),
+                    "vencimento": l.get("Vencimento"),
+                    "valor": valor,
+                    "pago_em": l.get("Pago") or None,
+                })
+            return achadas
+
+        pagas = da_competencia(self._linhas_debitos("2"))
+        abertas = da_competencia(self._linhas_debitos("1"))
+        status = "paga" if pagas and not abertas else "parcial" if pagas else "aberta" if abertas else "sem_guia"
+        return {"status": status, "pagas": pagas, "abertas": abertas}
+
     def buscar_guia_iss(
         self, cnpj: str, competencia: str | None = None, cmc: str | None = None
     ) -> tuple[bytes, dict[str, float]]:

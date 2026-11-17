@@ -10,6 +10,7 @@ import { buscarFaturamentoMensal, somarFaturamento, somarFaturamentoIssRetido } 
 import { resolverIssMensal } from "@/lib/calculo-impostos";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import { buscarFechamentosIss } from "@/lib/iss-fechamentos";
+import { buscarPagamentosIss } from "@/lib/iss-pagamentos";
 import { assinaturaFaturamentoIss, buscarConferenciasIss } from "@/lib/iss-conferencias";
 import { IBGE_PETROPOLIS } from "@/lib/iss-petropolis";
 import { CentralIssPetropolis, type EmpresaIssPetropolis } from "./CentralIssPetropolis";
@@ -84,9 +85,11 @@ export default async function CentralIssPetropolisPage(props: PageProps<"/admin/
     competencia,
     new Map(empresasSemConferencia.map((e) => [e.id, e.assinaturaSoma])),
   );
+  const pagamentos = await buscarPagamentosIss(supabase, "petropolis", competencia);
   const empresas: EmpresaIssPetropolis[] = empresasSemConferencia.map((e) => ({
     ...e,
     conferenciaSalva: conferencias.get(e.id) ?? null,
+    pagamento: pagamentos.get(e.id) ?? null,
   }));
 
   return (

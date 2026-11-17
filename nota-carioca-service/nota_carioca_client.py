@@ -515,6 +515,64 @@ class ClienteNotaCarioca:
 
         return {"linhas": linhas, "pendentes_anteriores": pendentes_anteriores}
 
+    def verificar_pagamento(self, competencia: str, filial: bool | None = None) -> dict:
+        """SÓ LEITURA (Central ISS Rio): a guia da competência foi paga?
+        Lê a grade de guias em "Pendentes" (padrão) e em "Quitadas" (radio
+        #ctl00_cphCabMenu_rbQuitadas, AutoPostBack — confirmado ao vivo em
+        17/11/2026: colunas Competência | Quitação | Validade | Valor Total |
+        Origem Débito | Nº do Documento). Nunca emite."""
+        ano, mes = (int(p) for p in competencia.split("-"))
+        html = self._abrir_grade_guias(ano, filial)
+        if "relogin" in self._page.url.lower():
+            raise ErroNotaCarioca(
+                "O certificado entra no Nota Carioca como tomador (pessoa física), "
+                "sem acesso às guias da empresa — cadastre o e-CNPJ."
+            )
+
+        def da_competencia(html_grade: str, quitadas: bool) -> list[dict]:
+            achadas = []
+            for tr in lxml_html.fromstring(html_grade).xpath(_XPATH_LINHAS_GUIAS):
+                cel = [c.text_content().strip() for c in tr.xpath("./td")]
+                if len(cel) < 6:
+                    continue
+                partes = [p.strip().upper() for p in cel[0].split("/")]
+                if len(partes) != 2 or partes[0] not in _MESES or f"{partes[1]}-{_MESES[partes[0]]:02d}" != competencia:
+                    continue
+                item = {
+                    "valor": _para_decimal_ou_none(cel[3]),
+                    "valor_texto": cel[3],
+                    "origem": cel[4],
+                    "documento": cel[5],
+                    "validade": cel[2] if cel[2] not in ("", "-") else None,
+                }
+                if quitadas:
+                    item["quitada_em"] = cel[1]
+                else:
+                    item["emitida_em"] = cel[1] if cel[1] not in ("", "-") else None
+                achadas.append(item)
+            return achadas
+
+        abertas = da_competencia(html, quitadas=False)
+        self._page.locator("#ctl00_cphCabMenu_rbQuitadas").click()
+        self._page.wait_for_timeout(1500)
+        self._page.wait_for_load_state("networkidle", timeout=60_000)
+        pagas = da_competencia(self._page.content(), quitadas=True)
+
+        # "A Declarar"/EMITIR GUIA em Pendentes = guia nem emitida ainda.
+        a_emitir = [a for a in abertas if a["documento"].upper() == "EMITIR GUIA"]
+        emitidas_abertas = [a for a in abertas if a not in a_emitir]
+        if pagas and not emitidas_abertas:
+            status = "paga"
+        elif pagas:
+            status = "parcial"
+        elif emitidas_abertas:
+            status = "aberta"
+        elif a_emitir:
+            status = "nao_emitida"
+        else:
+            status = "sem_guia"
+        return {"status": status, "pagas": pagas, "abertas": abertas}
+
     def _listar_notas_da_guia(self) -> list[dict]:
         """Notas emitidas que entram na guia — atrás de SELECIONAR/VISUALIZAR
         NOTAS, 10 por página. Avança na mesma sessão até a página não trazer

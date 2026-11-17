@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FechamentoIssCelula, type FechamentoIssResumo } from "@/components/fechamento/FechamentoIssCelula";
+import { PagamentoIssCelula, VerificarPagamentosLote } from "@/components/fechamento/PagamentoIss";
+import type { PagamentoIss } from "@/lib/iss-pagamentos";
 import { salvarConferenciaIss } from "@/lib/actions/iss-conferencias";
 import type { ConferenciaIssSalva } from "@/lib/iss-conferencias";
 
@@ -24,6 +26,8 @@ export type EmpresaIssPetropolis = {
   // Retrato do faturamento da SOMA agora — vai junto ao salvar a conferência.
   assinaturaSoma: string;
   conferenciaSalva: ConferenciaIssSalva | null;
+  // Última verificação de pagamento da guia (Verificar pagamento).
+  pagamento: PagamentoIss | null;
 };
 
 // valorServicos = Normal + Retido; valorIss = ISS só das Normais (o que vai na guia).
@@ -395,6 +399,11 @@ export function CentralIssPetropolis({
           >
             Conferir pendentes ({pendentes.length})
           </Button>
+          <VerificarPagamentosLote
+            municipio="petropolis"
+            competencia={competencia}
+            empresas={empresas.map((e) => ({ id: e.id, nome: e.nome }))}
+          />
           {podeEmitir && (
             <Button
               type="button"
@@ -448,6 +457,7 @@ export function CentralIssPetropolis({
               <th className="border-b border-border px-3 py-2 text-right">ISS da guia</th>
               <th className="border-b border-border px-3 py-2 text-left">Situação</th>
               <th className="border-b border-border px-3 py-2 text-left">Fechamento</th>
+              <th className="border-b border-border px-3 py-2 text-left">Pagamento</th>
               <th className="border-b border-border px-3 py-2 text-right">Ações</th>
             </tr>
           </thead>
@@ -527,6 +537,15 @@ export function CentralIssPetropolis({
                       competencia={competencia}
                       fechamento={empresa.fechamento}
                       podeMarcar={podeMarcarFechamento}
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <PagamentoIssCelula
+                      key={empresa.pagamento?.verificadoEm ?? "nunca"}
+                      companyId={empresa.id}
+                      municipio="petropolis"
+                      competencia={competencia}
+                      inicial={empresa.pagamento}
                     />
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right">

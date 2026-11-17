@@ -80,6 +80,17 @@ def buscar_guia_iss(req: GuiaIssNotaCariocaRequest):
     return _resposta_guia_pdf(pdf_bytes, valores)
 
 
+@app.post("/pagamento-iss", dependencies=[Depends(exigir_token_interno)])
+def verificar_pagamento_iss(req: ConferenciaIssRequest):
+    """SÓ LEITURA — a guia de ISS da competência foi paga?"""
+    pfx_bytes = base64.b64decode(req.certificado.pfx_base64)
+    try:
+        with ClienteNotaCarioca(pfx_bytes, req.certificado.senha) as cliente:
+            return cliente.verificar_pagamento(req.competencia, req.filial)
+    except ErroNotaCarioca as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 @app.post("/conferencia-iss", dependencies=[Depends(exigir_token_interno)])
 def conferir_iss(req: ConferenciaIssRequest):
     pfx_bytes = base64.b64decode(req.certificado.pfx_base64)

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import JSZip from "jszip";
 import { FechamentoIssCelula, type FechamentoIssResumo } from "@/components/fechamento/FechamentoIssCelula";
+import { PagamentoIssCelula, VerificarPagamentosLote } from "@/components/fechamento/PagamentoIss";
+import type { PagamentoIss } from "@/lib/iss-pagamentos";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +27,8 @@ export type EmpresaIssRio = {
   // Retrato do faturamento da SOMA agora — vai junto ao salvar a conferência.
   assinaturaSoma: string;
   conferenciaSalva: ConferenciaIssSalva | null;
+  // Última verificação de pagamento da guia (Verificar pagamento).
+  pagamento: PagamentoIss | null;
 };
 
 type Status = "ok" | "falta_emitir" | "diferenca" | "sem_movimento" | "sem_guia" | "cadastro" | "erro";
@@ -459,6 +463,11 @@ export function CentralIssRio({
           >
             Conferir pendentes ({pendentes.length})
           </Button>
+          <VerificarPagamentosLote
+            municipio="rio"
+            competencia={competencia}
+            empresas={empresas.map((e) => ({ id: e.id, nome: e.nome }))}
+          />
           <Button
             type="button"
             variant="secondary"
@@ -514,6 +523,7 @@ export function CentralIssRio({
               <th className="border-b border-border px-3 py-2 text-right">Guia</th>
               <th className="border-b border-border px-3 py-2 text-left">Situação</th>
               <th className="border-b border-border px-3 py-2 text-left">Fechamento</th>
+              <th className="border-b border-border px-3 py-2 text-left">Pagamento</th>
               <th className="border-b border-border px-3 py-2 text-right">Ações</th>
             </tr>
           </thead>
@@ -610,6 +620,15 @@ export function CentralIssRio({
                       competencia={competencia}
                       fechamento={empresa.fechamento}
                       podeMarcar={podeMarcarFechamento}
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <PagamentoIssCelula
+                      key={empresa.pagamento?.verificadoEm ?? "nunca"}
+                      companyId={empresa.id}
+                      municipio="rio"
+                      competencia={competencia}
+                      inicial={empresa.pagamento}
                     />
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right">

@@ -314,6 +314,18 @@ def consultar_faturamento_petropolis(req: GuiaIssPetropolisRequest):
     }
 
 
+@app.post("/petropolis/pagamento-iss", dependencies=[Depends(exigir_token_interno)])
+def verificar_pagamento_iss_petropolis(req: GuiaIssPetropolisRequest):
+    """SÓ LEITURA — a guia de ISS da competência foi paga?"""
+    if not req.competencia:
+        raise HTTPException(status_code=422, detail="Informe a competência (AAAA-MM).")
+    try:
+        with ClientePetropolis(req.login, req.senha_md5) as cliente:
+            return cliente.verificar_pagamento_iss(req.cnpj, req.competencia, req.cmc)
+    except ErroPetropolis as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 @app.post("/petropolis/diagnostico", dependencies=[Depends(exigir_token_interno)])
 def diagnosticar_petropolis(req: DiagnosticoPetropolisRequest):
     """SÓ LEITURA — descreve uma página do ISS de Petrópolis (lista fixa,
