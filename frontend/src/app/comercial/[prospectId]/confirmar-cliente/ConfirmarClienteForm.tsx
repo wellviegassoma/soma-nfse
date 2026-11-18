@@ -202,7 +202,7 @@ export function ConfirmarClienteForm({ prospect }: { prospect: Prospect }) {
         <Button type="submit" loading={pending}>
           Confirmar — criar empresa e virar Cliente Ativo
         </Button>
-        <Link href={`/admin/comercial/${prospect.id}`} className="text-sm font-medium text-foreground/60 hover:underline">
+        <Link href={`/comercial/${prospect.id}`} className="text-sm font-medium text-foreground/60 hover:underline">
           Cancelar
         </Link>
       </div>

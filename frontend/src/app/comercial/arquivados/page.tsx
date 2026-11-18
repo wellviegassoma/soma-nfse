@@ -24,7 +24,7 @@ export default async function ArquivadosPage() {
         <p className="text-sm text-foreground/60">
           Some do quadro, mas nada é apagado — desarquive pra voltar de onde parou.
         </p>
-        <Link href="/admin/comercial" className="text-sm font-medium text-foreground/60 hover:underline">
+        <Link href="/comercial" className="text-sm font-medium text-foreground/60 hover:underline">
           ← Voltar ao quadro
         </Link>
       </div>
@@ -46,7 +46,7 @@ export default async function ArquivadosPage() {
                 >
                   <div>
                     <Link
-                      href={`/admin/comercial/${prospect.id}`}
+                      href={`/comercial/${prospect.id}`}
                       className="text-sm font-medium text-foreground hover:underline"
                     >
                       {prospect.nome}

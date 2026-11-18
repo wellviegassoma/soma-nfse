@@ -33,7 +33,7 @@ export function MoverEtapaMenu({
         onChange={(e) => {
           const destino = e.target.value;
           if (destino === "CLIENTE_ATIVO") {
-            router.push(`/admin/comercial/${prospectId}/confirmar-cliente`);
+            router.push(`/comercial/${prospectId}/confirmar-cliente`);
             return;
           }
           if (destino === etapaAtualId) return;

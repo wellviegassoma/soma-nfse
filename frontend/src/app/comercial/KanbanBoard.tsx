@@ -75,12 +75,12 @@ function DraggableProspectCard({
       )}
       {...(podeEditar ? { ...listeners, ...attributes } : {})}
     >
-      <Link href={`/admin/comercial/${prospect.id}`} className="block hover:underline">
+      <Link href={`/comercial/${prospect.id}`} className="block hover:underline">
         <ProspectCardContent prospect={prospect} />
       </Link>
       {clienteAtivo && (
         <Link
-          href={`/admin/comercial/${prospect.id}#mensagem-novo-cliente`}
+          href={`/comercial/${prospect.id}#mensagem-novo-cliente`}
           className="mt-2 block text-xs font-medium text-brand hover:underline"
         >
           Mensagem de novo cliente →
@@ -109,10 +109,12 @@ export function KanbanBoard({
   etapas,
   prospects: prospectsIniciais,
   podeEditar,
+  podeConfirmarCliente,
 }: {
   etapas: Etapa[];
   prospects: Prospect[];
   podeEditar: boolean;
+  podeConfirmarCliente: boolean;
 }) {
   const [prospects, setProspects] = useState(prospectsIniciais);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -153,7 +155,11 @@ export function KanbanBoard({
     // Etapa TERMINAL_GANHO nunca move direto — abre a tela de confirmação
     // que cria a empresa de verdade (mesma regra do menu antigo).
     if (etapaDestino.tipo === "TERMINAL_GANHO") {
-      router.push(`/admin/comercial/${prospectId}/confirmar-cliente`);
+      if (!podeConfirmarCliente) {
+        setError("Virar Cliente Ativo cria a empresa no sistema e fica com a equipe da SOMA. Peça pra alguém da equipe confirmar.");
+        return;
+      }
+      router.push(`/comercial/${prospectId}/confirmar-cliente`);
       return;
     }
 

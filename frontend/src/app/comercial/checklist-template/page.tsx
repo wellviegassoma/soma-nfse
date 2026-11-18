@@ -39,7 +39,7 @@ export default async function ChecklistTemplatePage() {
           Categorias e itens copiados pra cada prospect novo (snapshot) — editar aqui não muda o
           checklist de quem já está em andamento.
         </p>
-        <Link href="/admin/comercial" className="text-sm font-medium text-foreground/60 hover:underline">
+        <Link href="/comercial" className="text-sm font-medium text-foreground/60 hover:underline">
           ← Voltar ao quadro
         </Link>
       </div>

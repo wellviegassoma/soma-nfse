@@ -25,7 +25,7 @@ export default async function EtapasPage() {
           comportamento: TERMINAL_GANHO abre a tela de confirmação e cria a empresa; as demais
           são só organização visual.
         </p>
-        <Link href="/admin/comercial" className="text-sm font-medium text-foreground/60 hover:underline">
+        <Link href="/comercial" className="text-sm font-medium text-foreground/60 hover:underline">
           ← Voltar ao quadro
         </Link>
       </div>

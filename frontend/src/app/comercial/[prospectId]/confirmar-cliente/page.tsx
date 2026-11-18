@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requirePermissao } from "@/lib/auth";
+import { requirePermissao, requireSomaStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
@@ -8,10 +8,12 @@ import { ConfirmarClienteForm } from "./ConfirmarClienteForm";
 export const metadata = { title: "Virar Cliente Ativo — Comercial" };
 
 export default async function ConfirmarClientePage(
-  props: PageProps<"/admin/comercial/[prospectId]/confirmar-cliente">,
+  props: PageProps<"/comercial/[prospectId]/confirmar-cliente">,
 ) {
   const { prospectId } = await props.params;
   await requirePermissao("comercial.editar");
+  // Cria empresa (companies/organizations) — só equipe com acesso às empresas.
+  await requireSomaStaff();
 
   const supabase = await createClient();
   const { data: prospect } = await supabase

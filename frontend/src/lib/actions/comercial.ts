@@ -6,7 +6,7 @@ import { del } from "@vercel/blob";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requirePermissao, requireSuperAdmin, requireUser } from "@/lib/auth";
+import { isSomaStaff, requirePermissao, requireSuperAdmin, requireUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import { buscarDadosCnpj, type DadosCnpj } from "@/lib/cnpj-lookup";
@@ -183,8 +183,8 @@ export async function criarProspect(
     corpo: "Prospect criado.",
   });
 
-  revalidatePath("/admin/comercial");
-  redirect(`/admin/comercial/${prospect.id}`);
+  revalidatePath("/comercial");
+  redirect(`/comercial/${prospect.id}`);
 }
 
 const editarProspectSchema = prospectSchema.extend({ prospectId: uuidLike });
@@ -251,13 +251,13 @@ export async function editarProspect(
     .eq("id", prospectId);
   if (error) return { error: "Não foi possível salvar." };
 
-  revalidatePath(`/admin/comercial/${prospectId}`);
+  revalidatePath(`/comercial/${prospectId}`);
   return { success: true };
 }
 
 // ---------------------------------------------------------------------------
 // Mover de etapa — etapas TERMINAL_GANHO não passam por aqui (a UI manda pra
-// /admin/comercial/[prospectId]/confirmar-cliente em vez de chamar isso).
+// /comercial/[prospectId]/confirmar-cliente em vez de chamar isso).
 // ---------------------------------------------------------------------------
 export async function moverProspectEtapa(prospectId: string, etapaId: string) {
   await requirePermissao("comercial.editar");
@@ -300,8 +300,8 @@ export async function moverProspectEtapa(prospectId: string, etapaId: string) {
     corpo: `Moveu para "${etapaDestino.nome}".`,
   });
 
-  revalidatePath("/admin/comercial");
-  revalidatePath(`/admin/comercial/${prospectId}`);
+  revalidatePath("/comercial");
+  revalidatePath(`/comercial/${prospectId}`);
 }
 
 export async function marcarChecklistItem(itemId: string, prospectId: string, concluido: boolean) {
@@ -334,7 +334,7 @@ export async function marcarChecklistItem(itemId: string, prospectId: string, co
     });
   }
 
-  revalidatePath(`/admin/comercial/${prospectId}`);
+  revalidatePath(`/comercial/${prospectId}`);
 }
 
 const comentarioSchema = z.object({
@@ -365,7 +365,7 @@ export async function adicionarComentario(
   });
   if (error) return { error: "Não foi possível salvar o comentário." };
 
-  revalidatePath(`/admin/comercial/${parsed.data.prospectId}`);
+  revalidatePath(`/comercial/${parsed.data.prospectId}`);
   return { success: true };
 }
 
@@ -406,7 +406,7 @@ export async function salvarAnexoComercial(
   });
   if (error) return { error: "Não foi possível salvar o anexo." };
 
-  revalidatePath(`/admin/comercial/${parsed.data.prospectId}`);
+  revalidatePath(`/comercial/${parsed.data.prospectId}`);
   return { success: true };
 }
 
@@ -425,7 +425,7 @@ export async function apagarAnexoComercial(anexoId: string, prospectId: string) 
   if (error) throw new Error("Não foi possível remover o anexo.");
 
   await del(anexo.blob_pathname).catch(() => {});
-  revalidatePath(`/admin/comercial/${prospectId}`);
+  revalidatePath(`/comercial/${prospectId}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -440,9 +440,9 @@ export async function arquivarProspect(prospectId: string) {
     .update({ arquivado_em: new Date().toISOString() })
     .eq("id", prospectId);
   if (error) throw new Error("Não foi possível arquivar o prospect.");
-  revalidatePath("/admin/comercial");
-  revalidatePath("/admin/comercial/arquivados");
-  revalidatePath(`/admin/comercial/${prospectId}`);
+  revalidatePath("/comercial");
+  revalidatePath("/comercial/arquivados");
+  revalidatePath(`/comercial/${prospectId}`);
 }
 
 export async function desarquivarProspect(prospectId: string) {
@@ -453,9 +453,9 @@ export async function desarquivarProspect(prospectId: string) {
     .update({ arquivado_em: null })
     .eq("id", prospectId);
   if (error) throw new Error("Não foi possível desarquivar o prospect.");
-  revalidatePath("/admin/comercial");
-  revalidatePath("/admin/comercial/arquivados");
-  revalidatePath(`/admin/comercial/${prospectId}`);
+  revalidatePath("/comercial");
+  revalidatePath("/comercial/arquivados");
+  revalidatePath(`/comercial/${prospectId}`);
 }
 
 export async function excluirProspectPermanente(prospectId: string) {
@@ -463,9 +463,9 @@ export async function excluirProspectPermanente(prospectId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("comercial_prospects").delete().eq("id", prospectId);
   if (error) throw new Error("Não foi possível excluir o prospect.");
-  revalidatePath("/admin/comercial");
-  revalidatePath("/admin/comercial/arquivados");
-  redirect("/admin/comercial");
+  revalidatePath("/comercial");
+  revalidatePath("/comercial/arquivados");
+  redirect("/comercial");
 }
 
 // ---------------------------------------------------------------------------
@@ -510,6 +510,9 @@ export async function confirmarClienteAtivo(
   formData: FormData,
 ): Promise<ActionState> {
   await requirePermissao("comercial.editar");
+  if (!(await isSomaStaff())) {
+    return { error: "Virar Cliente Ativo cria a empresa no sistema e fica com a equipe da SOMA. Peça pra alguém da equipe confirmar." };
+  }
 
   const parsed = confirmarClienteSchema.safeParse({
     prospectId: formData.get("prospectId"),
@@ -596,8 +599,8 @@ export async function confirmarClienteAtivo(
     newValue: { prospect_id: prospectId, legal_name: dadosEmpresa.legalName },
   });
 
-  revalidatePath("/admin/comercial");
-  revalidatePath(`/admin/comercial/${prospectId}`);
+  revalidatePath("/comercial");
+  revalidatePath(`/comercial/${prospectId}`);
   revalidatePath("/admin/empresas");
   redirect(`/admin/empresas/${companyId}`);
 }
@@ -664,7 +667,7 @@ export async function iniciarProcessoLegalizacaoDoProspect(
     corpo: "Processo de abertura iniciado no módulo Legalização.",
   });
 
-  revalidatePath(`/admin/comercial/${prospectId}`);
+  revalidatePath(`/comercial/${prospectId}`);
   return undefined;
 }
 
@@ -686,7 +689,7 @@ export async function desvincularProcessoLegalizacaoDoProspect(prospectId: strin
     corpo: "Desvinculou o processo de Legalização (o processo em si não foi apagado).",
   });
 
-  revalidatePath(`/admin/comercial/${prospectId}`);
+  revalidatePath(`/comercial/${prospectId}`);
 }
 
 export type StatusProcessoLegalizacao = {
@@ -751,8 +754,8 @@ export async function salvarEtapa(
     };
   }
 
-  revalidatePath("/admin/comercial/etapas");
-  revalidatePath("/admin/comercial");
+  revalidatePath("/comercial/etapas");
+  revalidatePath("/comercial");
   return { success: true };
 }
 
@@ -761,8 +764,8 @@ export async function alternarAtivoEtapa(etapaId: string, ativo: boolean) {
   const supabase = await createClient();
   const { error } = await supabase.from("comercial_etapas").update({ ativo }).eq("id", etapaId);
   if (error) throw new Error("Não foi possível atualizar a etapa.");
-  revalidatePath("/admin/comercial/etapas");
-  revalidatePath("/admin/comercial");
+  revalidatePath("/comercial/etapas");
+  revalidatePath("/comercial");
 }
 
 // ---------------------------------------------------------------------------
@@ -799,7 +802,7 @@ export async function salvarChecklistCategoria(
     };
   }
 
-  revalidatePath("/admin/comercial/checklist-template");
+  revalidatePath("/comercial/checklist-template");
   return { success: true };
 }
 
@@ -811,7 +814,7 @@ export async function alternarAtivoChecklistCategoria(categoriaId: string, ativo
     .update({ ativo })
     .eq("id", categoriaId);
   if (error) throw new Error("Não foi possível atualizar a categoria.");
-  revalidatePath("/admin/comercial/checklist-template");
+  revalidatePath("/comercial/checklist-template");
 }
 
 const itemSchema = z.object({
@@ -848,7 +851,7 @@ export async function salvarChecklistItem(
         .insert({ categoria_id: categoriaId, ...rest });
   if (error) return { error: "Não foi possível salvar o item." };
 
-  revalidatePath("/admin/comercial/checklist-template");
+  revalidatePath("/comercial/checklist-template");
   return { success: true };
 }
 
@@ -860,7 +863,7 @@ export async function alternarAtivoChecklistItem(itemId: string, ativo: boolean)
     .update({ ativo })
     .eq("id", itemId);
   if (error) throw new Error("Não foi possível atualizar o item.");
-  revalidatePath("/admin/comercial/checklist-template");
+  revalidatePath("/comercial/checklist-template");
 }
 
 // ---------------------------------------------------------------------------
@@ -917,6 +920,21 @@ export async function salvarDadosNovoCliente(
     .eq("id", prospectId);
   if (error) return { error: "Não foi possível salvar." };
 
-  revalidatePath(`/admin/comercial/${prospectId}`);
+  revalidatePath(`/comercial/${prospectId}`);
   return { success: true };
+}
+
+// Nomes de responsável/autor pra quem só tem Comercial (profiles_select
+// esconde outros perfis de quem não é equipe) — ver migration 20261118140000.
+// Sem a função no banco, devolve mapa vazio e a tela cai no join normal.
+export async function buscarNomesEquipeComercial(): Promise<Map<string, string>> {
+  await requirePermissao("comercial.ver");
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("comercial_nomes_equipe");
+  if (error || !data) return new Map();
+  return new Map(
+    (data as { id: string; full_name: string | null }[])
+      .filter((p) => p.full_name)
+      .map((p) => [p.id, p.full_name as string]),
+  );
 }

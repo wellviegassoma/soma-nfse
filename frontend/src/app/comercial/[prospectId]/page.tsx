@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireComercialAccess, temPermissao } from "@/lib/auth";
+import { requireComercialAccess, temPermissao, isSomaStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { buscarStatusProcessoLegalizacao, buscarDadosNovoCliente } from "@/lib/actions/comercial";
+import {
+  buscarStatusProcessoLegalizacao,
+  buscarDadosNovoCliente,
+  buscarNomesEquipeComercial,
+} from "@/lib/actions/comercial";
 import { MensagemNovoClienteSection } from "./MensagemNovoClienteSection";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -16,11 +20,12 @@ import { MoverEtapaMenu } from "../MoverEtapaMenu";
 export const metadata = { title: "Prospect — Comercial" };
 
 export default async function ProspectDetailPage(
-  props: PageProps<"/admin/comercial/[prospectId]">,
+  props: PageProps<"/comercial/[prospectId]">,
 ) {
   const { prospectId } = await props.params;
   await requireComercialAccess();
   const podeEditar = await temPermissao("comercial.editar");
+  const podeConfirmarCliente = podeEditar && (await isSomaStaff());
   const podeVerLegalizacao = await temPermissao("legalizacao.ver");
 
   const supabase = await createClient();
@@ -52,7 +57,7 @@ export default async function ProspectDetailPage(
         .order("created_at", { ascending: false }),
       supabase
         .from("comercial_prospect_atividade")
-        .select("id, tipo, corpo, created_at, autor:profiles(full_name)")
+        .select("id, tipo, corpo, created_at, autor_id, autor:profiles(full_name)")
         .eq("prospect_id", prospectId)
         .order("created_at", { ascending: false }),
     ]);
@@ -64,6 +69,20 @@ export default async function ProspectDetailPage(
     : null;
   const mostrarMensagemNovoCliente = etapa?.tipo === "TERMINAL_GANHO" && Boolean(prospect.company_id);
   const dadosNovoCliente = mostrarMensagemNovoCliente ? await buscarDadosNovoCliente(prospect.id) : null;
+  const nomesEquipe = await buscarNomesEquipeComercial();
+  const atividadesComAutor = (
+    (atividades ?? []) as unknown as {
+      id: string;
+      tipo: string;
+      corpo: string | null;
+      created_at: string;
+      autor_id: string | null;
+      autor: { full_name: string } | null;
+    }[]
+  ).map(({ autor_id, autor, ...a }) => {
+    const nome = autor?.full_name ?? (autor_id ? nomesEquipe.get(autor_id) : undefined);
+    return { ...a, autor: nome ? { full_name: nome } : null };
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -97,7 +116,7 @@ export default async function ProspectDetailPage(
           {podeEditar && etapa && (
             <MoverEtapaMenu prospectId={prospect.id} etapaAtualId={etapa.id} etapas={etapas ?? []} />
           )}
-          <Link href="/admin/comercial" className="text-sm text-foreground/60 hover:underline">
+          <Link href="/comercial" className="text-sm text-foreground/60 hover:underline">
             ← Voltar ao quadro
           </Link>
         </div>
@@ -143,15 +162,7 @@ export default async function ProspectDetailPage(
         <h2 className="mb-4 text-sm font-semibold text-foreground/70">Comentários e atividade</h2>
         <AtividadeSection
           prospectId={prospect.id}
-          atividades={
-            (atividades ?? []) as unknown as {
-              id: string;
-              tipo: string;
-              corpo: string | null;
-              created_at: string;
-              autor: { full_name: string } | null;
-            }[]
-          }
+          atividades={atividadesComAutor}
           podeEditar={podeEditar}
         />
       </Card>
@@ -159,9 +170,18 @@ export default async function ProspectDetailPage(
       {podeEditar && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           {etapa?.tipo !== "TERMINAL_GANHO" && !prospect.company_id ? (
-            <Link href={`/admin/comercial/${prospect.id}/confirmar-cliente`}>
-              <Button variant="secondary">✓ Virar Cliente Ativo…</Button>
-            </Link>
+            podeConfirmarCliente ? (
+              <Link href={`/comercial/${prospect.id}/confirmar-cliente`}>
+                <Button variant="secondary">✓ Virar Cliente Ativo…</Button>
+              </Link>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <Button variant="secondary" disabled>
+                  ✓ Virar Cliente Ativo…
+                </Button>
+                <span className="text-xs text-foreground/50">Fica com a equipe da SOMA (cria a empresa no sistema).</span>
+              </div>
+            )
           ) : (
             <span />
           )}

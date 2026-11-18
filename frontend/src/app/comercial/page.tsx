@@ -1,19 +1,21 @@
 import Link from "next/link";
-import { requireComercialAccess, temPermissao } from "@/lib/auth";
+import { requireComercialAccess, temPermissao, isSomaStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { KanbanBoard } from "./KanbanBoard";
+import { buscarNomesEquipeComercial } from "@/lib/actions/comercial";
 
 export const metadata = { title: "Comercial — Painel SOMA" };
 
 export default async function ComercialBoardPage() {
   await requireComercialAccess();
   const podeEditar = await temPermissao("comercial.editar");
+  const podeConfirmarCliente = podeEditar && (await isSomaStaff());
   const podeConfigurarFunil = await temPermissao("configuracoes.editar");
 
   const supabase = await createClient();
-  const [{ data: etapas }, { data: prospects }, { count: arquivadosCount }] = await Promise.all([
+  const [{ data: etapas }, { data: prospects }, { count: arquivadosCount }, nomesEquipe] = await Promise.all([
     supabase
       .from("comercial_etapas")
       .select("id, nome, cor, tipo, ativo")
@@ -21,13 +23,14 @@ export default async function ComercialBoardPage() {
       .order("ordem", { ascending: true }),
     supabase
       .from("comercial_prospects")
-      .select("id, nome, especialidade, cidade, honorario_soma, etapa_id, responsavel:profiles(full_name)")
+      .select("id, nome, especialidade, cidade, honorario_soma, etapa_id, responsavel_id, responsavel:profiles(full_name)")
       .is("arquivado_em", null)
       .order("updated_at", { ascending: false }),
     supabase
       .from("comercial_prospects")
       .select("id", { count: "exact", head: true })
       .not("arquivado_em", "is", null),
+    buscarNomesEquipeComercial(),
   ]);
 
   const etapasAtivas = etapas ?? [];
@@ -38,7 +41,10 @@ export default async function ComercialBoardPage() {
     cidade: p.cidade,
     honorario_soma: p.honorario_soma,
     etapa_id: p.etapa_id,
-    responsavelNome: (p.responsavel as unknown as { full_name: string } | null)?.full_name ?? null,
+    responsavelNome:
+      (p.responsavel as unknown as { full_name: string } | null)?.full_name ??
+      (p.responsavel_id ? nomesEquipe.get(p.responsavel_id) : undefined) ??
+      null,
   }));
 
   return (
@@ -53,25 +59,25 @@ export default async function ComercialBoardPage() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {Boolean(arquivadosCount) && (
-            <Link href="/admin/comercial/arquivados" className="text-sm font-medium text-foreground/60 hover:underline">
+            <Link href="/comercial/arquivados" className="text-sm font-medium text-foreground/60 hover:underline">
               Arquivados ({arquivadosCount})
             </Link>
           )}
           {podeConfigurarFunil && (
-            <Link href="/admin/comercial/etapas" className="text-sm font-medium text-foreground/60 hover:underline">
+            <Link href="/comercial/etapas" className="text-sm font-medium text-foreground/60 hover:underline">
               Configurar etapas
             </Link>
           )}
           {podeConfigurarFunil && (
             <Link
-              href="/admin/comercial/checklist-template"
+              href="/comercial/checklist-template"
               className="text-sm font-medium text-foreground/60 hover:underline"
             >
               Checklist padrão
             </Link>
           )}
           {podeEditar && (
-            <Link href="/admin/comercial/novo">
+            <Link href="/comercial/novo">
               <Button>+ Novo prospect</Button>
             </Link>
           )}
@@ -82,13 +88,18 @@ export default async function ComercialBoardPage() {
         <Card className="p-10 text-center text-sm text-foreground/50">
           Nenhuma etapa configurada ainda.{" "}
           {podeConfigurarFunil && (
-            <Link href="/admin/comercial/etapas" className="text-brand underline">
+            <Link href="/comercial/etapas" className="text-brand underline">
               Configure o funil
             </Link>
           )}
         </Card>
       ) : (
-        <KanbanBoard etapas={etapasAtivas} prospects={prospectsParaBoard} podeEditar={podeEditar} />
+        <KanbanBoard
+          etapas={etapasAtivas}
+          prospects={prospectsParaBoard}
+          podeEditar={podeEditar}
+          podeConfirmarCliente={podeConfirmarCliente}
+        />
       )}
     </div>
   );

@@ -33,7 +33,7 @@ export default async function AdminLayout({
           <div className="flex items-center gap-2">
             {podeVerComercial && (
               <Link
-                href="/admin/comercial"
+                href="/comercial"
                 className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
               >
                 Comercial

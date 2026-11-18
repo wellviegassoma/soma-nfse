@@ -183,7 +183,7 @@ export function NovoProspectForm() {
         <Button type="submit" loading={pending}>
           Criar prospect
         </Button>
-        <Link href="/admin/comercial" className="text-sm font-medium text-foreground/60 hover:underline">
+        <Link href="/comercial" className="text-sm font-medium text-foreground/60 hover:underline">
           Cancelar
         </Link>
       </div>
