@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireComercialAccess, temPermissao } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { buscarStatusProcessoLegalizacao } from "@/lib/actions/comercial";
+import { buscarStatusProcessoLegalizacao, buscarDadosNovoCliente } from "@/lib/actions/comercial";
+import { MensagemNovoClienteSection } from "./MensagemNovoClienteSection";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
@@ -28,7 +29,7 @@ export default async function ProspectDetailPage(
       supabase
         .from("comercial_prospects")
         .select(
-          "id, nome, tipo_onboarding, pessoa_tipo, especialidade, cidade, origem_lead, indicado_por, regime_tributario, faturamento_medio_estimado, cnpj, cpf, honorario_soma, descricao, abertura_cartorio_jucerja, abertura_capital_social, abertura_divisao_capital, abertura_administrador, abertura_cota_tipo, abertura_cnaes, abertura_opcoes_nome, legalizacao_processo_id, etapa_id, company_id, arquivado_em, updated_at, etapa:comercial_etapas(id, nome, cor, tipo)",
+          "id, nome, tipo_onboarding, pessoa_tipo, especialidade, cidade, origem_lead, indicado_por, regime_tributario, faturamento_medio_estimado, cnpj, cpf, honorario_soma, descricao, abertura_cartorio_jucerja, abertura_capital_social, abertura_divisao_capital, abertura_administrador, abertura_cota_tipo, abertura_cnaes, abertura_opcoes_nome, novo_cliente_inicio_responsabilidade, novo_cliente_funcionarios, novo_cliente_pro_labore, novo_cliente_fase_legalizacao, novo_cliente_obs, legalizacao_processo_id, etapa_id, company_id, arquivado_em, updated_at, etapa:comercial_etapas(id, nome, cor, tipo)",
         )
         .eq("id", prospectId)
         .maybeSingle(),
@@ -61,6 +62,8 @@ export default async function ProspectDetailPage(
   const statusProcesso = prospect.legalizacao_processo_id
     ? await buscarStatusProcessoLegalizacao(prospect.id)
     : null;
+  const mostrarMensagemNovoCliente = etapa?.tipo === "TERMINAL_GANHO" && Boolean(prospect.company_id);
+  const dadosNovoCliente = mostrarMensagemNovoCliente ? await buscarDadosNovoCliente(prospect.id) : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -99,6 +102,20 @@ export default async function ProspectDetailPage(
           </Link>
         </div>
       </div>
+
+      {mostrarMensagemNovoCliente && (
+        <Card id="mensagem-novo-cliente" className="p-6">
+          <h2 className="mb-4 text-sm font-semibold text-foreground/70">
+            Mensagem de novo cliente — grupo da equipe
+          </h2>
+          <MensagemNovoClienteSection
+            key={prospect.updated_at}
+            prospect={prospect}
+            empresa={dadosNovoCliente}
+            podeEditar={podeEditar}
+          />
+        </Card>
+      )}
 
       {/* key={updated_at}: depois de um submit bem-sucedido, o React reseta
           sozinho o <form> pro estado inicial (comportamento automático de

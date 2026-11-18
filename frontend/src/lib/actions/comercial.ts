@@ -14,6 +14,7 @@ import { isCpfValido } from "@/lib/formatters";
 import { criarEmpresaComOrganizacao } from "@/lib/actions/empresas";
 import { criarProcessoLegalizacaoCore } from "@/lib/actions/legalizacao-processos";
 import type { ActionState } from "@/lib/actions/auth";
+import type { DadosEmpresaNovoCliente } from "@/lib/comercial/mensagem-novo-cliente";
 
 // Mesma buscarDadosCnpj de lib/cnpj-lookup.ts usada em createCompany — só
 // troca o guard (comercial.editar em vez de requireSomaStaff), não mexe em
@@ -860,4 +861,62 @@ export async function alternarAtivoChecklistItem(itemId: string, ativo: boolean)
     .eq("id", itemId);
   if (error) throw new Error("Não foi possível atualizar o item.");
   revalidatePath("/admin/comercial/checklist-template");
+}
+
+// ---------------------------------------------------------------------------
+// Mensagem "Novo cliente" (card Cliente Ativo) — ver migration 20261118120000.
+// ---------------------------------------------------------------------------
+export async function buscarDadosNovoCliente(prospectId: string): Promise<DadosEmpresaNovoCliente | null> {
+  await requirePermissao("comercial.ver");
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("comercial_dados_novo_cliente", { p_prospect_id: prospectId });
+  return (data?.[0] as DadosEmpresaNovoCliente | undefined) ?? null;
+}
+
+const novoClienteSchema = z.object({
+  prospectId: uuidLike,
+  inicioResponsabilidade: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de início inválida.")
+    .optional(),
+  funcionarios: z.coerce.number().int().min(0, "Funcionários não pode ser negativo.").optional(),
+  proLabore: z.string().trim().max(500).optional(),
+  faseLegalizacao: z.string().trim().max(500).optional(),
+  obs: z.string().trim().max(4000).optional(),
+});
+
+export async function salvarDadosNovoCliente(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requirePermissao("comercial.editar");
+
+  const parsed = novoClienteSchema.safeParse({
+    prospectId: formData.get("prospectId"),
+    inicioResponsabilidade: formData.get("inicioResponsabilidade") || undefined,
+    funcionarios: formData.get("funcionarios") || undefined,
+    proLabore: formData.get("proLabore") || undefined,
+    faseLegalizacao: formData.get("faseLegalizacao") || undefined,
+    obs: formData.get("obs") || undefined,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const { prospectId, ...rest } = parsed.data;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("comercial_prospects")
+    .update({
+      novo_cliente_inicio_responsabilidade: rest.inicioResponsabilidade ?? null,
+      novo_cliente_funcionarios: rest.funcionarios ?? null,
+      novo_cliente_pro_labore: rest.proLabore || null,
+      novo_cliente_fase_legalizacao: rest.faseLegalizacao || null,
+      novo_cliente_obs: rest.obs || null,
+    })
+    .eq("id", prospectId);
+  if (error) return { error: "Não foi possível salvar." };
+
+  revalidatePath(`/admin/comercial/${prospectId}`);
+  return { success: true };
 }

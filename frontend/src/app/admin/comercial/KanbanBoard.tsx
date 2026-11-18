@@ -51,7 +51,15 @@ function ProspectCardContent({ prospect }: { prospect: Prospect }) {
   );
 }
 
-function DraggableProspectCard({ prospect, podeEditar }: { prospect: Prospect; podeEditar: boolean }) {
+function DraggableProspectCard({
+  prospect,
+  podeEditar,
+  clienteAtivo,
+}: {
+  prospect: Prospect;
+  podeEditar: boolean;
+  clienteAtivo: boolean;
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: prospect.id,
     disabled: !podeEditar,
@@ -70,6 +78,14 @@ function DraggableProspectCard({ prospect, podeEditar }: { prospect: Prospect; p
       <Link href={`/admin/comercial/${prospect.id}`} className="block hover:underline">
         <ProspectCardContent prospect={prospect} />
       </Link>
+      {clienteAtivo && (
+        <Link
+          href={`/admin/comercial/${prospect.id}#mensagem-novo-cliente`}
+          className="mt-2 block text-xs font-medium text-brand hover:underline"
+        >
+          Mensagem de novo cliente →
+        </Link>
+      )}
     </div>
   );
 }
@@ -177,7 +193,12 @@ export function KanbanBoard({
                 </div>
                 <DroppableColumn etapa={etapa}>
                   {cards.map((prospect) => (
-                    <DraggableProspectCard key={prospect.id} prospect={prospect} podeEditar={podeEditar} />
+                    <DraggableProspectCard
+                      key={prospect.id}
+                      prospect={prospect}
+                      podeEditar={podeEditar}
+                      clienteAtivo={etapa.tipo === "TERMINAL_GANHO"}
+                    />
                   ))}
                   {cards.length === 0 && (
                     <p className="px-1 text-xs text-foreground/40">Arraste um prospect pra cá.</p>
