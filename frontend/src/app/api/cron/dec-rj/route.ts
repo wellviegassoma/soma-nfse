@@ -12,7 +12,9 @@ export const maxDuration = 300;
 // e sai das próximas rodadas. Pula quem já foi lido nas últimas 20h, então as
 // rodadas seguidas do vercel.json terminam a carteira sem pagar duas vezes.
 const PULAR_SE_LIDA_HA_MENOS_DE_MS = 20 * 60 * 60 * 1000;
-const PARALELO = 4;
+// Uma por vez: com 4 em paralelo a SEFAZ-RJ barrou a maioria com
+// "Tentativas de consultar o site ... excedidas" (Infosimples 609), 19/11/2026.
+const PARALELO = 1;
 const ORCAMENTO_MS = 250_000;
 
 export async function GET(request: Request) {
@@ -26,13 +28,20 @@ export async function GET(request: Request) {
   const ie = so ? (params.get("ie") ?? "").replace(/\D/g, "") || null : null;
 
   const empresas = (await empresasParaLer(admin)).filter((e) => !so || e.id === so);
-  const { data: leituras } = await admin.from("dec_rj_leituras").select("company_id, lida_em, ativo");
+  const [{ data: leituras }, { data: isentas }] = await Promise.all([
+    admin.from("dec_rj_leituras").select("company_id, lida_em, ativo, ok"),
+    admin.from("companies").select("id").eq("inscricao_estadual", "ISENTO"),
+  ]);
+  // Sem inscrição estadual (ISENTO) não tem DeC: não gasta consulta.
+  const semIe = new Set((isentas ?? []).map((c) => c.id as string));
   const porEmpresa = new Map((leituras ?? []).map((l) => [l.company_id as string, l]));
   const fila = empresas.filter((e) => {
+    if (semIe.has(e.id) && !so) return false;
     const l = porEmpresa.get(e.id);
     if (!l) return true;
     if (l.ativo === false && !so) return false;
-    return so || Date.now() - new Date(l.lida_em as string).getTime() > PULAR_SE_LIDA_HA_MENOS_DE_MS;
+    // Só pula quem foi lido com sucesso há pouco — falha (609, timeout) tenta de novo.
+    return so || !l.ok || Date.now() - new Date(l.lida_em as string).getTime() > PULAR_SE_LIDA_HA_MENOS_DE_MS;
   });
 
   let lidas = 0;

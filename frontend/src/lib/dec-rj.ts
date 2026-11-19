@@ -95,8 +95,8 @@ export function mensagemDec(x: Bruto): MensagemCaixaPostal | null {
 }
 
 export type ResultadoDec =
-  | { ok: true; mensagens: MensagemCaixaPostal[]; naoLidas: number; preco: number | null }
-  | { ok: false; erro: string; semDec: boolean };
+  | { ok: true; mensagens: MensagemCaixaPostal[]; naoLidas: number; preco: number | null; ie: string | null }
+  | { ok: false; erro: string; semDec: boolean; naoConstaIcms: boolean };
 
 // Respostas que significam "esta empresa não tem DeC acessível pela SOMA"
 // (sem inscrição no ICMS-RJ, sem e-Procuração) — não adianta tentar de novo
@@ -135,10 +135,10 @@ async function certificadoDaEmpresa(
 export async function consultarDecRj(admin: Supa, cnpj: string, ie?: string | null): Promise<ResultadoDec> {
   const token = process.env.INFOSIMPLES_TOKEN;
   const chave = process.env.INFOSIMPLES_CHAVE_CRIPTOGRAFIA;
-  if (!token || !chave) return { ok: false, erro: "Infosimples não configurada (token/chave).", semDec: false };
+  if (!token || !chave) return { ok: false, erro: "Infosimples não configurada (token/chave).", semDec: false, naoConstaIcms: false };
 
   const cert = await certificadoDaEmpresa(admin, cnpj);
-  if (!cert.ok) return { ok: false, erro: cert.erro, semDec: false };
+  if (!cert.ok) return { ok: false, erro: cert.erro, semDec: false, naoConstaIcms: false };
 
   let body: { code?: number; code_message?: string; errors?: string[]; data?: Bruto[]; header?: Bruto };
   try {
@@ -160,10 +160,15 @@ export async function consultarDecRj(admin: Supa, cnpj: string, ie?: string | nu
     try {
       body = JSON.parse(t);
     } catch {
-      return { ok: false, erro: `Infosimples fora do ar (HTTP ${resp.status}) — tente de novo.`, semDec: false };
+      return { ok: false, erro: `Infosimples fora do ar (HTTP ${resp.status}) — tente de novo.`, semDec: false, naoConstaIcms: false };
     }
   } catch (e) {
-    return { ok: false, erro: `Falha ao chamar a Infosimples: ${e instanceof Error ? e.message : String(e)}`, semDec: false };
+    return {
+      ok: false,
+      erro: `Falha ao chamar a Infosimples: ${e instanceof Error ? e.message : String(e)}`,
+      semDec: false,
+      naoConstaIcms: false,
+    };
   }
 
   const preco = Number((body.header as Bruto | undefined)?.price ?? NaN);
@@ -173,12 +178,19 @@ export async function consultarDecRj(admin: Supa, cnpj: string, ie?: string | nu
       ok: false,
       erro: `Infosimples ${body.code ?? "?"}: ${detalhe || "erro sem mensagem"}`.slice(0, 1000),
       semDec: body.code === 612 || SEM_DEC.test(detalhe),
+      naoConstaIcms: /n[ãa]o consta no cadastro de ICMS/i.test(detalhe),
     };
   }
   const d = (body.data ?? [])[0] ?? {};
   const lista = Array.isArray(d.mensagens) ? (d.mensagens as Bruto[]) : [];
   const mensagens = lista.map(mensagemDec).filter((m): m is MensagemCaixaPostal => !!m);
-  return { ok: true, mensagens, naoLidas: Number(d.nao_lidas ?? 0) || 0, preco: Number.isFinite(preco) ? preco : null };
+  // A inscrição estadual vem dentro das mensagens já lidas (mensagem.ie).
+  const ieEncontrada =
+    lista
+      .map((x) => (x.mensagem && typeof x.mensagem === "object" ? texto((x.mensagem as Bruto).ie) : null))
+      .map((v) => (v ? v.replace(/\D/g, "") : null))
+      .find((v): v is string => !!v && v.length >= 6) ?? null;
+  return { ok: true, mensagens, naoLidas: Number(d.nao_lidas ?? 0) || 0, preco: Number.isFinite(preco) ? preco : null, ie: ieEncontrada };
 }
 
 /** Lê o DeC de uma empresa, grava na central e registra a leitura. */
@@ -189,6 +201,11 @@ export async function lerDecRjEmpresa(
   const r = await consultarDecRj(admin, empresa.cnpj, empresa.ie);
   const agora = new Date().toISOString();
   if (!r.ok) {
+    // SEFAZ-RJ: "CNPJ ou CPF não consta no cadastro de ICMS" → ISENTO, mas só
+    // se ninguém informou uma inscrição à mão.
+    if (r.naoConstaIcms) {
+      await admin.from("companies").update({ inscricao_estadual: "ISENTO" }).eq("id", empresa.id).is("inscricao_estadual", null);
+    }
     await admin.from("dec_rj_leituras").upsert({
       company_id: empresa.id,
       lida_em: agora,
@@ -209,6 +226,13 @@ export async function lerDecRjEmpresa(
     origem: "no DeC da SEFAZ-RJ",
   });
   if (!gravado.ok) return { ...gravado, semDec: false };
+  if (r.ie) {
+    await admin
+      .from("companies")
+      .update({ inscricao_estadual: r.ie })
+      .eq("id", empresa.id)
+      .or("inscricao_estadual.is.null,inscricao_estadual.eq.ISENTO");
+  }
   await admin.from("dec_rj_leituras").upsert({
     company_id: empresa.id,
     ativo: true,

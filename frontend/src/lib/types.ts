@@ -66,6 +66,7 @@ export type Company = {
   codigo_cliente: string | null;
   created_at: string;
   municipal_registration: string | null;
+  inscricao_estadual?: string | null;
   data_abertura: string | null;
   tax_regime: TaxRegime | null;
   cnae: string | null;
@@ -222,6 +223,7 @@ export type Customer = {
   email: string | null;
   phone: string | null;
   municipal_registration: string | null;
+  inscricao_estadual?: string | null;
   zip_code: string | null;
   address: string | null;
   number: string | null;

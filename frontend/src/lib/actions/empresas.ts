@@ -427,6 +427,11 @@ const percentualParaFracao = (v: string | undefined) =>
 const updateFiscalSchema = z.object({
   companyId: uuidLike,
   municipalRegistration: z.string().trim().optional(),
+  inscricaoEstadual: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (!v ? null : /^isent/i.test(v) ? "ISENTO" : v.replace(/\D/g, "") || null)),
   dataAbertura: z.string().trim().optional(),
   taxRegime: z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "IMUNE_ISENTO"]).optional(),
   cnae: z.string().trim().optional(),
@@ -455,6 +460,7 @@ export async function updateCompanyFiscal(
   const parsed = updateFiscalSchema.safeParse({
     companyId: formData.get("companyId"),
     municipalRegistration: formData.get("municipalRegistration") || undefined,
+    inscricaoEstadual: formData.get("inscricaoEstadual") || undefined,
     dataAbertura: formData.get("dataAbertura") || undefined,
     taxRegime: formData.get("taxRegime") || undefined,
     cnae: formData.get("cnae") || undefined,
@@ -483,7 +489,7 @@ export async function updateCompanyFiscal(
   const { data: before } = await supabase
     .from("companies")
     .select(
-      "municipal_registration, data_abertura, tax_regime, cnae, municipality_ibge_code, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
+      "municipal_registration, inscricao_estadual, data_abertura, tax_regime, cnae, municipality_ibge_code, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
     )
     .eq("id", companyId)
     .single();
@@ -507,6 +513,7 @@ export async function updateCompanyFiscal(
 
   const newValue = {
     municipal_registration: rest.municipalRegistration || null,
+    inscricao_estadual: rest.inscricaoEstadual ?? null,
     data_abertura: rest.dataAbertura || null,
     tax_regime: rest.taxRegime || null,
     cnae: rest.cnae || null,

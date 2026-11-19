@@ -74,6 +74,11 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
   if (filtro === "resolvidas") consulta = consulta.eq("status", "resolvida");
   if (empresaFiltro) consulta = consulta.eq("company_id", empresaFiltro);
 
+  const { data: situacoesForaDeAtiva } = await supabase
+    .from("cnpj_situacoes")
+    .select("company_id, situacao, data_situacao, motivo, situacao_anterior, mudou_em, verificado_em")
+    .eq("ok", true)
+    .neq("situacao", "ATIVA");
   const [{ data: mensagensBrutas, error: erroMsgs }, empresas, { data: leituras }, { data: contagens }, { data: globais }] =
     await Promise.all([
       consulta,
@@ -105,6 +110,8 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
     .sort(
       (a, b) =>
         ordemStatus[a.status] - ordemStatus[b.status] ||
+        // Alerta de CNPJ fora de ATIVA (situacao-cnpj.ts) acima de tudo.
+        Number(b.isn.startsWith("CNPJ:")) - Number(a.isn.startsWith("CNPJ:")) ||
         Number(destaque(b)) - Number(destaque(a)) ||
         (b.enviada_em ?? "").localeCompare(a.enviada_em ?? ""),
     );
@@ -151,6 +158,37 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
         ciência acontece sozinha {PRAZO_CIENCIA_TACITA_DIAS} dias depois do envio. Decida quem vai tratar antes de
         abrir no portal.
       </div>
+
+      {(() => {
+        // Empresa ativa no SOMA que não está ATIVA na Receita: alerta máximo.
+        const fora = (situacoesForaDeAtiva ?? []).filter((x) => nomeEmpresa.has(x.company_id as string));
+        if (!fora.length) return null;
+        return (
+          <div className="rounded-xl border-2 border-danger bg-danger p-4 text-white shadow-lg">
+            <p className="text-base font-bold">
+              ALERTA MÁXIMO: {fora.length} empresa(s) da carteira com CNPJ fora de ATIVA na Receita Federal
+            </p>
+            <p className="mt-0.5 text-xs text-white/85">
+              Empresa inapta ou suspensa não emite nota nem tira CND. Verificar no e-CAC e regularizar já. Fonte: BrasilAPI,
+              conferida toda segunda.
+            </p>
+            <ul className="mt-2 flex flex-col gap-1 text-sm">
+              {fora.map((x) => (
+                <li key={x.company_id as string} className="flex flex-wrap items-baseline gap-x-2">
+                  <Link href={href({ empresa: x.company_id as string, filtro: "todas" })} className="font-semibold underline">
+                    {nomeEmpresa.get(x.company_id as string)}
+                  </Link>
+                  <span className="font-mono text-white/85">{cnpjEmpresa.get(x.company_id as string)}</span>
+                  <span className="rounded bg-white px-1.5 py-0.5 text-xs font-bold text-danger">{x.situacao}</span>
+                  {x.data_situacao && <span className="text-xs">desde {dataSemHora(x.data_situacao as string)}</span>}
+                  {x.motivo && <span className="text-xs">· {x.motivo}</span>}
+                  {x.situacao_anterior && <span className="text-xs">· era {x.situacao_anterior}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
 
       {erroMsgs && (
         <Alert tone="danger">

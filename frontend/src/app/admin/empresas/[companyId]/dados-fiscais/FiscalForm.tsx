@@ -67,6 +67,22 @@ export function FiscalForm({ company }: { company: Company }) {
             />
           </Field>
           <Field
+            label="Inscrição estadual"
+            htmlFor="inscricaoEstadual"
+            hint="Preenchida sozinha pela leitura do DeC da SEFAZ-RJ. ISENTO = não consta no cadastro de ICMS (o DeC não é consultado). Vazio = ainda não verificado."
+          >
+            <Input
+              id="inscricaoEstadual"
+              name="inscricaoEstadual"
+              placeholder="Ex.: 11.940.30-7 ou ISENTO"
+              defaultValue={
+                company.inscricao_estadual && /^\d{8}$/.test(company.inscricao_estadual)
+                  ? company.inscricao_estadual.replace(/^(\d{2})(\d{3})(\d{2})(\d)$/, "$1.$2.$3-$4")
+                  : (company.inscricao_estadual ?? "")
+              }
+            />
+          </Field>
+          <Field
             label="Data de abertura"
             htmlFor="dataAbertura"
             hint="Usada pra saber se a empresa tem menos de 12 meses (RBT12 projetado proporcionalmente, regra oficial)"

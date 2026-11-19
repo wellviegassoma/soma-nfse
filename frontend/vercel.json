@@ -31,6 +31,14 @@
     {
       "path": "/api/cron/dec-rj?rodada=3",
       "schedule": "15 11 * * 1"
+    },
+    {
+      "path": "/api/cron/situacao-cnpj",
+      "schedule": "30 11 * * 1"
+    },
+    {
+      "path": "/api/cron/situacao-cnpj?rodada=2",
+      "schedule": "45 11 * * 1"
     }
   ]
 }
