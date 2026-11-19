@@ -55,20 +55,23 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
     : 2027;
   const custos = lerPercentual(sp.custos, CUSTOS_CREDITAVEIS_PADRAO);
   const b2b = lerPercentual(sp.b2b, B2B_PADRAO);
-  const filtro = sp.filtro === "troca" ? "troca" : "todas";
+  const filtro = sp.filtro === "troca" || sp.filtro === "sem-receita" ? sp.filtro : "todas";
 
   const supabase = await createClient();
   const bases = await carregarBasesReforma(supabase, { custosCreditaveisPct: custos, percentualB2b: b2b });
 
+  // Todas as empresas PJ ativas aparecem — inclusive as sem receita no sistema
+  // (empresa nova, nota emitida fora do Sefin Nacional etc.), que ficam na
+  // lista sem cálculo até a receita ser informada e salva no simulador.
   const linhas = bases
-    .filter((b) => b.entrada.receitaAnual + (b.entrada.receitaLivroCaixaAnual ?? 0) > 0)
     .map((b) => {
+      const semReceita = b.entrada.receitaAnual + (b.entrada.receitaLivroCaixaAnual ?? 0) <= 0;
       const regimeAtual = regimeAtualSimulado(b.taxRegime);
       const hoje = simularTodos(b.entrada, 2026);
       const noAno = simularTodos(b.entrada, ano);
-      const atualHoje = regimeAtual ? hoje.find((c) => c.regime === regimeAtual)! : null;
-      const atualNoAno = regimeAtual ? noAno.find((c) => c.regime === regimeAtual)! : null;
-      const melhor = melhorCenario(noAno);
+      const atualHoje = regimeAtual && !semReceita ? hoje.find((c) => c.regime === regimeAtual)! : null;
+      const atualNoAno = regimeAtual && !semReceita ? noAno.find((c) => c.regime === regimeAtual)! : null;
+      const melhor = semReceita ? null : melhorCenario(noAno);
       const economia = atualNoAno && melhor ? atualNoAno.cargaEfetiva - melhor.cargaEfetiva : 0;
       const recomendarTroca =
         atualNoAno != null && melhor != null && melhor.regime !== regimeAtual && trocaCompensa(economia, b.entrada.receitaAnual);
@@ -79,7 +82,19 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
       const destino = mudancaPara ? noAno.find((c) => c.regime === mudancaPara) : null;
       const economiaMudanca =
         atualNoAno && destino && destino.elegivel ? atualNoAno.cargaEfetiva - destino.cargaEfetiva : null;
-      return { b, regimeAtual, atualHoje, atualNoAno, melhor, economia, recomendarTroca, status, mudancaPara, economiaMudanca };
+      return {
+        b,
+        semReceita,
+        regimeAtual,
+        atualHoje,
+        atualNoAno,
+        melhor,
+        economia,
+        recomendarTroca,
+        status,
+        mudancaPara,
+        economiaMudanca,
+      };
     })
     // Não analisadas primeiro; já analisadas (verde/amarelo) vão para o fim.
     // Dentro de cada grupo, pela ordem do código do cliente.
@@ -90,13 +105,18 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
         x.b.nome.localeCompare(y.b.nome, "pt-BR"),
     );
 
-  const visiveis = filtro === "troca" ? linhas.filter((l) => l.recomendarTroca) : linhas;
+  const visiveis =
+    filtro === "troca"
+      ? linhas.filter((l) => l.recomendarTroca)
+      : filtro === "sem-receita"
+        ? linhas.filter((l) => l.semReceita)
+        : linhas;
   const comparaveis = linhas.filter((l) => l.atualHoje && l.atualNoAno);
   const totalHoje = comparaveis.reduce((a, l) => a + l.atualHoje!.total, 0);
   const totalAno = comparaveis.reduce((a, l) => a + l.atualNoAno!.total, 0);
   const comTroca = linhas.filter((l) => l.recomendarTroca);
   const economiaTotal = comTroca.reduce((a, l) => a + l.economia, 0);
-  const semReceita = bases.length - linhas.length;
+  const semReceita = linhas.filter((l) => l.semReceita).length;
   const aliq = ALIQUOTAS_REFERENCIA[ano];
 
   return (
@@ -137,6 +157,7 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
               <Select id="filtro" name="filtro" defaultValue={filtro}>
                 <option value="todas">Todos os clientes</option>
                 <option value="troca">Só com troca recomendada</option>
+                <option value="sem-receita">Só sem receita no sistema</option>
               </Select>
             </Field>
           </div>
@@ -158,9 +179,11 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Card className="p-4">
-          <div className="text-xs text-foreground/50">Clientes simulados</div>
+          <div className="text-xs text-foreground/50">Clientes na carteira</div>
           <div className="mt-1 text-2xl font-semibold text-foreground">{linhas.length}</div>
-          <div className="mt-1 text-xs text-foreground/50">{semReceita} sem receita nos últimos 12 meses</div>
+          <div className="mt-1 text-xs text-foreground/50">
+            {semReceita} sem receita no sistema (aparecem na lista sem cálculo)
+          </div>
           <div className="mt-1 text-xs">
             <span className="text-success">{linhas.filter((l) => l.status === "SEM_MUDANCA").length} sem mudança</span>
             {" · "}
@@ -219,7 +242,11 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
                     {l.b.nome}
                   </div>
                   <div className="text-xs text-foreground/50">
-                    {l.b.analise?.entrada
+                    {l.semReceita ? (
+                      <span className="font-medium text-warning">
+                        sem receita no sistema — informe no simulador e salve
+                      </span>
+                    ) : l.b.analise?.entrada
                       ? "dados da análise salva"
                       : l.b.receitaEstimada
                         ? `receita projetada de ${l.b.mesesReceita} mês(es)`
