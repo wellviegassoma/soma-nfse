@@ -265,6 +265,52 @@ export async function emitirGuiaIssPetropolis(
   return { ok: true, resumo, pdfBytes };
 }
 
+// Guia do ISS retido como TOMADOR (débito ISRSN que a Prefeitura gera
+// sozinha a partir das notas recebidas com retenção). Só emite o boleto de
+// um débito já existente — não declara nem consolida nada.
+export async function buscarGuiaIssRetidoPetropolis(
+  supabase: Supa,
+  companyId: string,
+  competencia: string,
+): Promise<{ ok: true; valor: number; pdfBytes: ArrayBuffer } | { ok: false; erro: string }> {
+  const empresa = await buscarEmpresaPetropolis(supabase, companyId);
+  if (!empresa.ok) return { ok: false, erro: empresa.erro };
+
+  let response: Response;
+  try {
+    response = await fetch(`${process.env.NFSE_ENGINE_URL}/petropolis/guia-iss-retido`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Token": process.env.NFSE_ENGINE_INTERNAL_TOKEN ?? "",
+      },
+      body: JSON.stringify({
+        cnpj: empresa.cnpj,
+        competencia,
+        login: empresa.loginProprio?.login,
+        senha_md5: empresa.loginProprio?.senhaMd5,
+        cmc: empresa.cmc,
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(80_000),
+    });
+  } catch {
+    return { ok: false, erro: "Não foi possível acessar o ISS de Petrópolis agora." };
+  }
+  if (!response.ok) {
+    const corpo = await response.json().catch(() => null);
+    return {
+      ok: false,
+      erro: (corpo && typeof corpo.detail === "string" && corpo.detail) || "Não foi possível gerar a guia do ISS retido.",
+    };
+  }
+  return {
+    ok: true,
+    valor: Number(response.headers.get("X-Valor-Guia") ?? 0) || 0,
+    pdfBytes: await response.arrayBuffer(),
+  };
+}
+
 export async function rodarConferenciaPetropolisParaTodasEmpresas(
   supabase: Supa,
   competencia: string,

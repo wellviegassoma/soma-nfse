@@ -1,6 +1,8 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { proximaCompetencia } from "@/lib/competencia";
+import { IBGE_PETROPOLIS } from "@/lib/iss-petropolis";
+import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import {
   eventosDaNota,
   lerRetencoes,
@@ -55,6 +57,10 @@ export type EmpresaReinf = {
   /** Eventos da Reinf que a empresa tem no mês (sem o ISS, que é municipal). */
   eventos: EventoReinf[];
   temIss: boolean;
+  /** Empresa de Petrópolis: dá pra baixar a guia do ISS retido (débito ISRSN) pelo sistema. */
+  petropolis: boolean;
+  /** "036 - LR Pena" — nome de arquivo das guias. */
+  prefixoArquivo: string;
   status: StatusReinf | null;
   observacao: string | null;
   marcadoEm: string | null;
@@ -145,7 +151,10 @@ export async function carregarCentralReinf(
 
   const companyIds = [...new Set(linhas.map((n) => n.company_id))];
   const [{ data: companies }, { data: fechamentos }] = await Promise.all([
-    supabase.from("companies").select("id, legal_name, trade_name, codigo_cliente, cnpj, tax_regime").in("id", companyIds),
+    supabase
+      .from("companies")
+      .select("id, legal_name, trade_name, codigo_cliente, cnpj, tax_regime, municipality_ibge_code")
+      .in("id", companyIds),
     supabase
       .from("reinf_fechamentos")
       .select("company_id, status, observacao, marcado_em")
@@ -224,6 +233,8 @@ export async function carregarCentralReinf(
       total: round2(Object.values(valores).reduce((a, b) => a + b, 0)),
       eventos,
       temIss: eventosSet.has("ISS"),
+      petropolis: c.municipality_ibge_code === IBGE_PETROPOLIS,
+      prefixoArquivo: prefixoArquivoEmpresa(c),
       status: (f?.status as StatusReinf | undefined) ?? (eventos.length ? "pendente" : null),
       observacao: (f?.observacao as string | null) ?? null,
       marcadoEm: (f?.marcado_em as string | null) ?? null,

@@ -8,6 +8,7 @@ import { formatarCpfCnpj, formatarData } from "@/lib/formatters";
 import { EVENTOS, NATUREZAS, type EventoReinf } from "@/lib/reinf-core";
 import type { EmpresaReinf, NotaReinf, StatusReinf } from "@/lib/reinf";
 import { ajustarNotaReinf, marcarReinf } from "@/lib/actions/reinf";
+import { GuiasIssRetidoLote } from "./GuiasIssRetidoLote";
 
 type Totais = {
   valores: Record<"irrf" | "pis" | "cofins" | "csll" | "cp" | "iss", number>;
@@ -92,6 +93,11 @@ export function CentralReinf(props: {
   }, [empresas, filtroEvento, filtroStatus, busca]);
 
   const pendentes = empresas.filter((e) => e.status === "pendente").length;
+  // Guia do ISS retido pelo sistema: só Petrópolis (débito ISRSN no portal).
+  const comGuiaIss = (e: EmpresaReinf) => e.petropolis && e.valores.iss > 0;
+  const empresasGuiaIss = filtradas
+    .filter(comGuiaIss)
+    .map((e) => ({ id: e.companyId, nome: e.nome, prefixoArquivo: e.prefixoArquivo }));
 
   function executar(acao: () => Promise<{ ok: true } | { ok: false; erro: string }>) {
     setErro(null);
@@ -163,6 +169,10 @@ export function CentralReinf(props: {
         </div>
       </Card>
 
+      <div className="flex justify-end">
+        <GuiasIssRetidoLote competencia={competencia} empresas={empresasGuiaIss} />
+      </div>
+
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div className="flex gap-1">
@@ -217,6 +227,7 @@ export function CentralReinf(props: {
                     </th>
                   ))}
                   <th className="px-3 py-2 text-right">Total</th>
+                  <th className="px-3 py-2 text-center">ISS retido</th>
                   <th className="px-3 py-2 text-left">Situação</th>
                 </tr>
               </thead>
@@ -257,6 +268,25 @@ export function CentralReinf(props: {
                         </td>
                       ))}
                       <td className="px-3 py-2 text-right font-semibold">{moeda(e.total)}</td>
+                      <td className="px-3 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
+                        {comGuiaIss(e) ? (
+                          <a
+                            href={`/admin/empresas/${e.companyId}/impostos/guia-iss-retido-petropolis?competencia=${competencia}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Baixa a guia do ISS retido (débito ISRSN) no portal de Petrópolis"
+                            className="inline-flex items-center whitespace-nowrap rounded-md border border-border px-2 py-1 text-xs font-medium text-brand hover:bg-surface-muted"
+                          >
+                            Gerar guia
+                          </a>
+                        ) : e.valores.iss > 0 ? (
+                          <span className="text-xs text-foreground/45" title="Guia pelo sistema só para Petrópolis">
+                            fora de Petrópolis
+                          </span>
+                        ) : (
+                          <span className="text-foreground/30">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2" onClick={(ev) => ev.stopPropagation()}>
                         {e.status ? (
                           <select
@@ -279,7 +309,7 @@ export function CentralReinf(props: {
                     </tr>
                     {aberta === e.companyId ? (
                       <tr>
-                        <td colSpan={12} className="bg-surface-muted/40 px-3 py-3">
+                        <td colSpan={13} className="bg-surface-muted/40 px-3 py-3">
                           <TabelaNotas notas={e.notas} competencia={competencia} podeMarcar={podeMarcar} executar={executar} ocupado={pendente} />
                         </td>
                       </tr>

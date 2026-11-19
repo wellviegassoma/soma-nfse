@@ -67,6 +67,8 @@ _USER_AGENT = (
 
 # Campos ocultos do <form name="AForm"> de cada linha de débito — os que
 # precisam ser reenviados pra emissao_boleto.php pra emitir aquela guia.
+_DIVIDA_ISS_RETIDO = "ISRSN"
+
 _CAMPOS_BOLETO = [
     "id_dividasparcelas", "nr_parcela", "st_unica", "dt_corrige",
     "ds_divida", "vl_multa", "vl_juros", "vl_correcao", "st_divida",
@@ -313,7 +315,7 @@ class ClientePetropolis:
         self._sessao.post(LOGIN_URL, data={"clientes": empresa_id}, timeout=30)
 
     def _extrair_linha_debito(
-        self, html: str, ano_mes_alvo: tuple[int, int] | None
+        self, html: str, ano_mes_alvo: tuple[int, int] | None, retido: bool = False
     ) -> tuple[dict[str, str], tuple[int, int]] | None:
         """
         Devolve (campos_do_form, (ano, mes)_da_competencia) da linha de
@@ -334,6 +336,24 @@ class ClientePetropolis:
                     break
                 campos[nome] = els[0].get("value", "")
             else:
+                # ISRSN = ISS retido como TOMADOR (nota recebida com retenção,
+                # gerado pela própria Prefeitura). Exercício = ano e Parc. =
+                # mês da competência; vence ~dia 15 do mês seguinte — pelo
+                # vencimento cairia na mesma competência do ISS próprio (IV.),
+                # por isso os dois nunca se misturam aqui.
+                celulas = [" ".join(td.text_content().split()) for td in linha.xpath("./td")]
+                idx_retido = next((i for i, c in enumerate(celulas) if c == _DIVIDA_ISS_RETIDO), None)
+                if retido:
+                    if idx_retido is None or idx_retido < 1 or idx_retido + 2 >= len(celulas):
+                        continue
+                    try:
+                        competencia_linha = (int(celulas[idx_retido - 1]), int(celulas[idx_retido + 2]))
+                    except ValueError:
+                        continue
+                    candidatos.append((campos, competencia_linha))
+                    continue
+                if idx_retido is not None:
+                    continue
                 textos = linha.xpath(".//td/div[@align='center']/text()")
                 datas = [t.strip() for t in textos if _REGEX_DATA.match(t.strip())]
                 if not datas:
@@ -688,6 +708,48 @@ class ClientePetropolis:
 
         resumo = self._consultar_resumo_periodo(ano, mes)
         return r.content, resumo
+
+    def buscar_guia_iss_retido(
+        self, cnpj: str, competencia: str, cmc: str | None = None
+    ) -> tuple[bytes, float]:
+        """
+        Guia do ISS retido como tomador (débito ISRSN) da competência — a
+        Prefeitura cria esse débito sozinha a partir das notas recebidas com
+        ISS retido (conferido ao vivo em 11/2026: valores batem centavo a
+        centavo com o vISSQN das notas). Só emite o boleto de um débito que
+        já existe, como no ISS próprio; não declara nada. Devolve (pdf, valor).
+        """
+        ano_mes_alvo = _ano_mes_da_competencia(competencia)
+        if not self._login_proprio:
+            if cmc:
+                self._selecionar_empresa_por_cmc(cmc, cnpj)
+            else:
+                self._selecionar_empresa_por_cnpj(cnpj)
+        resp = self._sessao.get(
+            f"{BASE_URL}/iss-levantamento_debitos.php",
+            params={"st_divida": "0", "st_parcela": "1"},
+            timeout=30,
+        )
+        sem_debito = "não foram localizados" in resp.text.lower()
+        resultado = None if sem_debito else self._extrair_linha_debito(resp.text, ano_mes_alvo, retido=True)
+        if resultado is None:
+            raise ErroPetropolis(
+                f"Nenhuma guia de ISS retido em aberto pra {ano_mes_alvo[1]:02d}/{ano_mes_alvo[0]} "
+                "— a Prefeitura ainda não gerou o débito (as notas recebidas entram com atraso), "
+                "ou ele já foi pago."
+            )
+        campos, _ = resultado
+        r = self._sessao.post(
+            f"{BASE_URL}/emissao_boleto.php",
+            params={"st_cartao": "1"},
+            data={**campos, "bt_boleto": "0"},
+            timeout=45,
+        )
+        if "pdf" not in r.headers.get("content-type", "").lower():
+            raise ErroPetropolis("Não foi possível gerar o PDF da guia de ISS retido.")
+        bruto = (campos.get("vl_parcela") or "0").strip()
+        valor = _valor_para_float(bruto) if "," in bruto else float(bruto or 0)
+        return r.content, valor
 
     def _consolidar_periodo(self, ano: int, mes: int) -> None:
         """

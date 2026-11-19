@@ -283,6 +283,24 @@ def buscar_guia_iss_petropolis(req: GuiaIssPetropolisRequest):
     return _resposta_guia_pdf(pdf_bytes, resumo)
 
 
+@app.post("/petropolis/guia-iss-retido", dependencies=[Depends(exigir_token_interno)])
+def buscar_guia_iss_retido_petropolis(req: GuiaIssPetropolisRequest):
+    """Boleto do ISS retido como tomador (débito ISRSN) — ver
+    ClientePetropolis.buscar_guia_iss_retido. Só emite guia de débito já existente."""
+    if not req.competencia:
+        raise HTTPException(status_code=422, detail="Informe a competência (AAAA-MM).")
+    try:
+        with ClientePetropolis(req.login, req.senha_md5) as cliente:
+            pdf_bytes, valor = cliente.buscar_guia_iss_retido(req.cnpj, req.competencia, req.cmc)
+    except ErroPetropolis as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"X-Valor-Guia": f"{valor:.2f}"},
+    )
+
+
 @app.post("/petropolis/clientes-contador", dependencies=[Depends(exigir_token_interno)])
 def listar_clientes_contador_petropolis():
     """Só leitura — lista (CMC, nome) dos clientes do login único do escritório."""
