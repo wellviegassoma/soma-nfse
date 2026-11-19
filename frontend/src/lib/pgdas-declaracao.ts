@@ -65,6 +65,31 @@ export function removerPeriodoDesnecessario(
   return copia as Record<string, unknown>;
 }
 
+// Empresa optante pelo regime de CAIXA no Simples: a Serpro exige
+// receitaPaCaixaInterno/Externo mesmo que zero (MSG_ISN_037, JH MED, 11/2026).
+// O sistema não sabe de antemão o regime (é opção feita no PGDAS-D) nem tem o
+// recebido no mês — usa a mesma receita das notas, que é o que o fechamento
+// já calcula. Devolve os dados corrigidos, ou null se a mensagem não é essa.
+export function incluirReceitaCaixa(
+  dados: Record<string, unknown>,
+  mensagemSerpro: string,
+): Record<string, unknown> | null {
+  if (!/MSG_ISN_037|regime de Caixa deve possuir/i.test(mensagemSerpro)) return null;
+  const copia = structuredClone(dados) as {
+    declaracao?: {
+      receitaPaCompetenciaInterno?: number;
+      receitaPaCompetenciaExterno?: number;
+      receitaPaCaixaInterno?: number;
+      receitaPaCaixaExterno?: number;
+    };
+  };
+  const decl = copia.declaracao;
+  if (!decl || decl.receitaPaCaixaInterno !== undefined) return null;
+  decl.receitaPaCaixaInterno = decl.receitaPaCompetenciaInterno ?? 0;
+  decl.receitaPaCaixaExterno = decl.receitaPaCompetenciaExterno ?? 0;
+  return copia as Record<string, unknown>;
+}
+
 export type DeclaracaoPgdasResultado =
   | { dados: null; bloqueios: string[] }
   | { dados: Record<string, unknown>; bloqueios: [] };

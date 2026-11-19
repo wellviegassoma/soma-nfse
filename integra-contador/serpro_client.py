@@ -99,6 +99,13 @@ def _extrair_motivo_erro(texto_resposta: str) -> str:
     return texto_resposta[:2000]
 
 
+def _dados_vazios(corpo: Any) -> bool:
+    if not isinstance(corpo, dict):
+        return False
+    dados = corpo.get("dados")
+    return dados is None or (isinstance(dados, str) and dados.strip() in ("", "[]", "{}", "null"))
+
+
 def chamar(id_sistema: str, id_servico: str, contribuinte_cnpj: str, dados: dict[str, Any]) -> dict:
     try:
         servico = obter_servico(id_sistema, id_servico)
@@ -113,6 +120,8 @@ def chamar(id_sistema: str, id_servico: str, contribuinte_cnpj: str, dados: dict
     # normal logo abaixo — é o único registro que sobra do recibo/DARF.
     if servico.rota != "Declarar":
         cacheado = cache.buscar(id_sistema, id_servico, contribuinte_cnpj, dados, servico.cache_ttl_segundos)
+        if cacheado is not None and servico.rota == "Emitir" and _dados_vazios(cacheado["resposta"]):
+            cacheado = None  # resposta vazia guardada antes dessa regra — busca de novo
         if cacheado is not None:
             _logar(
                 id_sistema, id_servico, contribuinte_cnpj, cacheado["status"], True, int((time.monotonic() - inicio) * 1000)
@@ -146,6 +155,11 @@ def chamar(id_sistema: str, id_servico: str, contribuinte_cnpj: str, dados: dict
         )
     corpo = resposta.json()
 
-    cache.salvar(id_sistema, id_servico, contribuinte_cnpj, dados, corpo, resposta.status_code)
+    # Documento que ainda não existe (ex.: GERARDAS12 antes de a declaração
+    # ser transmitida devolve dados "[]" + aviso MSG_ISN_005) não vai pro
+    # cache: senão, depois de transmitir, o lote de guias continuava lendo a
+    # resposta vazia por um dia inteiro (Central Simples, 18/11/2026).
+    if not (servico.rota == "Emitir" and _dados_vazios(corpo)):
+        cache.salvar(id_sistema, id_servico, contribuinte_cnpj, dados, corpo, resposta.status_code)
     _logar(id_sistema, id_servico, contribuinte_cnpj, resposta.status_code, False, int((time.monotonic() - inicio) * 1000))
     return corpo

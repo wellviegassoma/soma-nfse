@@ -45,8 +45,9 @@ export function BaixarGuiasSimplesLoteButton({
       setEmpresaAtual(empresa.nome);
       try {
         const resposta = await fetch(`/admin/empresas/${empresa.id}/integra-contador/simples/das/${periodoApuracao}`);
-        if (!resposta.ok || resposta.headers.get("Content-Type") !== "application/pdf") {
-          falhasLocais.push(empresa.nome);
+        if (!resposta.ok || !resposta.headers.get("Content-Type")?.startsWith("application/pdf")) {
+          const corpo = await resposta.json().catch(() => null);
+          falhasLocais.push(`${empresa.nome}${corpo?.error ? ` (${corpo.error})` : ` (HTTP ${resposta.status})`}`);
           continue;
         }
         const blob = await resposta.blob();
@@ -67,7 +68,9 @@ export function BaixarGuiasSimplesLoteButton({
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
       setConcluido(true);
     } else if (empresas.length > 0) {
-      setErro("Não consegui gerar nenhuma guia — confira se as declarações já foram transmitidas.");
+      setErro(
+        `Não consegui gerar nenhuma guia. Motivos: ${falhasLocais.slice(0, 5).join("; ")}${falhasLocais.length > 5 ? "…" : ""}`,
+      );
     }
 
     setEmpresaAtual(null);
@@ -115,8 +118,7 @@ export function BaixarGuiasSimplesLoteButton({
           ZIP baixado.
           {falhas.length > 0 && (
             <span className="mt-1 block">
-              {falhas.length} guia(s) não geraram (provavelmente ainda não declaradas):{" "}
-              {falhas.join(", ")}.
+              {falhas.length} guia(s) não geraram: {falhas.join("; ")}.
             </span>
           )}
         </Alert>

@@ -8,7 +8,7 @@ import {
   receitaComManual,
 } from "@/lib/faturamento";
 import { buscarFolhaMensal, totalFolhaComEncargos } from "@/lib/folha";
-import { montarDeclaracaoPgdasD, removerPeriodoDesnecessario } from "@/lib/pgdas-declaracao";
+import { incluirReceitaCaixa, montarDeclaracaoPgdasD, removerPeriodoDesnecessario } from "@/lib/pgdas-declaracao";
 import {
   COLUNAS_EMPRESA_SIMPLES,
   buscarExtrasConferencia,
@@ -165,7 +165,8 @@ export async function POST(
 
     body = await response.json().catch(() => null);
     if (response.ok || tentativa >= 12) break;
-    const corrigido = removerPeriodoDesnecessario(dadosEnviados, String(body?.detail ?? ""));
+    const mensagem = String(body?.detail ?? "");
+    const corrigido = removerPeriodoDesnecessario(dadosEnviados, mensagem) ?? incluirReceitaCaixa(dadosEnviados, mensagem);
     if (!corrigido) break;
     dadosEnviados = corrigido;
   }

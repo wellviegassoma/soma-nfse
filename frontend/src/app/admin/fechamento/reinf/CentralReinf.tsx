@@ -339,6 +339,7 @@ function TabelaNotas(props: {
           <th className="px-2 py-1.5 text-left">Natureza</th>
           <th className="px-2 py-1.5 text-left">Pago em</th>
           <th className="px-2 py-1.5 text-center">Ignorar</th>
+          <th className="px-2 py-1.5 text-center">PDF</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-border/70">
@@ -418,10 +419,21 @@ function TabelaNotas(props: {
                     onChange={(e) => executar(() => ajustarNotaReinf(n.id, { ignorar: e.target.checked }))}
                   />
                 </td>
+                <td className="px-2 py-1.5 text-center">
+                  <a
+                    href={`/admin/empresas/${n.companyId}/fechamento/notas/${n.id}/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center rounded border border-border px-2 py-1 font-medium text-brand hover:bg-surface-muted"
+                    title="Abrir o PDF da nota numa nova aba"
+                  >
+                    PDF
+                  </a>
+                </td>
               </tr>
               {n.alertas.length || n.parcialNoMes || (n.mesPagamento && n.competencia !== competencia) ? (
                 <tr>
-                  <td colSpan={comEmpresa ? 15 : 14} className="px-2 pb-2 text-[11px] text-warning">
+                  <td colSpan={comEmpresa ? 16 : 15} className="px-2 pb-2 text-[11px] text-warning">
                     {n.mesPagamento && n.competencia !== competencia ? `Nota de ${n.competencia.split("-").reverse().join("/")}, paga neste mês. ` : ""}
                     {n.parcialNoMes ? "Parte da retenção foi para outro mês (pagamento ou competência diferentes). " : ""}
                     {n.alertas.join(" ")}
