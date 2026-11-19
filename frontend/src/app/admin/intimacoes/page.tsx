@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { formatarData, formatarDataHora } from "@/lib/formatters";
 import { cn } from "@/lib/cn";
+import { hojeBrasilia } from "@/lib/competencia";
 import { ehIntimacao, ORIGEM, STATUS_LABEL, type StatusTratamento } from "@/lib/caixa-postal-core";
 import { empresasParaLer } from "@/lib/caixa-postal";
 import { TratamentoMensagem } from "./TratamentoMensagem";
@@ -49,6 +50,7 @@ function cienciaTacita(enviadaEm: string): string {
 
 export default async function IntimacoesPage({ searchParams }: PageProps<"/admin/intimacoes">) {
   const sp = await searchParams;
+  const hoje = hojeBrasilia();
   const filtro: Filtro = sp.filtro === "resolvidas" || sp.filtro === "todas" ? sp.filtro : "abertas";
   const soDestaque = sp.destaque === "1";
   const empresaFiltro = typeof sp.empresa === "string" ? sp.empresa : null;
@@ -239,7 +241,8 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
                         </span>
                       ) : m.ciencia_em ? (
                         <span className="font-medium text-warning">
-                          Ninguém abriu · ciência automática em {dataSemHora(m.ciencia_em)} (prazo já corre)
+                          Ninguém abriu · ciência automática em {dataSemHora(m.ciencia_em)}
+                          {m.ciencia_em <= hoje ? " (prazo já corre)" : " (prazo ainda não começou)"}
                         </span>
                       ) : (
                         <>Ninguém abriu ainda · ciência automática em {tacita ? formatarData(tacita) : "—"}</>
