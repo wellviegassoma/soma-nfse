@@ -15,6 +15,8 @@ type Tab = { href: string; label: string; exact?: boolean };
 const TAB_VISAO_GERAL: Tab = { href: "/admin", label: "Visão geral", exact: true };
 const TAB_EMPRESAS: Tab = { href: "/admin/empresas", label: "Empresas" };
 const TAB_FECHAMENTO: Tab = { href: "/admin/fechamento", label: "Fechamento" };
+// Simulador CBS/IBS da carteira (calculadoras RTC da Receita, Portaria Cotec 342/2026).
+const TAB_REFORMA: Tab = { href: "/admin/reforma-tributaria", label: "Reforma Tributária" };
 const TAB_CERTIFICADOS: Tab = { href: "/admin/certificados", label: "Certificados" };
 const TAB_AUTOMACAO: Tab = { href: "/admin/automacao", label: "Automação" };
 // Pouco usadas: no fim, depois de um separador, mais apagadas.
@@ -84,6 +86,7 @@ export function AdminNav({
     TAB_EMPRESAS,
     ...(podeEmitirNotas ? [TAB_EMISSAO_NOTAS, TAB_PEDIDOS_NOTA] : []),
     TAB_FECHAMENTO,
+    TAB_REFORMA,
     TAB_CERTIFICADOS,
     TAB_AUTOMACAO,
     ...(podeGerenciarUsuarios ? [TAB_USUARIOS] : []),
