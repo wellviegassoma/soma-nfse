@@ -15,6 +15,8 @@ type Tab = { href: string; label: string; exact?: boolean };
 const TAB_VISAO_GERAL: Tab = { href: "/admin", label: "Visão geral", exact: true };
 const TAB_EMPRESAS: Tab = { href: "/admin/empresas", label: "Empresas" };
 const TAB_FECHAMENTO: Tab = { href: "/admin/fechamento", label: "Fechamento" };
+// Caixa Postal do e-CAC de toda a carteira (docs: lib/caixa-postal-core.ts).
+const TAB_INTIMACOES: Tab = { href: "/admin/intimacoes", label: "Intimações" };
 // Simulador CBS/IBS da carteira (calculadoras RTC da Receita, Portaria Cotec 342/2026).
 const TAB_REFORMA: Tab = { href: "/admin/reforma-tributaria", label: "Reforma Tributária" };
 const TAB_CERTIFICADOS: Tab = { href: "/admin/certificados", label: "Certificados" };
@@ -73,11 +75,13 @@ export function AdminNav({
   podeGerenciarUsuarios,
   podeEmitirNotas,
   pedidosPendentes = 0,
+  intimacoesNovas = 0,
 }: {
   isSuperAdmin: boolean;
   podeGerenciarUsuarios: boolean;
   podeEmitirNotas: boolean;
   pedidosPendentes?: number;
+  intimacoesNovas?: number;
 }) {
   const pathname = usePathname();
   const pendentes = usePedidosPendentes(podeEmitirNotas, pedidosPendentes, pathname);
@@ -86,6 +90,7 @@ export function AdminNav({
     TAB_EMPRESAS,
     ...(podeEmitirNotas ? [TAB_EMISSAO_NOTAS, TAB_PEDIDOS_NOTA] : []),
     TAB_FECHAMENTO,
+    TAB_INTIMACOES,
     TAB_REFORMA,
     TAB_CERTIFICADOS,
     TAB_AUTOMACAO,
@@ -122,6 +127,15 @@ export function AdminNav({
                 aria-label={`${pendentes} pendente(s)`}
               >
                 {pendentes > 99 ? "99+" : pendentes}
+              </span>
+            ) : null}
+            {tab.href === TAB_INTIMACOES.href && intimacoesNovas > 0 ? (
+              <span
+                className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 align-middle text-xs font-bold leading-none text-white"
+                title={`${intimacoesNovas} mensagem(ns) da Caixa Postal sem ninguém tratando`}
+                aria-label={`${intimacoesNovas} nova(s)`}
+              >
+                {intimacoesNovas > 99 ? "99+" : intimacoesNovas}
               </span>
             ) : null}
           </Link>

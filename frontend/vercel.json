@@ -7,6 +7,18 @@
     {
       "path": "/api/cron/financeiro-recorrencias",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/caixa-postal",
+      "schedule": "0 10 * * 1"
+    },
+    {
+      "path": "/api/cron/caixa-postal?rodada=2",
+      "schedule": "15 10 * * 1"
+    },
+    {
+      "path": "/api/cron/caixa-postal?rodada=3",
+      "schedule": "30 10 * * 1"
     }
   ]
 }

@@ -4,6 +4,8 @@ import { Logo } from "@/components/Logo";
 import { LogoutButton } from "@/components/LogoutButton";
 import { AdminNav } from "@/components/AdminNav";
 import { contarPedidosPendentes } from "@/lib/actions/pedidos-nota";
+import { contarIntimacoesNovas } from "@/lib/caixa-postal";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function AdminLayout({
   children,
@@ -18,6 +20,8 @@ export default async function AdminLayout({
   const podeVerComercial = await temPermissao("comercial.ver");
   // Selo da aba Pedidos de Nota (o AdminNav atualiza sozinho a cada minuto).
   const pedidosPendentes = podeEmitirNotas ? await contarPedidosPendentes().catch(() => 0) : 0;
+  // Selo da aba Intimações: Caixa Postal do e-CAC sem ninguém tratando.
+  const intimacoesNovas = await contarIntimacoesNovas(await createClient()).catch(() => 0);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -75,6 +79,7 @@ export default async function AdminLayout({
           podeGerenciarUsuarios={podeGerenciarUsuarios}
           podeEmitirNotas={podeEmitirNotas}
           pedidosPendentes={pedidosPendentes}
+          intimacoesNovas={intimacoesNovas}
         />
         <div className="pt-6">{children}</div>
       </div>
