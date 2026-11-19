@@ -44,6 +44,10 @@ export async function GET(request: Request) {
     return so || !l.ok || Date.now() - new Date(l.lida_em as string).getTime() > PULAR_SE_LIDA_HA_MENOS_DE_MS;
   });
 
+  // Nunca lidas primeiro, depois da leitura mais antiga para a mais recente:
+  // quem acabou de falhar (609) vai para o fim e a rodada sempre avança.
+  fila.sort((a, b) => (porEmpresa.get(a.id)?.lida_em ?? "").localeCompare(porEmpresa.get(b.id)?.lida_em ?? ""));
+
   let lidas = 0;
   let novas = 0;
   let semDec = 0;

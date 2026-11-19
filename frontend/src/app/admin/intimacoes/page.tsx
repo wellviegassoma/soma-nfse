@@ -53,6 +53,31 @@ function cienciaTacita(enviadaEm: string): string {
   return d.toISOString();
 }
 
+// Última rodada de cada rotina (vercel.json, toda segunda): quando foi, quantas
+// empresas deram certo nas 24h dela e quantas falharam. Mais de 8 dias sem
+// rodar = a rotina parou, e a tela avisa em vermelho.
+function resumoRotina(linhas: { quando: string; ok: boolean }[]) {
+  const ultima = linhas.filter((l) => l.ok).map((l) => l.quando).sort().at(-1) ?? null;
+  if (!ultima) return { ultima: null, ok: 0, falhas: linhas.filter((l) => !l.ok).length, atrasada: true };
+  const inicio = new Date(ultima).getTime() - 24 * 3600_000;
+  const daRodada = linhas.filter((l) => new Date(l.quando).getTime() >= inicio);
+  return {
+    ultima,
+    ok: daRodada.filter((l) => l.ok).length,
+    falhas: daRodada.filter((l) => !l.ok).length,
+    atrasada: Date.now() - new Date(ultima).getTime() > 8 * 24 * 3600_000,
+  };
+}
+
+/** Próxima segunda às 7h (Brasília), horário do primeiro cron do vercel.json → dd/mm/aaaa. */
+function proximaSegundaBr(): string {
+  const br = new Date(Date.now() - 3 * 3600_000); // "relógio" de Brasília em campos UTC
+  const dow = br.getUTCDay();
+  const dias = dow === 1 && br.getUTCHours() < 7 ? 0 : (8 - dow) % 7 || 7;
+  const d = new Date(Date.UTC(br.getUTCFullYear(), br.getUTCMonth(), br.getUTCDate() + dias));
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
+}
+
 export default async function IntimacoesPage({ searchParams }: PageProps<"/admin/intimacoes">) {
   const sp = await searchParams;
   const hoje = hojeBrasilia();
@@ -74,6 +99,10 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
   if (filtro === "resolvidas") consulta = consulta.eq("status", "resolvida");
   if (empresaFiltro) consulta = consulta.eq("company_id", empresaFiltro);
 
+  const [{ data: leiturasDec }, { data: verificacoesCnpj }] = await Promise.all([
+    supabase.from("dec_rj_leituras").select("lida_em, ok, ativo"),
+    supabase.from("cnpj_situacoes").select("verificado_em, ok"),
+  ]);
   const { data: situacoesForaDeAtiva } = await supabase
     .from("cnpj_situacoes")
     .select("company_id, situacao, data_situacao, motivo, situacao_anterior, mudou_em, verificado_em")
@@ -122,11 +151,26 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
   const nEmTratamento = abertas.filter((m) => m.status === "em_tratamento").length;
   const comFalha = empresas.filter((e) => leituraPorEmpresa.get(e.id)?.ok === false);
   const nuncaLidas = empresas.filter((e) => !leituraPorEmpresa.has(e.id));
-  const ultimaLeitura = (leituras ?? [])
-    .filter((l) => l.ok)
-    .map((l) => l.lida_em as string)
-    .sort()
-    .at(-1);
+  const rotinas = [
+    {
+      nome: "Caixa Postal do e-CAC",
+      fonte: "Integra Contador",
+      ...resumoRotina((leituras ?? []).map((l) => ({ quando: l.lida_em as string, ok: !!l.ok }))),
+    },
+    {
+      nome: "DeC da SEFAZ-RJ",
+      fonte: "Infosimples",
+      ...resumoRotina(
+        (leiturasDec ?? []).filter((l) => l.ativo !== false || l.ok).map((l) => ({ quando: l.lida_em as string, ok: !!l.ok })),
+      ),
+    },
+    {
+      nome: "Situação do CNPJ",
+      fonte: "BrasilAPI",
+      ...resumoRotina((verificacoesCnpj ?? []).map((v) => ({ quando: v.verificado_em as string, ok: !!v.ok }))),
+    },
+  ];
+  const proximaSegunda = proximaSegundaBr();
 
   const href = (mud: Record<string, string | null>) => {
     const q = new URLSearchParams();
@@ -142,14 +186,41 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
         <div>
           <h1 className="text-xl font-semibold text-foreground">Intimações e mensagens oficiais</h1>
           <p className="text-sm text-foreground/60">
-            Caixa Postal do e-CAC (Integra Contador) e DeC da SEFAZ-RJ (Infosimples) de toda a carteira, lidos toda segunda-feira de manhã.
-            {ultimaLeitura ? ` Última leitura: ${formatarDataHora(ultimaLeitura)}.` : " Ainda não houve leitura."}
+            Caixa Postal do e-CAC, DeC da SEFAZ-RJ e situação do CNPJ de toda a carteira, lidos sozinhos toda
+            segunda-feira de manhã. Próxima: segunda, {proximaSegunda}, a partir das 7h.
           </p>
         </div>
         <LerCaixaPostalButton
           empresas={empresas.filter((e) => !empresaFiltro || e.id === empresaFiltro).map((e) => ({ id: e.id, nome: e.nome }))}
           rotulo={empresaFiltro ? "Ler esta empresa agora" : "Ler todas agora"}
         />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {rotinas.map((r) => (
+          <div
+            key={r.nome}
+            className={cn(
+              "rounded-xl border p-3 text-sm",
+              r.atrasada ? "border-danger bg-danger-soft text-danger" : "border-border bg-surface",
+            )}
+          >
+            <p className="font-semibold text-foreground">
+              {r.nome} <span className="font-normal text-foreground/50">· {r.fonte}</span>
+            </p>
+            {r.ultima ? (
+              <p className={cn("mt-0.5", r.atrasada ? "font-semibold" : "text-foreground/70")}>
+                Última leitura: {formatarDataHora(r.ultima)}
+                {r.atrasada && " (mais de 8 dias: a rotina pode ter parado)"}
+              </p>
+            ) : (
+              <p className="mt-0.5 font-semibold">Ainda não rodou.</p>
+            )}
+            <p className="text-xs text-foreground/50">
+              {r.ok} empresa(s) lida(s){r.falhas ? ` · ${r.falhas} com erro` : ""} nessa rodada
+            </p>
+          </div>
+        ))}
       </div>
 
       <div className="rounded-xl border border-warning/20 bg-warning-soft p-4 text-sm text-warning">
