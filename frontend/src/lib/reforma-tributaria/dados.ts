@@ -7,6 +7,7 @@ import { buscarAtividade } from "@/lib/simples-nacional-atividades";
 import { sugerirAtividade } from "@/lib/lc116-sugestao-atividade";
 import { REDUCAO_POR_CCLASSTRIB } from "@/lib/reforma-tributaria/parametros";
 import type { EntradaSimulacao } from "@/lib/reforma-tributaria/motor";
+import { aplicarAnalise, type AnaliseReforma, type StatusAnalise } from "@/lib/reforma-tributaria/analise";
 import type { IssTipo, TaxRegime } from "@/lib/types";
 
 // Base de cada cliente para o simulador: últimos 12 meses fechados de
@@ -26,6 +27,11 @@ export type BaseEmpresaReforma = {
   // De onde veio o Anexo III × V do Simples: cadastro (cliente do Simples),
   // atividade dos serviços, ou presumido sujeito ao Fator R (conservador).
   origemAnexo: "cadastro" | "servicos" | "presumido";
+  // Análise salva pelo contador (null = não analisada).
+  analise: AnaliseReforma | null;
+  // Dados do sistema, sem a análise salva (botão "voltar aos dados do sistema").
+  entradaSistema: EntradaSimulacao;
+  // O que a simulação usa: dados do sistema + o que foi salvo na análise.
   entrada: EntradaSimulacao;
 };
 
@@ -66,7 +72,7 @@ export async function carregarBasesReforma(
     .order("legal_name", { ascending: true });
   if (opcoes.companyId) companiesQuery = companiesQuery.eq("id", opcoes.companyId);
 
-  const [{ data: companies }, dpsRows, folhas, { data: manuais }, { data: servicos }] = await Promise.all([
+  const [{ data: companies }, dpsRows, folhas, { data: manuais }, { data: servicos }, { data: analises }] = await Promise.all([
     companiesQuery,
     buscarTudoPaginado<DpsRow>((from, to) => {
       let q = supabase.from("dps").select("company_id, valor, status, data_competencia, nfse(status, access_key)");
@@ -90,7 +96,38 @@ export async function carregarBasesReforma(
       if (opcoes.companyId) q = q.eq("company_id", opcoes.companyId);
       return q;
     })(),
+    (() => {
+      let q = supabase
+        .from("reforma_analises")
+        .select(
+          "company_id, status, observacao, tem_livro_caixa, livro_caixa_media_mensal, livro_caixa_meses, entrada, regime_recomendado, analisado_em, perfil:profiles!reforma_analises_analisado_por_fkey(full_name)",
+        );
+      if (opcoes.companyId) q = q.eq("company_id", opcoes.companyId);
+      return q;
+    })(),
   ]);
+
+  const analisePorEmpresa = new Map<string, AnaliseReforma>();
+  for (const a of analises ?? []) {
+    const perfil = Array.isArray(a.perfil) ? a.perfil[0] : a.perfil;
+    const meses: Record<string, number> = {};
+    for (const [k, v] of Object.entries((a.livro_caixa_meses ?? {}) as Record<string, unknown>)) {
+      if (Number(v) > 0) meses[k] = Number(v);
+    }
+    analisePorEmpresa.set(a.company_id, {
+      status: a.status as StatusAnalise,
+      observacao: a.observacao,
+      livroCaixa: {
+        tem: Boolean(a.tem_livro_caixa),
+        mediaMensal: a.livro_caixa_media_mensal != null ? Number(a.livro_caixa_media_mensal) : null,
+        meses,
+      },
+      entrada: (a.entrada ?? null) as AnaliseReforma["entrada"],
+      regimeRecomendado: a.regime_recomendado,
+      analisadoPor: (perfil as { full_name?: string | null } | null)?.full_name ?? null,
+      analisadoEm: a.analisado_em,
+    });
+  }
 
   // Chaves já cobertas por dps não entram de novo pela RPC (mesma dedup da Visão geral).
   const chavesDps: string[] = [];
@@ -203,6 +240,22 @@ export async function carregarBasesReforma(
         ? Number(c.iss_valor_fixo_profissional) * Number(c.iss_quantidade_profissionais) * 12
         : null;
 
+    const entradaSistema: EntradaSimulacao = {
+      receitaAnual: rb.rbt12,
+      receitaHospitalarAnual: Math.min(hosp, rb.rbt12),
+      salariosAnual: (folha?.salarios ?? 0) * escalaFolha,
+      proLaboreAnual: (folha?.proLabore ?? 0) * escalaFolha,
+      fgtsAnual: (folha?.fgts ?? 0) * escalaFolha,
+      sujeitoFatorR,
+      anexoIV,
+      aliquotaIss: c.iss_aliquota_padrao != null ? Number(c.iss_aliquota_padrao) : ISS_PADRAO,
+      issFixoAnual,
+      reducaoCbsIbs: reducao,
+      custosCreditaveisPct: opcoes.custosCreditaveisPct ?? CUSTOS_CREDITAVEIS_PADRAO,
+      percentualB2b: opcoes.percentualB2b ?? B2B_PADRAO,
+    };
+    const analise = analisePorEmpresa.get(c.id) ?? null;
+
     return {
       id: c.id,
       nome: c.trade_name || c.legal_name,
@@ -213,20 +266,9 @@ export async function carregarBasesReforma(
       folhaInformada: Boolean(folha),
       cClassTrib,
       origemAnexo,
-      entrada: {
-        receitaAnual: rb.rbt12,
-        receitaHospitalarAnual: Math.min(hosp, rb.rbt12),
-        salariosAnual: (folha?.salarios ?? 0) * escalaFolha,
-        proLaboreAnual: (folha?.proLabore ?? 0) * escalaFolha,
-        fgtsAnual: (folha?.fgts ?? 0) * escalaFolha,
-        sujeitoFatorR,
-        anexoIV,
-        aliquotaIss: c.iss_aliquota_padrao != null ? Number(c.iss_aliquota_padrao) : ISS_PADRAO,
-        issFixoAnual,
-        reducaoCbsIbs: reducao,
-        custosCreditaveisPct: opcoes.custosCreditaveisPct ?? CUSTOS_CREDITAVEIS_PADRAO,
-        percentualB2b: opcoes.percentualB2b ?? B2B_PADRAO,
-      },
+      analise,
+      entradaSistema,
+      entrada: aplicarAnalise(entradaSistema, analise),
     };
   });
 }

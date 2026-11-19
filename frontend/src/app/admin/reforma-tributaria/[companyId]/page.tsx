@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { carregarBasesReforma, CUSTOS_CREDITAVEIS_PADRAO, B2B_PADRAO } from "@/lib/reforma-tributaria/dados";
 import { NOMES_CCLASSTRIB } from "@/lib/ibscbs-correlacao";
 import { TAX_REGIME_LABELS } from "@/lib/types";
+import { competenciasRbt12 } from "@/lib/faturamento";
+import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { SimuladorEmpresa } from "./SimuladorEmpresa";
 
 export const metadata = { title: "Simulador da Reforma — Painel SOMA" };
@@ -51,8 +53,12 @@ export default async function SimuladorEmpresaPage(props: PageProps<"/admin/refo
         </p>
       </div>
       <SimuladorEmpresa
+        companyId={base.id}
         taxRegime={base.taxRegime}
         inicial={base.entrada}
+        sistema={base.entradaSistema}
+        analise={base.analise}
+        mesesLivroCaixa={[...competenciasRbt12(mesCorrenteBrasilia())].reverse()}
         folhaInformada={base.folhaInformada}
       />
     </div>

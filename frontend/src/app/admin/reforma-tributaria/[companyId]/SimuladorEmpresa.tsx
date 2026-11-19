@@ -1,6 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/Button";
+import { descartarAnaliseReforma, salvarAnaliseReforma } from "@/lib/actions/reforma-tributaria";
+import {
+  ROTULO_STATUS,
+  receitaLivroCaixaAnual,
+  type AnaliseReforma,
+  type LivroCaixa,
+  type StatusAnalise,
+} from "@/lib/reforma-tributaria/analise";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -9,6 +19,7 @@ import { cn } from "@/lib/cn";
 import { formatarMoeda, formatarPercentual } from "@/lib/formatters";
 import {
   NOME_REGIME,
+  consolidarLivroCaixa,
   fatorR,
   melhorCenario,
   regimeAtualSimulado,
@@ -28,17 +39,34 @@ type CampoNumero = "receitaAnual" | "receitaHospitalarAnual" | "salariosAnual" |
 type CampoPct = "aliquotaIss" | "custosCreditaveisPct" | "percentualB2b";
 
 export function SimuladorEmpresa({
+  companyId,
   taxRegime,
   inicial,
+  sistema,
+  analise,
+  mesesLivroCaixa,
   folhaInformada,
 }: {
+  companyId: string;
   taxRegime: TaxRegime | null;
   inicial: EntradaSimulacao;
+  sistema: EntradaSimulacao;
+  analise: AnaliseReforma | null;
+  mesesLivroCaixa: string[]; // "YYYY-MM", mais antigo primeiro
   folhaInformada: boolean;
 }) {
-  const [e, setE] = useState<EntradaSimulacao>(inicial);
+  const [base, setE] = useState<EntradaSimulacao>(inicial);
   const [ano, setAno] = useState<AnoSimulacao>(2027);
+  const [livroCaixa, setLivroCaixa] = useState<LivroCaixa>(
+    analise?.livroCaixa ?? { tem: false, mediaMensal: null, meses: {} },
+  );
+  const [status, setStatus] = useState<StatusAnalise>(analise?.status ?? "PENDENTE");
+  const [observacao, setObservacao] = useState(analise?.observacao ?? "");
   const regimeAtual = regimeAtualSimulado(taxRegime);
+
+  const lc = receitaLivroCaixaAnual(livroCaixa);
+  // `e` = dados editados + receita do livro caixa (somada à da PJ no motor).
+  const e = useMemo(() => ({ ...base, receitaLivroCaixaAnual: lc.anual }), [base, lc.anual]);
 
   const porAno = useMemo(
     () => ANOS_SIMULACAO.map((a) => ({ ano: a, cenarios: simularTodos(e, a) })),
@@ -48,16 +76,16 @@ export function SimuladorEmpresa({
   const melhor = melhorCenario(cenarios);
   const atual = regimeAtual ? cenarios.find((c) => c.regime === regimeAtual)! : null;
   const atualHoje = regimeAtual ? porAno[0].cenarios.find((c) => c.regime === regimeAtual)! : null;
-  const fr = fatorR(e);
+  const fr = fatorR(consolidarLivroCaixa(e));
   const aliq = ALIQUOTAS_REFERENCIA[ano];
 
   const num = (campo: CampoNumero) => ({
-    value: Math.round(e[campo] * 100) / 100,
+    value: Math.round(base[campo] * 100) / 100,
     onChange: (ev: React.ChangeEvent<HTMLInputElement>) =>
       setE((s) => ({ ...s, [campo]: Math.max(0, Number(ev.target.value) || 0) })),
   });
   const pct = (campo: CampoPct) => ({
-    value: Math.round(e[campo] * 10000) / 100,
+    value: Math.round(base[campo] * 10000) / 100,
     onChange: (ev: React.ChangeEvent<HTMLInputElement>) =>
       setE((s) => ({ ...s, [campo]: Math.min(100, Math.max(0, Number(ev.target.value) || 0)) / 100 })),
   });
@@ -69,7 +97,7 @@ export function SimuladorEmpresa({
           <h2 className="text-sm font-semibold text-foreground">Dados do cliente (12 meses)</h2>
           <button
             type="button"
-            onClick={() => setE(inicial)}
+            onClick={() => setE(sistema)}
             className="text-xs font-medium text-brand hover:underline"
           >
             Voltar aos dados do sistema
@@ -133,6 +161,14 @@ export function SimuladorEmpresa({
           </Field>
         </div>
       </Card>
+
+      <PainelLivroCaixa
+        livroCaixa={livroCaixa}
+        setLivroCaixa={setLivroCaixa}
+        meses={mesesLivroCaixa}
+        lc={lc}
+        receitaPj={base.receitaAnual}
+      />
 
       <div className="flex flex-wrap gap-1 border-b border-border">
         {ANOS_SIMULACAO.map((a) => (
@@ -215,8 +251,249 @@ export function SimuladorEmpresa({
         </p>
       </Card>
 
+      <PainelAnalise
+        companyId={companyId}
+        analise={analise}
+        status={status}
+        setStatus={setStatus}
+        observacao={observacao}
+        setObservacao={setObservacao}
+        base={base}
+        livroCaixa={livroCaixa}
+        ano={ano}
+        melhor={melhor}
+        regimeAtual={regimeAtual}
+      />
+
       <Checklist2027 regimeAtual={regimeAtual} />
     </div>
+  );
+}
+
+function rotuloMes(m: string) {
+  const [a, mm] = m.split("-");
+  return `${mm}/${a}`;
+}
+
+function PainelLivroCaixa({
+  livroCaixa,
+  setLivroCaixa,
+  meses,
+  lc,
+  receitaPj,
+}: {
+  livroCaixa: LivroCaixa;
+  setLivroCaixa: React.Dispatch<React.SetStateAction<LivroCaixa>>;
+  meses: string[];
+  lc: ReturnType<typeof receitaLivroCaixaAnual>;
+  receitaPj: number;
+}) {
+  const origem =
+    lc.origem === "meses+media"
+      ? `${lc.mesesInformados} mês(es) informados + média nos demais`
+      : lc.origem === "meses"
+        ? `${lc.mesesInformados} mês(es) informados, projetado para 12`
+        : lc.origem === "media"
+          ? "média mensal × 12"
+          : "nada informado ainda";
+  return (
+    <Card className="p-6">
+      <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-[var(--brand)]"
+          checked={livroCaixa.tem}
+          onChange={(ev) => setLivroCaixa((s) => ({ ...s, tem: ev.target.checked }))}
+        />
+        Sócio tem livro caixa na pessoa física (carnê-leão)
+      </label>
+      <p className="mt-1 text-xs text-foreground/55">
+        Para quem fatura parte pela PJ e parte na PF: a receita do livro caixa é somada à da PJ na simulação, como se
+        tudo passasse a ser faturado pela empresa (muda a faixa do Simples, o Fator R e todos os tributos).
+      </p>
+      {livroCaixa.tem && (
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="w-[260px]">
+            <Field label="Faturamento médio mensal (R$)" htmlFor="lcmedia" hint="Usado nos meses não informados abaixo">
+              <Input
+                id="lcmedia"
+                type="number"
+                step="100"
+                min={0}
+                value={livroCaixa.mediaMensal ?? ""}
+                onChange={(ev) =>
+                  setLivroCaixa((s) => ({
+                    ...s,
+                    mediaMensal: ev.target.value === "" ? null : Math.max(0, Number(ev.target.value) || 0),
+                  }))
+                }
+              />
+            </Field>
+          </div>
+          <div>
+            <div className="mb-2 text-sm font-medium text-foreground">Ou mês a mês (opcional)</div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+              {meses.map((m) => (
+                <Field key={m} label={rotuloMes(m)} htmlFor={`lc-${m}`}>
+                  <Input
+                    id={`lc-${m}`}
+                    type="number"
+                    step="100"
+                    min={0}
+                    value={livroCaixa.meses[m] ?? ""}
+                    onChange={(ev) =>
+                      setLivroCaixa((s) => {
+                        const novos = { ...s.meses };
+                        const v = Number(ev.target.value);
+                        if (ev.target.value === "" || !(v > 0)) delete novos[m];
+                        else novos[m] = v;
+                        return { ...s, meses: novos };
+                      })
+                    }
+                  />
+                </Field>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg bg-brand-soft px-4 py-3 text-sm text-foreground">
+            Livro caixa: <strong>{formatarMoeda(lc.anual)}/ano</strong> ({origem}) · PJ {formatarMoeda(receitaPj)} ·{" "}
+            <strong>receita simulada {formatarMoeda(receitaPj + lc.anual)}</strong>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function PainelAnalise({
+  companyId,
+  analise,
+  status,
+  setStatus,
+  observacao,
+  setObservacao,
+  base,
+  livroCaixa,
+  ano,
+  melhor,
+  regimeAtual,
+}: {
+  companyId: string;
+  analise: AnaliseReforma | null;
+  status: StatusAnalise;
+  setStatus: (s: StatusAnalise) => void;
+  observacao: string;
+  setObservacao: (s: string) => void;
+  base: EntradaSimulacao;
+  livroCaixa: LivroCaixa;
+  ano: AnoSimulacao;
+  melhor: Cenario | null;
+  regimeAtual: ReturnType<typeof regimeAtualSimulado>;
+}) {
+  const router = useRouter();
+  const [pendente, iniciar] = useTransition();
+  const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
+  const sugestao: StatusAnalise | null =
+    melhor && regimeAtual ? (melhor.regime === regimeAtual ? "SEM_MUDANCA" : "COM_MUDANCA") : null;
+
+  function salvar() {
+    setMsg(null);
+    iniciar(async () => {
+      const r = await salvarAnaliseReforma({
+        companyId,
+        status,
+        observacao: observacao.trim() || null,
+        temLivroCaixa: livroCaixa.tem,
+        livroCaixaMediaMensal: livroCaixa.mediaMensal,
+        livroCaixaMeses: livroCaixa.meses,
+        entrada: {
+          receitaAnual: base.receitaAnual,
+          receitaHospitalarAnual: base.receitaHospitalarAnual,
+          salariosAnual: base.salariosAnual,
+          proLaboreAnual: base.proLaboreAnual,
+          fgtsAnual: base.fgtsAnual,
+          sujeitoFatorR: base.sujeitoFatorR,
+          aliquotaIss: base.aliquotaIss,
+          reducaoCbsIbs: base.reducaoCbsIbs,
+          custosCreditaveisPct: base.custosCreditaveisPct,
+          percentualB2b: base.percentualB2b,
+        },
+        regimeRecomendado: melhor?.regime ?? null,
+        anoReferencia: ano,
+      });
+      setMsg(r ?? null);
+      if (r?.ok) router.refresh();
+    });
+  }
+
+  return (
+    <Card
+      className={cn(
+        "p-6",
+        status === "SEM_MUDANCA" && "border-success/40 bg-success-soft",
+        status === "COM_MUDANCA" && "border-yellow-400 bg-yellow-100",
+      )}
+    >
+      <h2 className="text-sm font-semibold text-foreground">Minha análise</h2>
+      <p className="mt-1 text-xs text-foreground/55">
+        Salvar guarda os dados editados acima, o livro caixa e o status. A carteira passa a usar estes dados no lugar
+        dos do sistema para esta empresa.
+        {analise?.analisadoEm
+          ? ` Última análise: ${new Date(analise.analisadoEm).toLocaleString("pt-BR")}${analise.analisadoPor ? ` por ${analise.analisadoPor}` : ""}.`
+          : ""}
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-[300px_1fr]">
+        <Field
+          label="Status"
+          htmlFor="status"
+          hint={sugestao ? `Pela simulação de ${ano}: ${ROTULO_STATUS[sugestao].toLowerCase()}` : undefined}
+        >
+          <Select id="status" value={status} onChange={(ev) => setStatus(ev.target.value as StatusAnalise)}>
+            {(Object.keys(ROTULO_STATUS) as StatusAnalise[]).map((s) => (
+              <option key={s} value={s}>
+                {ROTULO_STATUS[s]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Observações" htmlFor="obs">
+          <textarea
+            id="obs"
+            rows={3}
+            value={observacao}
+            onChange={(ev) => setObservacao(ev.target.value)}
+            className="w-full rounded-lg border border-border bg-surface px-3.5 py-2 text-[15px] text-foreground outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
+            placeholder="Ex.: migrar para o Simples em jan/2027; reunião marcada com o sócio"
+          />
+        </Field>
+      </div>
+      <div className="mt-4 flex items-center gap-3">
+        <Button type="button" onClick={salvar} disabled={pendente}>
+          {pendente ? "Salvando…" : "Salvar análise"}
+        </Button>
+        {analise && (
+          <button
+            type="button"
+            disabled={pendente}
+            onClick={() => {
+              if (!confirm("Descartar a análise salva? A empresa volta a usar só os dados do sistema.")) return;
+              setMsg(null);
+              iniciar(async () => {
+                const r = await descartarAnaliseReforma(companyId);
+                setMsg(r ?? null);
+                // Recarrega a página inteira: o estado do formulário volta aos dados do sistema.
+                if (r?.ok) window.location.reload();
+              });
+            }}
+            className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
+          >
+            Descartar análise salva
+          </button>
+        )}
+        {msg?.ok && <span className="text-sm font-medium text-success">{msg.ok}</span>}
+        {msg?.error && <span className="text-sm font-medium text-danger">{msg.error}</span>}
+      </div>
+    </Card>
   );
 }
 

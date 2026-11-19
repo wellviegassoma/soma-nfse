@@ -67,7 +67,16 @@ export type EntradaSimulacao = {
   custosCreditaveisPct: number; // fração da receita
   // Receita vinda de clientes PJ que aproveitam crédito de CBS/IBS.
   percentualB2b: number; // fração 0..1
+  // Receita da pessoa física do sócio (livro caixa / carnê-leão) a somar à
+  // da PJ — quem fatura parte na PF e parte na PJ. 0 ou ausente = não soma.
+  receitaLivroCaixaAnual?: number;
 };
+
+// Receita que entra no cálculo: PJ + livro caixa (quando informado).
+export function consolidarLivroCaixa(e: EntradaSimulacao): EntradaSimulacao {
+  const lc = Math.max(0, e.receitaLivroCaixaAnual ?? 0);
+  return lc > 0 ? { ...e, receitaAnual: e.receitaAnual + lc, receitaLivroCaixaAnual: 0 } : e;
+}
 
 export type Componente = { rotulo: string; valor: number; destaque?: "novo" | "saindo" };
 
@@ -267,7 +276,8 @@ export function simularLucroPresumido(e: EntradaSimulacao, ano: AnoSimulacao): C
   return fechar("LUCRO_PRESUMIDO", e, componentes, reg.debito, avisos, eleg);
 }
 
-export function simularTodos(e: EntradaSimulacao, ano: AnoSimulacao): Cenario[] {
+export function simularTodos(entrada: EntradaSimulacao, ano: AnoSimulacao): Cenario[] {
+  const e = consolidarLivroCaixa(entrada);
   return [simularSimples(e, ano), simularSimplesHibrido(e, ano), simularLucroPresumido(e, ano)];
 }
 
