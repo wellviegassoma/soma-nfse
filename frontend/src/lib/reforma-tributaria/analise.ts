@@ -1,7 +1,19 @@
 // Análise salva do simulador da Reforma (tabela reforma_analises) —
 // tipos e regras usados tanto no servidor quanto na tela.
 
-import type { EntradaSimulacao } from "@/lib/reforma-tributaria/motor";
+import type { EntradaSimulacao, RegimeSimulado } from "@/lib/reforma-tributaria/motor";
+
+export const REGIMES_SIMULADOS: RegimeSimulado[] = ["SIMPLES", "SIMPLES_HIBRIDO", "LUCRO_PRESUMIDO"];
+
+export function ehRegimeSimulado(v: unknown): v is RegimeSimulado {
+  return typeof v === "string" && (REGIMES_SIMULADOS as string[]).includes(v);
+}
+
+// Para onde dá para mudar: os outros regimes simulados. Simples ↔ híbrido
+// também conta (é escolha do Simples, mas muda a apuração de CBS/IBS).
+export function opcoesMudanca(regimeAtual: RegimeSimulado | null): RegimeSimulado[] {
+  return REGIMES_SIMULADOS.filter((r) => r !== regimeAtual);
+}
 
 export type StatusAnalise = "PENDENTE" | "SEM_MUDANCA" | "COM_MUDANCA";
 
@@ -22,7 +34,10 @@ export type AnaliseReforma = {
   observacao: string | null;
   livroCaixa: LivroCaixa;
   entrada: Partial<EntradaSimulacao> | null;
-  regimeRecomendado: string | null;
+  // Coluna regime_recomendado: a MUDANÇA DECIDIDA pelo contador quando o
+  // status é COM_MUDANCA (para qual regime o cliente vai). Null nos outros
+  // status ou quando a mudança ainda não foi definida.
+  mudancaPara: RegimeSimulado | null;
   analisadoPor: string | null;
   analisadoEm: string | null;
 };

@@ -13,6 +13,7 @@ const CAMINHO = "/admin/reforma-tributaria";
 export type ReformaAcaoState = { error?: string; ok?: string } | undefined;
 
 const status = z.enum(["PENDENTE", "SEM_MUDANCA", "COM_MUDANCA"]);
+const regime = z.enum(["SIMPLES", "SIMPLES_HIBRIDO", "LUCRO_PRESUMIDO"]);
 const dinheiro = z.number().finite().min(0).max(1e10);
 const fracao = z.number().finite().min(0).max(1);
 
@@ -39,7 +40,8 @@ const analiseSchema = z.object({
   livroCaixaMediaMensal: dinheiro.nullable(),
   livroCaixaMeses: z.record(z.string().regex(/^\d{4}-\d{2}$/), dinheiro),
   entrada: entradaSchema,
-  regimeRecomendado: z.string().max(40).nullable(),
+  // Mudança decidida (só vale com status COM_MUDANCA) — gravada em regime_recomendado.
+  mudancaPara: regime.nullable(),
   anoReferencia: z.number().int().min(2026).max(2033).nullable(),
 });
 
@@ -74,7 +76,7 @@ export async function salvarAnaliseReforma(input: SalvarAnaliseInput): Promise<R
     livro_caixa_media_mensal: d.temLivroCaixa ? d.livroCaixaMediaMensal : null,
     livro_caixa_meses: d.temLivroCaixa ? meses : {},
     entrada,
-    regime_recomendado: d.regimeRecomendado,
+    regime_recomendado: d.status === "COM_MUDANCA" ? d.mudancaPara : null,
     ano_referencia: d.anoReferencia,
     analisado_por: user.id,
     analisado_em: new Date().toISOString(),
@@ -109,24 +111,35 @@ export async function descartarAnaliseReforma(companyId: string): Promise<Reform
   return { ok: "Análise descartada." };
 }
 
-/** Só o status (seletor da coluna Análise na carteira). */
-export async function marcarStatusReforma(companyId: string, novo: string): Promise<ReformaAcaoState> {
+/**
+ * Status + mudança decidida (seletores da coluna Análise na carteira).
+ * `mudancaPara`: undefined = não mexe na mudança já gravada; null = "a definir".
+ * Fora de COM_MUDANCA a mudança é sempre apagada.
+ */
+export async function marcarStatusReforma(
+  companyId: string,
+  novo: string,
+  mudancaPara?: string | null,
+): Promise<ReformaAcaoState> {
   await requireSomaStaff();
   const user = await requireUser();
-  const p = z.object({ companyId: uuidLike, status }).safeParse({ companyId, status: novo });
+  const p = z
+    .object({ companyId: uuidLike, status, mudancaPara: regime.nullable().optional() })
+    .safeParse({ companyId, status: novo, mudancaPara });
   if (!p.success) return { error: "Status inválido." };
 
+  const linha: Record<string, unknown> = {
+    company_id: p.data.companyId,
+    status: p.data.status,
+    analisado_por: user.id,
+    analisado_em: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  if (p.data.status !== "COM_MUDANCA") linha.regime_recomendado = null;
+  else if (p.data.mudancaPara !== undefined) linha.regime_recomendado = p.data.mudancaPara;
+
   const supabase = await createClient();
-  const { error } = await supabase.from("reforma_analises").upsert(
-    {
-      company_id: p.data.companyId,
-      status: p.data.status,
-      analisado_por: user.id,
-      analisado_em: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "company_id" },
-  );
+  const { error } = await supabase.from("reforma_analises").upsert(linha, { onConflict: "company_id" });
   if (error) return { error: msgErroTabela(error) };
 
   await logAudit({
@@ -134,7 +147,7 @@ export async function marcarStatusReforma(companyId: string, novo: string): Prom
     action: "reforma.status",
     entity: "reforma_analises",
     entityId: p.data.companyId,
-    newValue: { status: p.data.status },
+    newValue: { status: p.data.status, mudancaPara: linha.regime_recomendado },
   });
   revalidatePath(CAMINHO);
   return { ok: "Status salvo." };

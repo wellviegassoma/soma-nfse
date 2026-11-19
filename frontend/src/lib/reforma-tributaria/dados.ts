@@ -7,7 +7,12 @@ import { buscarAtividade } from "@/lib/simples-nacional-atividades";
 import { sugerirAtividade } from "@/lib/lc116-sugestao-atividade";
 import { REDUCAO_POR_CCLASSTRIB } from "@/lib/reforma-tributaria/parametros";
 import type { EntradaSimulacao } from "@/lib/reforma-tributaria/motor";
-import { aplicarAnalise, type AnaliseReforma, type StatusAnalise } from "@/lib/reforma-tributaria/analise";
+import {
+  aplicarAnalise,
+  ehRegimeSimulado,
+  type AnaliseReforma,
+  type StatusAnalise,
+} from "@/lib/reforma-tributaria/analise";
 import type { IssTipo, TaxRegime } from "@/lib/types";
 
 // Base de cada cliente para o simulador: últimos 12 meses fechados de
@@ -123,7 +128,7 @@ export async function carregarBasesReforma(
         meses,
       },
       entrada: (a.entrada ?? null) as AnaliseReforma["entrada"],
-      regimeRecomendado: a.regime_recomendado,
+      mudancaPara: a.status === "COM_MUDANCA" && ehRegimeSimulado(a.regime_recomendado) ? a.regime_recomendado : null,
       analisadoPor: (perfil as { full_name?: string | null } | null)?.full_name ?? null,
       analisadoEm: a.analisado_em,
     });

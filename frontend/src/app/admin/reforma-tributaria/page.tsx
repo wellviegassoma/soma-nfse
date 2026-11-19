@@ -73,7 +73,13 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
       const recomendarTroca =
         atualNoAno != null && melhor != null && melhor.regime !== regimeAtual && trocaCompensa(economia, b.entrada.receitaAnual);
       const status: StatusAnalise = b.analise?.status ?? "PENDENTE";
-      return { b, regimeAtual, atualHoje, atualNoAno, melhor, economia, recomendarTroca, status };
+      const mudancaPara = status === "COM_MUDANCA" ? (b.analise?.mudancaPara ?? null) : null;
+      // Economia da mudança DECIDIDA (pode ser negativa se o contador escolheu
+      // um regime que a simulação acha mais caro — ex.: híbrido por causa de cliente PJ).
+      const destino = mudancaPara ? noAno.find((c) => c.regime === mudancaPara) : null;
+      const economiaMudanca =
+        atualNoAno && destino && destino.elegivel ? atualNoAno.cargaEfetiva - destino.cargaEfetiva : null;
+      return { b, regimeAtual, atualHoje, atualNoAno, melhor, economia, recomendarTroca, status, mudancaPara, economiaMudanca };
     })
     // Não analisadas primeiro; já analisadas (verde/amarelo) vão para o fim.
     // Dentro de cada grupo, pela ordem do código do cliente.
@@ -239,7 +245,18 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
                   <ValorCenario c={l.atualNoAno} base={l.atualHoje} />
                 </td>
                 <td className="px-4 py-3">
-                  {l.melhor ? (
+                  {l.status === "COM_MUDANCA" ? (
+                    <div>
+                      <span className="inline-flex rounded-full border border-yellow-500 bg-yellow-200 px-2.5 py-0.5 text-xs font-semibold text-yellow-900">
+                        {l.mudancaPara ? `Mudar → ${NOME_REGIME[l.mudancaPara]}` : "Mudança a definir"}
+                      </span>
+                      {l.melhor && (
+                        <div className="mt-1 text-xs text-foreground/50">
+                          simulação: {l.recomendarTroca ? `trocar → ${NOME_REGIME[l.melhor.regime]}` : "manter"}
+                        </div>
+                      )}
+                    </div>
+                  ) : l.melhor ? (
                     <span
                       className={cn(
                         "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
@@ -254,12 +271,28 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
                   )}
                   {!l.regimeAtual && <div className="mt-1 text-xs text-foreground/45">regime atual não simulado</div>}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums font-medium text-success">
-                  {l.recomendarTroca ? formatarMoeda(l.economia) : ""}
+                <td className="px-4 py-3 text-right tabular-nums font-medium">
+                  {l.economiaMudanca != null ? (
+                    <span className={l.economiaMudanca >= 0 ? "text-success" : "text-danger"}>
+                      {l.economiaMudanca >= 0 ? "" : "−"}
+                      {formatarMoeda(Math.abs(l.economiaMudanca))}
+                    </span>
+                  ) : l.recomendarTroca && l.status !== "COM_MUDANCA" ? (
+                    <span className="text-success">{formatarMoeda(l.economia)}</span>
+                  ) : (
+                    ""
+                  )}
                 </td>
                 <td className="px-4 py-3">
-                  {/* key: remonta com o status salvo quando a lista recarrega */}
-                  <StatusAnaliseSelect key={l.status} companyId={l.b.id} status={l.status} />
+                  {/* key: remonta com o que está salvo quando a lista recarrega */}
+                  <StatusAnaliseSelect
+                    key={`${l.status}-${l.mudancaPara ?? ""}`}
+                    companyId={l.b.id}
+                    status={l.status}
+                    mudancaPara={l.mudancaPara}
+                    regimeAtual={l.regimeAtual}
+                    sugestao={l.melhor && l.melhor.regime !== l.regimeAtual ? l.melhor.regime : null}
+                  />
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Link

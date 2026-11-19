@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { descartarAnaliseReforma, salvarAnaliseReforma } from "@/lib/actions/reforma-tributaria";
 import {
   ROTULO_STATUS,
+  opcoesMudanca,
   receitaLivroCaixaAnual,
   type AnaliseReforma,
   type LivroCaixa,
@@ -26,6 +27,7 @@ import {
   simularTodos,
   type Cenario,
   type EntradaSimulacao,
+  type RegimeSimulado,
 } from "@/lib/reforma-tributaria/motor";
 import {
   ALIQUOTAS_REFERENCIA,
@@ -395,6 +397,11 @@ function PainelAnalise({
   const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
   const sugestao: StatusAnalise | null =
     melhor && regimeAtual ? (melhor.regime === regimeAtual ? "SEM_MUDANCA" : "COM_MUDANCA") : null;
+  const opcoes = opcoesMudanca(regimeAtual);
+  // Sem mudança gravada, já vem marcada a melhor opção da simulação (se for outra).
+  const [mudancaPara, setMudancaPara] = useState<RegimeSimulado | null>(
+    () => analise?.mudancaPara ?? (melhor && melhor.regime !== regimeAtual ? melhor.regime : null),
+  );
 
   function salvar() {
     setMsg(null);
@@ -418,7 +425,7 @@ function PainelAnalise({
           custosCreditaveisPct: base.custosCreditaveisPct,
           percentualB2b: base.percentualB2b,
         },
-        regimeRecomendado: melhor?.regime ?? null,
+        mudancaPara: status === "COM_MUDANCA" ? mudancaPara : null,
         anoReferencia: ano,
       });
       setMsg(r ?? null);
@@ -443,19 +450,45 @@ function PainelAnalise({
           : ""}
       </p>
       <div className="mt-4 grid gap-4 sm:grid-cols-[300px_1fr]">
-        <Field
-          label="Status"
-          htmlFor="status"
-          hint={sugestao ? `Pela simulação de ${ano}: ${ROTULO_STATUS[sugestao].toLowerCase()}` : undefined}
-        >
-          <Select id="status" value={status} onChange={(ev) => setStatus(ev.target.value as StatusAnalise)}>
-            {(Object.keys(ROTULO_STATUS) as StatusAnalise[]).map((s) => (
-              <option key={s} value={s}>
-                {ROTULO_STATUS[s]}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <div className="flex flex-col gap-4">
+          <Field
+            label="Status"
+            htmlFor="status"
+            hint={sugestao ? `Pela simulação de ${ano}: ${ROTULO_STATUS[sugestao].toLowerCase()}` : undefined}
+          >
+            <Select id="status" value={status} onChange={(ev) => setStatus(ev.target.value as StatusAnalise)}>
+              {(Object.keys(ROTULO_STATUS) as StatusAnalise[]).map((s) => (
+                <option key={s} value={s}>
+                  {ROTULO_STATUS[s]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {status === "COM_MUDANCA" && (
+            <Field
+              label="Mudar para"
+              htmlFor="mudanca"
+              hint={
+                melhor && melhor.regime !== regimeAtual
+                  ? `Melhor opção na simulação de ${ano}: ${NOME_REGIME[melhor.regime]}`
+                  : undefined
+              }
+            >
+              <Select
+                id="mudanca"
+                value={mudancaPara ?? ""}
+                onChange={(ev) => setMudancaPara((ev.target.value || null) as RegimeSimulado | null)}
+              >
+                <option value="">A definir</option>
+                {opcoes.map((r) => (
+                  <option key={r} value={r}>
+                    {NOME_REGIME[r]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+        </div>
         <Field label="Observações" htmlFor="obs">
           <textarea
             id="obs"
