@@ -152,10 +152,39 @@ export const STATUS_LABEL: Record<StatusTratamento, string> = {
 export const DIAS_HISTORICO = 90;
 
 export function statusInicial(m: MensagemCaixaPostal, primeiraLeituraDaEmpresa: boolean, agora = new Date()): StatusTratamento {
-  if (!primeiraLeituraDaEmpresa || !m.enviadaEm) return "nova";
+  return motivoResolucaoAutomatica(m, primeiraLeituraDaEmpresa, agora) ? "resolvida" : "nova";
+}
+
+/**
+ * Avisos da Receita só informativos, que não pedem ação (pedido de
+ * 19/11/2026: o de fraudes bancárias veio 82 vezes, marcado como relevante).
+ * Lista curta de propósito: lembrete de obrigação (e-BEF, opção pelo
+ * Simples), parcelamento, e-Processo e intimação NUNCA entram — e se o
+ * assunto tiver cara de intimação/cobrança, a regra não vale.
+ */
+const ASSUNTOS_INFORMATIVOS: RegExp[] = [
+  /^Como se proteger de fraudes/i,
+  /^Bem-vindo ao Caixa Postal/i,
+  /^Comunica[çc][ãa]o das novas funcionalidades do Painel Receita/i,
+  /^Painel Receita\W+Intelig[êe]ncia Competitiva/i,
+];
+
+export function ehInformativo(assunto: string): boolean {
+  return !ehIntimacao(assunto) && ASSUNTOS_INFORMATIVOS.some((r) => r.test(assunto));
+}
+
+/** Por que a mensagem já entra resolvida, ou null se vai para a fila. */
+export function motivoResolucaoAutomatica(
+  m: MensagemCaixaPostal,
+  primeiraLeituraDaEmpresa: boolean,
+  agora = new Date(),
+): string | null {
+  if (ehInformativo(m.assunto)) return "Resolvida automaticamente: aviso informativo da Receita, sem ação necessária.";
+  if (!primeiraLeituraDaEmpresa || !m.enviadaEm) return null;
   const dias = (agora.getTime() - new Date(m.enviadaEm).getTime()) / 86_400_000;
-  if (dias <= DIAS_HISTORICO) return "nova";
-  return ehIntimacao(m.assunto) && !m.lidaEm ? "nova" : "resolvida";
+  if (dias <= DIAS_HISTORICO) return null;
+  if (ehIntimacao(m.assunto) && !m.lidaEm) return null;
+  return "Importação inicial: mensagem com mais de 90 dias (histórico).";
 }
 
 // ---------------------------------------------------------------------------

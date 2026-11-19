@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
-import { formatarData, formatarDataHora } from "@/lib/formatters";
+import { formatarCnpj, formatarData, formatarDataHora } from "@/lib/formatters";
 import { cn } from "@/lib/cn";
 import { hojeBrasilia } from "@/lib/competencia";
 import { decodificarEntidades, ehIntimacao, ORIGEM, STATUS_LABEL, type StatusTratamento } from "@/lib/caixa-postal-core";
@@ -93,6 +93,7 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
     .sort((a, b) => a.nome.localeCompare(b.nome));
 
   const nomeEmpresa = new Map(empresas.map((e) => [e.id, e.nome]));
+  const cnpjEmpresa = new Map(empresas.map((e) => [e.id, formatarCnpj(e.cnpj)]));
   const leituraPorEmpresa = new Map((leituras ?? []).map((l) => [l.company_id as string, l]));
 
   const destaque = (m: { relevante: boolean; assunto: string }) => m.relevante || ehIntimacao(m.assunto);
@@ -231,6 +232,9 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
                       <Link href={href({ empresa: m.company_id })} className="font-medium text-foreground hover:underline">
                         {nomeEmpresa.get(m.company_id) ?? "Empresa inativa"}
                       </Link>
+                      {cnpjEmpresa.get(m.company_id) && (
+                        <span className="font-mono text-foreground/70">{cnpjEmpresa.get(m.company_id)}</span>
+                      )}
                       <span className="text-foreground/50">
                         {m.descricao_origem || (m.tipo_origem ? ORIGEM[m.tipo_origem] : "Caixa Postal")}
                       </span>
@@ -241,7 +245,12 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
                       {" · "}
                       {m.lida_em ? (
                         <span className="font-medium text-warning">
-                          Aberta no e-CAC em {formatarDataHora(m.lida_em)} (já tem ciência)
+                          {m.corpo_lido_em &&
+                          Math.abs(new Date(m.lida_em).getTime() - new Date(m.corpo_lido_em).getTime()) < 5 * 60_000
+                            ? `Aberta pelo SOMA em ${formatarDataHora(m.lida_em)}${
+                                m.corpo_lido_por ? ` por ${nomePorId.get(m.corpo_lido_por) ?? "—"}` : ""
+                              } (já tem ciência)`
+                            : `Aberta no e-CAC em ${formatarDataHora(m.lida_em)} (já tem ciência)`}
                         </span>
                       ) : m.ciencia_em ? (
                         <span className="font-medium text-warning">
@@ -304,7 +313,9 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
               const l = leituraPorEmpresa.get(e.id)!;
               return (
                 <li key={e.id} className="flex flex-col gap-0.5 py-1.5 sm:flex-row sm:gap-3">
-                  <span className="whitespace-nowrap font-medium">{e.nome}</span>
+                  <span className="whitespace-nowrap font-medium">
+                    {e.nome} <span className="font-mono font-normal text-foreground/70">{formatarCnpj(e.cnpj)}</span>
+                  </span>
                   <span className="text-xs text-foreground/60">
                     {formatarDataHora(l.lida_em as string)}: {l.erro}
                   </span>

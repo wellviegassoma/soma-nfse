@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { lerCorpo, lerMensagens, statusInicial, SERVICO_DETALHE, SERVICO_LISTA, type MensagemCaixaPostal } from "@/lib/caixa-postal-core";
+import { lerCorpo, lerMensagens, motivoResolucaoAutomatica, SERVICO_DETALHE, SERVICO_LISTA, type MensagemCaixaPostal } from "@/lib/caixa-postal-core";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Supa = SupabaseClient<any, any, any>;
@@ -138,12 +138,13 @@ export async function lerCaixaPostalEmpresa(supabase: Supa, empresa: EmpresaCaix
   if (novas.length) {
     const agora = new Date();
     const linhas = novas.map((m) => {
-      const status = statusInicial(m, primeiraLeitura, agora);
+      const motivo = motivoResolucaoAutomatica(m, primeiraLeitura, agora);
+      const status = motivo ? "resolvida" : "nova";
       if (status === "nova") novasNaFila += 1;
       return {
         ...linhaReceita(empresa.id, m),
         status,
-        observacao: status === "resolvida" ? "Importação inicial: mensagem com mais de 90 dias (histórico)." : null,
+        observacao: motivo,
         tratamento_em: status === "resolvida" ? agora.toISOString() : null,
       };
     });
