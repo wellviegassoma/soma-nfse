@@ -145,7 +145,7 @@ export async function issueNfse(_prevState: IssueNfseState, formData: FormData):
     supabase
       .from("companies")
       .select(
-        "cnpj, cpf, municipal_registration, nfse_envia_im, municipality_ibge_code, nfse_ambiente, dps_series, tax_regime, regime_especial_tributacao, allow_retroactive_emission",
+        "cnpj, cpf, municipal_registration, nfse_envia_im, municipality_ibge_code, nfse_ambiente, dps_series, tax_regime, regime_especial_tributacao, iss_tipo, allow_retroactive_emission",
       )
       .eq("id", companyId)
       .single(),
@@ -303,7 +303,13 @@ export async function issueNfse(_prevState: IssueNfseState, formData: FormData):
       // CST 00 (Simples) x CST 01-07 (apuração própria) precisa bater com
       // isso — empresa fora do Simples não pode ir com opSimpNac=3.
       opcao_simples_nacional: company.tax_regime === "SIMPLES_NACIONAL" ? 3 : 1,
-      regime_especial_tributacao: company.regime_especial_tributacao ?? 0,
+      // ISS fixo = sociedade uniprofissional: a nota precisa sair como
+      // Sociedade de Profissionais (6) mesmo que o regime especial do
+      // cadastro tenha ficado em "Nenhum" (caso da Queiroz em 19/11/2026).
+      regime_especial_tributacao:
+        company.iss_tipo === "FIXO" && !company.regime_especial_tributacao
+          ? 6
+          : (company.regime_especial_tributacao ?? 0),
     },
     certificado: { pfx_base64: pfxBase64, senha },
     numero_dps: numeroDps,
