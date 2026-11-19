@@ -5,7 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff, requireUser } from "@/lib/auth";
 import { uuidLike } from "@/lib/zod-helpers";
-import { lerCaixaPostalEmpresa, type ResultadoLeitura } from "@/lib/caixa-postal";
+import { buscarConteudoCaixaPostal, lerCaixaPostalEmpresa, type ResultadoLeitura } from "@/lib/caixa-postal";
 
 const CAMINHO = "/admin/intimacoes";
 
@@ -102,6 +102,54 @@ export async function lerCaixaPostalAgora(companyId: string): Promise<ResultadoL
   const cnpj = String(c?.cnpj ?? "").replace(/\D/g, "");
   if (!c || cnpj.length !== 14) return { ok: false, erro: "Empresa sem CNPJ." };
   const r = await lerCaixaPostalEmpresa(supabase, { id: c.id, cnpj });
+  revalidatePath(CAMINHO);
+  return r;
+}
+
+export type ConteudoResultado = { ok: true; corpo: string } | { ok: false; erro: string };
+
+/**
+ * Lê o conteúdo de uma mensagem (MSGDETALHAMENTO62) — DÁ CIÊNCIA da
+ * intimação, igual a abrir no e-CAC. A tela só chama depois de a pessoa
+ * confirmar. O texto fica guardado: abrir de novo não chama a Receita (nem
+ * cobra) e o histórico registra quem deu ciência pelo SOMA e quando.
+ */
+export async function abrirConteudo(mensagemId: string): Promise<ConteudoResultado> {
+  await requireSomaStaff();
+  const user = await requireUser();
+  if (!uuidLike.safeParse(mensagemId).success) return { ok: false, erro: "Mensagem inválida." };
+  const supabase = await createClient();
+  const { data: m } = await supabase
+    .from("caixa_postal_mensagens")
+    .select("id, isn, corpo, lida_em, status, responsavel_id, company_id, companies(cnpj)")
+    .eq("id", mensagemId)
+    .maybeSingle();
+  if (!m) return { ok: false, erro: "Mensagem não encontrada." };
+  if (m.corpo) return { ok: true, corpo: m.corpo as string };
+
+  const empresa = (Array.isArray(m.companies) ? m.companies[0] : m.companies) as { cnpj: string | null } | null;
+  const cnpj = String(empresa?.cnpj ?? "").replace(/\D/g, "");
+  if (cnpj.length !== 14) return { ok: false, erro: "Empresa sem CNPJ." };
+
+  const r = await buscarConteudoCaixaPostal(cnpj, m.isn as string);
+  if (!r.ok) return r;
+
+  const agora = new Date().toISOString();
+  const jaLida = !!m.lida_em;
+  await supabase
+    .from("caixa_postal_mensagens")
+    .update({ corpo: r.corpo, corpo_lido_em: agora, corpo_lido_por: user.id, ...(jaLida ? {} : { lida_em: agora }) })
+    .eq("id", mensagemId);
+  await supabase.from("caixa_postal_tratamentos").insert({
+    mensagem_id: mensagemId,
+    status: m.status,
+    responsavel_id: m.responsavel_id,
+    observacao: jaLida
+      ? "Conteúdo lido no SOMA (a mensagem já tinha ciência)."
+      : "Conteúdo lido no SOMA: ciência dada nesta data, prazo começa a contar.",
+    feito_por: user.id,
+    feito_em: agora,
+  });
   revalidatePath(CAMINHO);
   return r;
 }

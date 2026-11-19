@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { lerMensagens, statusInicial, SERVICO_LISTA, type MensagemCaixaPostal } from "@/lib/caixa-postal-core";
+import { lerCorpo, lerMensagens, statusInicial, SERVICO_DETALHE, SERVICO_LISTA, type MensagemCaixaPostal } from "@/lib/caixa-postal-core";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Supa = SupabaseClient<any, any, any>;
@@ -42,6 +42,37 @@ export async function buscarListaCaixaPostal(
   const corpo = await r.json().catch(() => null);
   if (!r.ok) return { ok: false, erro: traduzirErro(String(corpo?.detail ?? `Integra Contador respondeu HTTP ${r.status}.`)) };
   return { ok: true, mensagens: lerMensagens(corpo?.resposta?.dados) };
+}
+
+/**
+ * Conteúdo de UMA mensagem (MSGDETALHAMENTO62). ATENÇÃO: DÁ CIÊNCIA da
+ * intimação, igual a abrir no e-CAC. Só chamar depois de confirmação humana
+ * (lib/actions/caixa-postal.ts → abrirConteudo). Uma chamada paga.
+ */
+export async function buscarConteudoCaixaPostal(
+  cnpj: string,
+  isn: string,
+): Promise<{ ok: true; corpo: string } | { ok: false; erro: string }> {
+  let r: Response;
+  try {
+    r = await fetch(`${process.env.INTEGRA_CONTADOR_URL}/contribuintes/${cnpj}/chamar`, {
+      method: "POST",
+      headers: {
+        "X-Internal-Token": process.env.INTEGRA_CONTADOR_INTERNAL_TOKEN ?? "",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id_sistema: SERVICO_DETALHE.idSistema, id_servico: SERVICO_DETALHE.idServico, dados: { isn } }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch {
+    return { ok: false, erro: "Não foi possível falar com o Integra Contador agora." };
+  }
+  const corpo = await r.json().catch(() => null);
+  if (!r.ok) return { ok: false, erro: traduzirErro(String(corpo?.detail ?? `Integra Contador respondeu HTTP ${r.status}.`)) };
+  const texto = lerCorpo(corpo?.resposta?.dados);
+  if (!texto) return { ok: false, erro: "A Receita respondeu sem o texto da mensagem." };
+  return { ok: true, corpo: texto };
 }
 
 function traduzirErro(msg: string): string {

@@ -157,3 +157,76 @@ export function statusInicial(m: MensagemCaixaPostal, primeiraLeituraDaEmpresa: 
   if (dias <= DIAS_HISTORICO) return "nova";
   return ehIntimacao(m.assunto) && !m.lidaEm ? "nova" : "resolvida";
 }
+
+// ---------------------------------------------------------------------------
+// Conteúdo (MSGDETALHAMENTO62) — DÁ CIÊNCIA. Só chamado quando alguém
+// confirma na tela; ver lib/actions/caixa-postal.ts (abrirConteudo).
+// Saída: dados.conteudo[] com corpoModelo (texto do modelo, pode ter HTML
+// e "++VARIAVEL++") e variaveis[] (valores, na ordem dos marcadores).
+// ---------------------------------------------------------------------------
+
+export const SERVICO_DETALHE = { idSistema: "CAIXAPOSTAL", idServico: "MSGDETALHAMENTO62" } as const;
+
+const ENTIDADES: Record<string, string> = {
+  nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", ordf: "ª", ordm: "º", deg: "°", sect: "§",
+  ndash: "–", mdash: "—", hellip: "…", bull: "•", middot: "·", laquo: "«", raquo: "»", ldquo: "“", rdquo: "”",
+  lsquo: "‘", rsquo: "’", euro: "€", copy: "©", reg: "®", szlig: "ß",
+};
+// &aacute; &Ccedil; &otilde; … → letra + acento combinado, normalizado.
+const ACENTO: Record<string, string> = {
+  acute: "\u0301", grave: "\u0300", circ: "\u0302", tilde: "\u0303", uml: "\u0308", cedil: "\u0327", ring: "\u030a",
+};
+
+/** Entidades HTML (nomeadas e numéricas) → caracteres. A Receita manda acentos assim. */
+export function decodificarEntidades(t: string): string {
+  return t
+    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+    .replace(/&([a-z]+);/gi, (e, nome: string) => {
+      const m = nome.match(/^([a-z])(acute|grave|circ|tilde|uml|cedil|ring)$/i);
+      if (m) return (m[1] + ACENTO[m[2].toLowerCase()]).normalize("NFC");
+      return ENTIDADES[nome] ?? ENTIDADES[nome.toLowerCase()] ?? e;
+    });
+}
+
+/** HTML do modelo → texto simples (quebras preservadas; links viram "texto (url)"). */
+export function htmlParaTexto(html: string): string {
+  return html
+    .replace(/<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, url: string, txt: string) =>
+      txt.replace(/<[^>]+>/g, "").trim() === url ? url : `${txt} (${url})`,
+    )
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/\s*(p|div|li|tr|h[1-6])\s*>/gi, "\n")
+    .replace(/<\s*li[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Troca cada "++VARIAVEL++" pelo valor correspondente, na ordem. */
+export function montarCorpo(modelo: string, variaveis: unknown[]): string {
+  let i = 0;
+  return modelo.replace(/\+\+VARIAVEL\+\+/g, () => {
+    const v = variaveis[i++];
+    return v == null ? "" : String(v);
+  });
+}
+
+/** `resposta.dados` do MSGDETALHAMENTO62 → texto do corpo (ou null se não veio). */
+export function lerCorpo(dados: unknown): string | null {
+  const d = parseJson(dados) as Bruto | null;
+  if (!d || typeof d !== "object") return null;
+  const conteudo = d.conteudo;
+  const msg = (Array.isArray(conteudo) ? conteudo[0] : conteudo) as Bruto | undefined;
+  if (!msg || typeof msg !== "object") return null;
+  const modelo = texto(msg.corpoModelo);
+  if (!modelo) return null;
+  const vars = Array.isArray(msg.variaveis) ? msg.variaveis : [];
+  return decodificarEntidades(htmlParaTexto(montarCorpo(modelo, vars)))
+    .split("\n")
+    .map((l) => l.replace(/\u00a0/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}

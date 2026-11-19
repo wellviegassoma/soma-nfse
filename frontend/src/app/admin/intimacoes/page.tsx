@@ -6,9 +6,10 @@ import { Alert } from "@/components/ui/Alert";
 import { formatarData, formatarDataHora } from "@/lib/formatters";
 import { cn } from "@/lib/cn";
 import { hojeBrasilia } from "@/lib/competencia";
-import { ehIntimacao, ORIGEM, STATUS_LABEL, type StatusTratamento } from "@/lib/caixa-postal-core";
+import { decodificarEntidades, ehIntimacao, ORIGEM, STATUS_LABEL, type StatusTratamento } from "@/lib/caixa-postal-core";
 import { empresasParaLer } from "@/lib/caixa-postal";
 import { TratamentoMensagem } from "./TratamentoMensagem";
+import { ConteudoMensagem } from "./ConteudoMensagem";
 import { LerCaixaPostalButton } from "./LerCaixaPostalButton";
 
 export const metadata = { title: "Intimações — Painel SOMA" };
@@ -32,6 +33,9 @@ type Linha = {
   observacao: string | null;
   tratamento_em: string | null;
   tratamento_por: string | null;
+  corpo: string | null;
+  corpo_lido_em: string | null;
+  corpo_lido_por: string | null;
 };
 
 const PRAZO_CIENCIA_TACITA_DIAS = 15; // Decreto 70.235/72, art. 23, § 2º, III, "a"
@@ -61,7 +65,7 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
   let consulta = supabase
     .from("caixa_postal_mensagens")
     .select(
-      "id, company_id, assunto, relevante, tipo_origem, descricao_origem, enviada_em, lida_em, ciencia_em, vista_em, status, responsavel_id, observacao, tratamento_em, tratamento_por",
+      "id, company_id, assunto, relevante, tipo_origem, descricao_origem, enviada_em, lida_em, ciencia_em, vista_em, status, responsavel_id, observacao, tratamento_em, tratamento_por, corpo, corpo_lido_em, corpo_lido_por",
     )
     .order("enviada_em", { ascending: false, nullsFirst: false })
     .limit(filtro === "abertas" ? 1000 : 400);
@@ -140,7 +144,7 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
 
       <div className="rounded-xl border border-warning/20 bg-warning-soft p-4 text-sm text-warning">
         <strong>Abrir a mensagem no e-CAC dá ciência da intimação e o prazo começa a contar.</strong> O SOMA lê só a
-        lista (assunto, data, relevância, se alguém já abriu), que <strong>não dá ciência</strong>. Sem abrir, a
+        lista (assunto, data, relevância, se alguém já abriu), que <strong>não dá ciência</strong>. O botão &quot;Ler conteúdo&quot; traz o texto para cá, mas dá ciência igual ao e-CAC (pede confirmação). Sem abrir, a
         ciência acontece sozinha {PRAZO_CIENCIA_TACITA_DIAS} dias depois do envio. Decida quem vai tratar antes de
         abrir no portal.
       </div>
@@ -261,6 +265,19 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
                         )}
                       </p>
                     )}
+                    <ConteudoMensagem
+                      mensagemId={m.id}
+                      corpo={m.corpo ? decodificarEntidades(m.corpo).replace(/^[ \t]+/gm, "") : null}
+                      lidoPor={
+                        m.corpo_lido_em
+                          ? `Lido no SOMA por ${m.corpo_lido_por ? nomePorId.get(m.corpo_lido_por) ?? "—" : "—"} em ${formatarDataHora(m.corpo_lido_em)}.`
+                          : null
+                      }
+                      jaTemCiencia={!!m.lida_em || (!!m.ciencia_em && m.ciencia_em <= hoje)}
+                      cienciaAutomatica={
+                        m.ciencia_em && m.ciencia_em > hoje ? dataSemHora(m.ciencia_em) : tacita ? formatarData(tacita) : null
+                      }
+                    />
                   </div>
                   <TratamentoMensagem
                     mensagemId={m.id}
