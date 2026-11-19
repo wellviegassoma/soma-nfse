@@ -29,6 +29,21 @@ const entradaSchema = z
     reducaoCbsIbs: fracao,
     custosCreditaveisPct: fracao,
     percentualB2b: fracao,
+    // Simulador pessoa física × PJ (CPF) — ver lib/reforma-tributaria/pessoa-fisica.ts.
+    pf: z
+      .object({
+        receitaAnual: dinheiro,
+        despesasAnual: dinheiro,
+        dependentes: z.number().int().min(0).max(20),
+        issAutonomoAnual: dinheiro,
+        reducaoCbsIbs: fracao,
+        custosCreditaveisPct: fracao,
+        percentualB2b: fracao,
+        sujeitoFatorR: z.boolean(),
+        aliquotaIssPj: fracao,
+        custoManterPjAnual: dinheiro,
+      })
+      .partial(),
   })
   .partial();
 
@@ -65,6 +80,7 @@ export async function salvarAnaliseReforma(input: SalvarAnaliseInput): Promise<R
   for (const campo of CAMPOS_ENTRADA_SALVOS) {
     if (d.entrada[campo] !== undefined) entrada[campo] = d.entrada[campo];
   }
+  if (d.entrada.pf) entrada.pf = d.entrada.pf;
   const meses = Object.fromEntries(Object.entries(d.livroCaixaMeses).filter(([, v]) => v > 0));
 
   const supabase = await createClient();

@@ -1,17 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/Button";
-import { descartarAnaliseReforma, salvarAnaliseReforma } from "@/lib/actions/reforma-tributaria";
-import {
-  ROTULO_STATUS,
-  opcoesMudanca,
-  receitaLivroCaixaAnual,
-  type AnaliseReforma,
-  type LivroCaixa,
-  type StatusAnalise,
-} from "@/lib/reforma-tributaria/analise";
+import { useMemo, useState } from "react";
+import { receitaLivroCaixaAnual, type AnaliseReforma, type LivroCaixa } from "@/lib/reforma-tributaria/analise";
+import { PainelAnalise } from "./PainelAnalise";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -27,7 +18,6 @@ import {
   simularTodos,
   type Cenario,
   type EntradaSimulacao,
-  type RegimeSimulado,
 } from "@/lib/reforma-tributaria/motor";
 import {
   ALIQUOTAS_REFERENCIA,
@@ -62,8 +52,6 @@ export function SimuladorEmpresa({
   const [livroCaixa, setLivroCaixa] = useState<LivroCaixa>(
     analise?.livroCaixa ?? { tem: false, mediaMensal: null, meses: {} },
   );
-  const [status, setStatus] = useState<StatusAnalise>(analise?.status ?? "PENDENTE");
-  const [observacao, setObservacao] = useState(analise?.observacao ?? "");
   const regimeAtual = regimeAtualSimulado(taxRegime);
 
   const lc = receitaLivroCaixaAnual(livroCaixa);
@@ -256,15 +244,28 @@ export function SimuladorEmpresa({
       <PainelAnalise
         companyId={companyId}
         analise={analise}
-        status={status}
-        setStatus={setStatus}
-        observacao={observacao}
-        setObservacao={setObservacao}
-        base={base}
-        livroCaixa={livroCaixa}
-        ano={ano}
-        melhor={melhor}
         regimeAtual={regimeAtual}
+        ano={ano}
+        sugestao={melhor && regimeAtual ? (melhor.regime === regimeAtual ? "SEM_MUDANCA" : "COM_MUDANCA") : null}
+        mudancaSugerida={melhor && melhor.regime !== regimeAtual ? melhor.regime : null}
+        rotuloMelhor={melhor && melhor.regime !== regimeAtual ? NOME_REGIME[melhor.regime] : null}
+        montarDados={() => ({
+          temLivroCaixa: livroCaixa.tem,
+          livroCaixaMediaMensal: livroCaixa.mediaMensal,
+          livroCaixaMeses: livroCaixa.meses,
+          entrada: {
+            receitaAnual: base.receitaAnual,
+            receitaHospitalarAnual: base.receitaHospitalarAnual,
+            salariosAnual: base.salariosAnual,
+            proLaboreAnual: base.proLaboreAnual,
+            fgtsAnual: base.fgtsAnual,
+            sujeitoFatorR: base.sujeitoFatorR,
+            aliquotaIss: base.aliquotaIss,
+            reducaoCbsIbs: base.reducaoCbsIbs,
+            custosCreditaveisPct: base.custosCreditaveisPct,
+            percentualB2b: base.percentualB2b,
+          },
+        })}
       />
 
       <Checklist2027 regimeAtual={regimeAtual} />
@@ -367,169 +368,6 @@ function PainelLivroCaixa({
   );
 }
 
-function PainelAnalise({
-  companyId,
-  analise,
-  status,
-  setStatus,
-  observacao,
-  setObservacao,
-  base,
-  livroCaixa,
-  ano,
-  melhor,
-  regimeAtual,
-}: {
-  companyId: string;
-  analise: AnaliseReforma | null;
-  status: StatusAnalise;
-  setStatus: (s: StatusAnalise) => void;
-  observacao: string;
-  setObservacao: (s: string) => void;
-  base: EntradaSimulacao;
-  livroCaixa: LivroCaixa;
-  ano: AnoSimulacao;
-  melhor: Cenario | null;
-  regimeAtual: ReturnType<typeof regimeAtualSimulado>;
-}) {
-  const router = useRouter();
-  const [pendente, iniciar] = useTransition();
-  const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
-  const sugestao: StatusAnalise | null =
-    melhor && regimeAtual ? (melhor.regime === regimeAtual ? "SEM_MUDANCA" : "COM_MUDANCA") : null;
-  const opcoes = opcoesMudanca(regimeAtual);
-  // Sem mudança gravada, já vem marcada a melhor opção da simulação (se for outra).
-  const [mudancaPara, setMudancaPara] = useState<RegimeSimulado | null>(
-    () => analise?.mudancaPara ?? (melhor && melhor.regime !== regimeAtual ? melhor.regime : null),
-  );
-
-  function salvar() {
-    setMsg(null);
-    iniciar(async () => {
-      const r = await salvarAnaliseReforma({
-        companyId,
-        status,
-        observacao: observacao.trim() || null,
-        temLivroCaixa: livroCaixa.tem,
-        livroCaixaMediaMensal: livroCaixa.mediaMensal,
-        livroCaixaMeses: livroCaixa.meses,
-        entrada: {
-          receitaAnual: base.receitaAnual,
-          receitaHospitalarAnual: base.receitaHospitalarAnual,
-          salariosAnual: base.salariosAnual,
-          proLaboreAnual: base.proLaboreAnual,
-          fgtsAnual: base.fgtsAnual,
-          sujeitoFatorR: base.sujeitoFatorR,
-          aliquotaIss: base.aliquotaIss,
-          reducaoCbsIbs: base.reducaoCbsIbs,
-          custosCreditaveisPct: base.custosCreditaveisPct,
-          percentualB2b: base.percentualB2b,
-        },
-        mudancaPara: status === "COM_MUDANCA" ? mudancaPara : null,
-        anoReferencia: ano,
-      });
-      setMsg(r ?? null);
-      if (r?.ok) router.refresh();
-    });
-  }
-
-  return (
-    <Card
-      className={cn(
-        "p-6",
-        status === "SEM_MUDANCA" && "border-success/40 bg-success-soft",
-        status === "COM_MUDANCA" && "border-yellow-400 bg-yellow-100",
-      )}
-    >
-      <h2 className="text-sm font-semibold text-foreground">Minha análise</h2>
-      <p className="mt-1 text-xs text-foreground/55">
-        Salvar guarda os dados editados acima, o livro caixa e o status. A carteira passa a usar estes dados no lugar
-        dos do sistema para esta empresa.
-        {analise?.analisadoEm
-          ? ` Última análise: ${new Date(analise.analisadoEm).toLocaleString("pt-BR")}${analise.analisadoPor ? ` por ${analise.analisadoPor}` : ""}.`
-          : ""}
-      </p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-[300px_1fr]">
-        <div className="flex flex-col gap-4">
-          <Field
-            label="Status"
-            htmlFor="status"
-            hint={sugestao ? `Pela simulação de ${ano}: ${ROTULO_STATUS[sugestao].toLowerCase()}` : undefined}
-          >
-            <Select id="status" value={status} onChange={(ev) => setStatus(ev.target.value as StatusAnalise)}>
-              {(Object.keys(ROTULO_STATUS) as StatusAnalise[]).map((s) => (
-                <option key={s} value={s}>
-                  {ROTULO_STATUS[s]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {status === "COM_MUDANCA" && (
-            <Field
-              label="Mudar para"
-              htmlFor="mudanca"
-              hint={
-                melhor && melhor.regime !== regimeAtual
-                  ? `Melhor opção na simulação de ${ano}: ${NOME_REGIME[melhor.regime]}`
-                  : undefined
-              }
-            >
-              <Select
-                id="mudanca"
-                value={mudancaPara ?? ""}
-                onChange={(ev) => setMudancaPara((ev.target.value || null) as RegimeSimulado | null)}
-              >
-                <option value="">A definir</option>
-                {opcoes.map((r) => (
-                  <option key={r} value={r}>
-                    {NOME_REGIME[r]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-        </div>
-        <Field label="Observações" htmlFor="obs">
-          <textarea
-            id="obs"
-            rows={3}
-            value={observacao}
-            onChange={(ev) => setObservacao(ev.target.value)}
-            className="w-full rounded-lg border border-border bg-surface px-3.5 py-2 text-[15px] text-foreground outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
-            placeholder="Ex.: migrar para o Simples em jan/2027; reunião marcada com o sócio"
-          />
-        </Field>
-      </div>
-      <div className="mt-4 flex items-center gap-3">
-        <Button type="button" onClick={salvar} disabled={pendente}>
-          {pendente ? "Salvando…" : "Salvar análise"}
-        </Button>
-        {analise && (
-          <button
-            type="button"
-            disabled={pendente}
-            onClick={() => {
-              if (!confirm("Descartar a análise salva? A empresa volta a usar só os dados do sistema.")) return;
-              setMsg(null);
-              iniciar(async () => {
-                const r = await descartarAnaliseReforma(companyId);
-                setMsg(r ?? null);
-                // Recarrega a página inteira: o estado do formulário volta aos dados do sistema.
-                if (r?.ok) window.location.reload();
-              });
-            }}
-            className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
-          >
-            Descartar análise salva
-          </button>
-        )}
-        {msg?.ok && <span className="text-sm font-medium text-success">{msg.ok}</span>}
-        {msg?.error && <span className="text-sm font-medium text-danger">{msg.error}</span>}
-      </div>
-    </Card>
-  );
-}
-
 function Recomendacao({
   ano,
   atual,
@@ -568,7 +406,7 @@ function Recomendacao({
           <div className="text-lg font-semibold text-foreground">{NOME_REGIME[melhor.regime]}</div>
           <div className="text-xs text-foreground/60">
             {!regimeAtual
-              ? "Regime atual não simulado (Lucro Real / não informado)"
+              ? "Sem regime de PJ atual para comparar (pessoa física, Lucro Real ou não informado)"
               : trocar
                 ? `Economia estimada de ${formatarMoeda(economia)}/ano`
                 : "Manter o regime atual"}

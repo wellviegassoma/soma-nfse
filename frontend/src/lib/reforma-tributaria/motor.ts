@@ -107,7 +107,8 @@ function aliquotaCbsIbs(ano: AnoSimulacao, reducao: number) {
 }
 
 // CBS/IBS no regime regular: débito sobre a receita − crédito sobre compras.
-function cbsIbsRegular(e: EntradaSimulacao, ano: AnoSimulacao) {
+// Também usado para a pessoa física contribuinte (lib/reforma-tributaria/pessoa-fisica.ts).
+export function cbsIbsRegular(e: EntradaSimulacao, ano: AnoSimulacao) {
   if (!cbsIbsCobradoNoAno(ano)) return { cbs: 0, ibs: 0, debito: 0, credito: 0 };
   const al = aliquotaCbsIbs(ano, e.reducaoCbsIbs);
   const baseCompras = e.receitaAnual * e.custosCreditaveisPct;

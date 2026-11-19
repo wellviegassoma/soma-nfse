@@ -7,16 +7,26 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { formatarMoeda, formatarPercentual } from "@/lib/formatters";
 import { cn } from "@/lib/cn";
-import { carregarBasesReforma, CUSTOS_CREDITAVEIS_PADRAO, B2B_PADRAO } from "@/lib/reforma-tributaria/dados";
+import {
+  carregarBasesReforma,
+  CUSTOS_CREDITAVEIS_PADRAO,
+  B2B_PADRAO,
+  type BaseEmpresaReforma,
+} from "@/lib/reforma-tributaria/dados";
+import {
+  melhorOpcaoPF,
+  simularPessoaFisica,
+  type OpcaoId,
+  type OpcaoPessoaFisica,
+} from "@/lib/reforma-tributaria/pessoa-fisica";
 import {
   NOME_REGIME,
   melhorCenario,
   regimeAtualSimulado,
   simularTodos,
-  type Cenario,
 } from "@/lib/reforma-tributaria/motor";
 import { ALIQUOTAS_REFERENCIA, ANOS_SIMULACAO, FONTES_OFICIAIS, type AnoSimulacao } from "@/lib/reforma-tributaria/parametros";
-import type { StatusAnalise } from "@/lib/reforma-tributaria/analise";
+import { entradaPessoaFisica, type StatusAnalise } from "@/lib/reforma-tributaria/analise";
 import { StatusAnaliseSelect } from "./StatusAnaliseSelect";
 
 export const metadata = { title: "Reforma Tributária — Painel SOMA" };
@@ -32,6 +42,40 @@ const SIGLA: Record<string, string> = {
 // trabalho/risco de mudar de regime (1% da receita ou R$ 3 mil/ano).
 function trocaCompensa(economia: number, receita: number) {
   return economia > Math.max(3_000, receita * 0.01);
+}
+
+type ResumoValor = { total: number; aliquotaEfetiva: number };
+
+// CPF (livro caixa / carnê-leão): "hoje" e "no ano" são os tributos na pessoa
+// física; a melhor opção compara continuar no CPF × abrir PJ pelo que fica
+// no bolso (lib/reforma-tributaria/pessoa-fisica.ts).
+function linhaPessoaFisica(b: BaseEmpresaReforma, ano: AnoSimulacao) {
+  const entrada = entradaPessoaFisica(b.entradaSistema, b.analise);
+  const semReceita = entrada.receitaAnual <= 0;
+  const hoje = simularPessoaFisica(entrada, 2026);
+  const noAno = simularPessoaFisica(entrada, ano);
+  const pf = noAno[0];
+  const resumo = (o: OpcaoPessoaFisica): ResumoValor => ({ total: o.tributos, aliquotaEfetiva: o.cargaPct });
+  const melhor = semReceita ? null : melhorOpcaoPF(noAno);
+  const economia = melhor && melhor.id !== "PF" ? melhor.liquidoEfetivo - pf.liquidoEfetivo : 0;
+  const status: StatusAnalise = b.analise?.status ?? "PENDENTE";
+  const mudancaPara = status === "COM_MUDANCA" ? (b.analise?.mudancaPara ?? null) : null;
+  const destino = mudancaPara ? noAno.find((o) => o.id === mudancaPara) : null;
+  return {
+    b,
+    receitaExibida: entrada.receitaAnual,
+    semReceita,
+    regimeAtual: null,
+    atualHoje: semReceita ? null : resumo(hoje[0]),
+    atualNoAno: semReceita ? null : resumo(pf),
+    melhor: null,
+    melhorPf: melhor?.id ?? null,
+    economia,
+    recomendarTroca: melhor != null && melhor.id !== "PF" && trocaCompensa(economia, entrada.receitaAnual),
+    status,
+    mudancaPara,
+    economiaMudanca: !semReceita && destino && destino.elegivel ? destino.liquidoEfetivo - pf.liquidoEfetivo : null,
+  };
 }
 
 // Código do cliente em ordem numérica ("2" antes de "10"); sem código no fim.
@@ -65,6 +109,7 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
   // lista sem cálculo até a receita ser informada e salva no simulador.
   const linhas = bases
     .map((b) => {
+      if (b.pessoaFisica) return linhaPessoaFisica(b, ano);
       const semReceita = b.entrada.receitaAnual + (b.entrada.receitaLivroCaixaAnual ?? 0) <= 0;
       const regimeAtual = regimeAtualSimulado(b.taxRegime);
       const hoje = simularTodos(b.entrada, 2026);
@@ -84,11 +129,13 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
         atualNoAno && destino && destino.elegivel ? atualNoAno.cargaEfetiva - destino.cargaEfetiva : null;
       return {
         b,
+        receitaExibida: b.entrada.receitaAnual + (b.entrada.receitaLivroCaixaAnual ?? 0),
         semReceita,
         regimeAtual,
-        atualHoje,
-        atualNoAno,
+        atualHoje: atualHoje as ResumoValor | null,
+        atualNoAno: atualNoAno as ResumoValor | null,
         melhor,
+        melhorPf: null as OpcaoId | null,
         economia,
         recomendarTroca,
         status,
@@ -256,9 +303,11 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
                     {l.b.analise?.livroCaixa.tem ? " · com livro caixa" : ""}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-foreground/70">{l.b.taxRegime ? SIGLA[l.b.taxRegime] : "—"}</td>
+                <td className="px-4 py-3 text-foreground/70">
+                  {l.b.pessoaFisica ? "PF (carnê-leão)" : l.b.taxRegime ? SIGLA[l.b.taxRegime] : "—"}
+                </td>
                 <td className="px-4 py-3 text-right tabular-nums">
-                  {formatarMoeda(l.b.entrada.receitaAnual + (l.b.entrada.receitaLivroCaixaAnual ?? 0))}
+                  {formatarMoeda(l.receitaExibida)}
                   {(l.b.entrada.receitaLivroCaixaAnual ?? 0) > 0 && (
                     <div className="text-xs text-foreground/50">
                       PJ + livro caixa {formatarMoeda(l.b.entrada.receitaLivroCaixaAnual ?? 0)}
@@ -275,14 +324,39 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
                   {l.status === "COM_MUDANCA" ? (
                     <div>
                       <span className="inline-flex rounded-full border border-yellow-500 bg-yellow-200 px-2.5 py-0.5 text-xs font-semibold text-yellow-900">
-                        {l.mudancaPara ? `Mudar → ${NOME_REGIME[l.mudancaPara]}` : "Mudança a definir"}
+                        {l.mudancaPara
+                          ? `${l.b.pessoaFisica ? "Abrir PJ → " : "Mudar → "}${NOME_REGIME[l.mudancaPara]}`
+                          : "Mudança a definir"}
                       </span>
-                      {l.melhor && (
+                      {(l.melhor || l.melhorPf) && (
                         <div className="mt-1 text-xs text-foreground/50">
-                          simulação: {l.recomendarTroca ? `trocar → ${NOME_REGIME[l.melhor.regime]}` : "manter"}
+                          simulação:{" "}
+                          {l.melhorPf
+                            ? l.melhorPf === "PF"
+                              ? "continuar PF"
+                              : `abrir PJ → ${NOME_REGIME[l.melhorPf]}`
+                            : l.recomendarTroca && l.melhor
+                              ? `trocar → ${NOME_REGIME[l.melhor.regime]}`
+                              : "manter"}
                         </div>
                       )}
                     </div>
+                  ) : l.melhorPf ? (
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+                        l.recomendarTroca ? "bg-success-soft text-success" : "bg-surface-muted text-foreground/60",
+                      )}
+                    >
+                      {l.melhorPf === "PF" || !l.recomendarTroca ? "Continuar na PF" : `Abrir PJ → ${NOME_REGIME[l.melhorPf]}`}
+                    </span>
+                  ) : l.melhor && !l.regimeAtual ? (
+                    // Sem regime de PJ para comparar (CPF, Lucro Real, imune ou não informado):
+                    // mostra só a melhor opção de PJ simulada.
+                    <span className="inline-flex rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-medium text-brand">
+                      {l.b.pessoaFisica ? "Se abrir PJ → " : "Melhor → "}
+                      {NOME_REGIME[l.melhor.regime]}
+                    </span>
                   ) : l.melhor ? (
                     <span
                       className={cn(
@@ -291,12 +365,17 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
                       )}
                     >
                       {l.recomendarTroca ? "Trocar → " : "Manter · "}
-                      {l.recomendarTroca ? NOME_REGIME[l.melhor.regime] : l.regimeAtual ? NOME_REGIME[l.regimeAtual] : NOME_REGIME[l.melhor.regime]}
+                      {l.recomendarTroca ? NOME_REGIME[l.melhor.regime] : NOME_REGIME[l.regimeAtual!]}
                     </span>
                   ) : (
                     "—"
                   )}
-                  {!l.regimeAtual && <div className="mt-1 text-xs text-foreground/45">regime atual não simulado</div>}
+                  {!l.regimeAtual && !l.b.pessoaFisica && (
+                    <div className="mt-1 text-xs text-foreground/45">regime atual não simulado</div>
+                  )}
+                  {l.b.pessoaFisica && !l.semReceita && (
+                    <div className="mt-1 text-xs text-foreground/45">pela sobra no bolso (IRPF + INSS + CBS/IBS)</div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums font-medium">
                   {l.economiaMudanca != null ? (
@@ -318,7 +397,15 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
                     status={l.status}
                     mudancaPara={l.mudancaPara}
                     regimeAtual={l.regimeAtual}
-                    sugestao={l.melhor && l.melhor.regime !== l.regimeAtual ? l.melhor.regime : null}
+                    sugestao={
+                      l.melhorPf
+                        ? l.melhorPf === "PF"
+                          ? null
+                          : l.melhorPf
+                        : l.melhor && l.melhor.regime !== l.regimeAtual
+                          ? l.melhor.regime
+                          : null
+                    }
                   />
                 </td>
                 <td className="px-4 py-3 text-right">
@@ -366,7 +453,7 @@ export default async function ReformaTributariaPage(props: PageProps<"/admin/ref
   );
 }
 
-function ValorCenario({ c, base }: { c: Cenario | null; base?: Cenario | null }) {
+function ValorCenario({ c, base }: { c: ResumoValor | null; base?: ResumoValor | null }) {
   if (!c) return <span className="text-foreground/40">—</span>;
   const variacao = base && base.total > 0 ? c.total / base.total - 1 : null;
   return (

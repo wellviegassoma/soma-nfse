@@ -2,6 +2,7 @@
 // tipos e regras usados tanto no servidor quanto na tela.
 
 import type { EntradaSimulacao, RegimeSimulado } from "@/lib/reforma-tributaria/motor";
+import { ENTRADA_PF_PADRAO, type EntradaPessoaFisica } from "@/lib/reforma-tributaria/pessoa-fisica";
 
 export const REGIMES_SIMULADOS: RegimeSimulado[] = ["SIMPLES", "SIMPLES_HIBRIDO", "LUCRO_PRESUMIDO"];
 
@@ -33,7 +34,8 @@ export type AnaliseReforma = {
   status: StatusAnalise;
   observacao: string | null;
   livroCaixa: LivroCaixa;
-  entrada: Partial<EntradaSimulacao> | null;
+  // `pf`: dados do simulador pessoa física × PJ (só para CPF).
+  entrada: (Partial<EntradaSimulacao> & { pf?: Partial<EntradaPessoaFisica> }) | null;
   // Coluna regime_recomendado: a MUDANÇA DECIDIDA pelo contador quando o
   // status é COM_MUDANCA (para qual regime o cliente vai). Null nos outros
   // status ou quando a mudança ainda não foi definida.
@@ -80,6 +82,19 @@ export const CAMPOS_ENTRADA_SALVOS = [
   "custosCreditaveisPct",
   "percentualB2b",
 ] as const satisfies readonly (keyof EntradaSimulacao)[];
+
+// Entrada do simulador pessoa física × PJ: o que foi salvo na análise (pf),
+// senão o que o sistema sabe (receita das notas no CPF, redução do serviço).
+export function entradaPessoaFisica(sistema: EntradaSimulacao, analise: AnaliseReforma | null): EntradaPessoaFisica {
+  const pf = analise?.entrada?.pf ?? {};
+  return {
+    ...ENTRADA_PF_PADRAO,
+    receitaAnual: sistema.receitaAnual,
+    reducaoCbsIbs: sistema.reducaoCbsIbs,
+    sujeitoFatorR: true, // profissional da saúde / regulamentado: em regra sujeito ao Fator R
+    ...Object.fromEntries(Object.entries(pf).filter(([, v]) => v !== undefined && v !== null)),
+  };
+}
 
 export function aplicarAnalise(sistema: EntradaSimulacao, analise: AnaliseReforma | null): EntradaSimulacao {
   if (!analise) return sistema;

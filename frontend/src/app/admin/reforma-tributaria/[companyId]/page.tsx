@@ -6,7 +6,9 @@ import { NOMES_CCLASSTRIB } from "@/lib/ibscbs-correlacao";
 import { TAX_REGIME_LABELS } from "@/lib/types";
 import { competenciasRbt12 } from "@/lib/faturamento";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { entradaPessoaFisica } from "@/lib/reforma-tributaria/analise";
 import { SimuladorEmpresa } from "./SimuladorEmpresa";
+import { SimuladorPessoaFisica } from "./SimuladorPessoaFisica";
 
 export const metadata = { title: "Simulador da Reforma — Painel SOMA" };
 
@@ -37,30 +39,44 @@ export default async function SimuladorEmpresaPage(props: PageProps<"/admin/refo
           {base.nome}
         </h1>
         <p className="text-sm text-foreground/60">
-          Regime cadastrado: {base.taxRegime ? TAX_REGIME_LABELS[base.taxRegime] : "não informado"}
+          {base.pessoaFisica
+            ? "Pessoa física (livro caixa / carnê-leão) — continuar no CPF × abrir PJ, pelo que fica no bolso"
+            : `Regime cadastrado: ${base.taxRegime ? TAX_REGIME_LABELS[base.taxRegime] : "não informado"}`}
           {base.cClassTrib
             ? ` · serviço principal ${base.cClassTrib} — ${NOMES_CCLASSTRIB[base.cClassTrib] ?? "classificação sem nome"}`
             : " · serviços sem cClassTrib cadastrado"}
-          {base.receitaEstimada ? ` · receita projetada de ${base.mesesReceita} mês(es)` : ""}
+          {base.receitaEstimada && base.mesesReceita > 0 ? ` · receita projetada de ${base.mesesReceita} mês(es)` : ""}
+          {base.entradaSistema.receitaAnual <= 0 ? " · sem receita no sistema — informe abaixo" : ""}
         </p>
-        <p className="text-xs text-foreground/50">
-          Anexo do Simples:{" "}
-          {base.origemAnexo === "cadastro"
-            ? "Fator R conforme o cadastro da empresa"
-            : base.origemAnexo === "servicos"
-              ? "pela atividade dos serviços cadastrados"
-              : "sem atividade do Simples nos serviços — assumido sujeito ao Fator R (conservador); ajuste abaixo se não for"}
-        </p>
+        {!base.pessoaFisica && (
+          <p className="text-xs text-foreground/50">
+            Anexo do Simples:{" "}
+            {base.origemAnexo === "cadastro"
+              ? "Fator R conforme o cadastro da empresa"
+              : base.origemAnexo === "servicos"
+                ? "pela atividade dos serviços cadastrados"
+                : "sem atividade do Simples nos serviços — assumido sujeito ao Fator R (conservador); ajuste abaixo se não for"}
+          </p>
+        )}
       </div>
-      <SimuladorEmpresa
-        companyId={base.id}
-        taxRegime={base.taxRegime}
-        inicial={base.entrada}
-        sistema={base.entradaSistema}
-        analise={base.analise}
-        mesesLivroCaixa={[...competenciasRbt12(mesCorrenteBrasilia())].reverse()}
-        folhaInformada={base.folhaInformada}
-      />
+      {base.pessoaFisica ? (
+        <SimuladorPessoaFisica
+          companyId={base.id}
+          inicial={entradaPessoaFisica(base.entradaSistema, base.analise)}
+          sistema={entradaPessoaFisica(base.entradaSistema, null)}
+          analise={base.analise}
+        />
+      ) : (
+        <SimuladorEmpresa
+          companyId={base.id}
+          taxRegime={base.taxRegime}
+          inicial={base.entrada}
+          sistema={base.entradaSistema}
+          analise={base.analise}
+          mesesLivroCaixa={[...competenciasRbt12(mesCorrenteBrasilia())].reverse()}
+          folhaInformada={base.folhaInformada}
+        />
+      )}
     </div>
   );
 }

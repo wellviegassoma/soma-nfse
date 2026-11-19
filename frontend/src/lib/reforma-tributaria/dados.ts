@@ -24,6 +24,8 @@ export type BaseEmpresaReforma = {
   id: string;
   nome: string;
   codigoCliente: string | null;
+  // CPF (livro caixa / carnê-leão) — sem regime de PJ atual.
+  pessoaFisica: boolean;
   taxRegime: TaxRegime | null;
   receitaEstimada: boolean;
   mesesReceita: number;
@@ -195,8 +197,10 @@ export async function carregarBasesReforma(
     classPorEmpresa.set(s.company_id, m);
   }
 
-  // Carnê-leão (CPF) não tem regime de PJ para comparar.
-  return (companies ?? []).filter((c) => c.person_type !== "PF").map((c) => {
+  // Todas as cadastradas, inclusive CPF (livro caixa / carnê-leão): para
+  // essas não há regime de PJ atual — a simulação mostra quanto pagaria se
+  // abrisse uma PJ (o IRPF do carnê-leão não é calculado aqui).
+  return (companies ?? []).map((c) => {
     const porMes = receita.get(c.id);
     const porMesManual = manual.get(c.id);
     const mesesManuais = new Set(porMesManual?.keys() ?? []);
@@ -265,7 +269,9 @@ export async function carregarBasesReforma(
       id: c.id,
       nome: c.trade_name || c.legal_name,
       codigoCliente: c.codigo_cliente,
-      taxRegime: c.tax_regime as TaxRegime | null,
+      pessoaFisica: c.person_type === "PF",
+      // PF não tem regime de PJ, mesmo que algum campo antigo esteja preenchido.
+      taxRegime: c.person_type === "PF" ? null : (c.tax_regime as TaxRegime | null),
       receitaEstimada: rb.estimado,
       mesesReceita: rb.mesesDisponiveis,
       folhaInformada: Boolean(folha),
