@@ -507,6 +507,11 @@ class ClientePetropolis:
         "iss-levantamento_debitos.php",
         "iss-consulta_periodos.php",
         "index.php",
+        # ISS retido como tomador (Movimento Econômico → Retido) e a
+        # integração com a NFS-e Nacional — só consulta (GET).
+        "iss-periodos_retencao.php",
+        "iss-consulta_integracao_nfsnacional.php",
+        "iss-consulta_lancamento.php",
     }
 
     def diagnosticar(self, cnpj: str, cmc: str | None, pagina: str, params: dict[str, str]) -> dict:
