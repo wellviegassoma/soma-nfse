@@ -31,6 +31,7 @@ export type MensagemCaixaPostal = {
   validadeEm: string | null; // YYYY-MM-DD
   excluidaEm: string | null;
   bruto: Record<string, unknown>;
+  corpo?: string | null; // só o DeC traz (mensagens já lidas)
 };
 
 type Bruto = Record<string, unknown>;
@@ -67,7 +68,7 @@ export function dataHoraSerpro(data: unknown, hora: unknown): string | null {
 
 /** Assunto do modelo com o "++VARIAVEL++" trocado pelo parâmetro. */
 export function montarAssunto(modelo: unknown, parametro: unknown): string {
-  const m = texto(modelo) ?? "(sem assunto)";
+  const m = decodificarEntidades(texto(modelo) ?? "(sem assunto)");
   const p = texto(parametro);
   return m.includes("++VARIAVEL++") ? m.replace(/\+\+VARIAVEL\+\+/g, p ?? "").replace(/\s{2,}/g, " ").trim() : m;
 }

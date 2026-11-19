@@ -126,6 +126,9 @@ export async function abrirConteudo(mensagemId: string): Promise<ConteudoResulta
     .maybeSingle();
   if (!m) return { ok: false, erro: "Mensagem não encontrada." };
   if (m.corpo) return { ok: true, corpo: m.corpo as string };
+  if (String(m.isn).startsWith("DEC:")) {
+    return { ok: false, erro: "Mensagem do DeC: abra no portal da SEFAZ-RJ (abrir dá ciência)." };
+  }
 
   const empresa = (Array.isArray(m.companies) ? m.companies[0] : m.companies) as { cnpj: string | null } | null;
   const cnpj = String(empresa?.cnpj ?? "").replace(/\D/g, "");

@@ -33,6 +33,7 @@ type Linha = {
   observacao: string | null;
   tratamento_em: string | null;
   tratamento_por: string | null;
+  isn: string;
   corpo: string | null;
   corpo_lido_em: string | null;
   corpo_lido_por: string | null;
@@ -65,7 +66,7 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
   let consulta = supabase
     .from("caixa_postal_mensagens")
     .select(
-      "id, company_id, assunto, relevante, tipo_origem, descricao_origem, enviada_em, lida_em, ciencia_em, vista_em, status, responsavel_id, observacao, tratamento_em, tratamento_por, corpo, corpo_lido_em, corpo_lido_por",
+      "id, company_id, isn, assunto, relevante, tipo_origem, descricao_origem, enviada_em, lida_em, ciencia_em, vista_em, status, responsavel_id, observacao, tratamento_em, tratamento_por, corpo, corpo_lido_em, corpo_lido_por",
     )
     .order("enviada_em", { ascending: false, nullsFirst: false })
     .limit(filtro === "abertas" ? 1000 : 400);
@@ -99,6 +100,7 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
   const destaque = (m: { relevante: boolean; assunto: string }) => m.relevante || ehIntimacao(m.assunto);
   const ordemStatus: Record<StatusTratamento, number> = { nova: 0, em_tratamento: 1, resolvida: 2 };
   const mensagens = ((mensagensBrutas ?? []) as Linha[])
+    .map((m) => ({ ...m, assunto: decodificarEntidades(m.assunto) }))
     .filter((m) => !soDestaque || destaque(m))
     .sort(
       (a, b) =>
@@ -133,7 +135,7 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
         <div>
           <h1 className="text-xl font-semibold text-foreground">Intimações e mensagens oficiais</h1>
           <p className="text-sm text-foreground/60">
-            Caixa Postal do e-CAC de toda a carteira, lida pelo Integra Contador toda segunda-feira, às 7h.
+            Caixa Postal do e-CAC (Integra Contador) e DeC da SEFAZ-RJ (Infosimples) de toda a carteira, lidos toda segunda-feira de manhã.
             {ultimaLeitura ? ` Última leitura: ${formatarDataHora(ultimaLeitura)}.` : " Ainda não houve leitura."}
           </p>
         </div>
@@ -250,7 +252,7 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
                             ? `Aberta pelo SOMA em ${formatarDataHora(m.lida_em)}${
                                 m.corpo_lido_por ? ` por ${nomePorId.get(m.corpo_lido_por) ?? "—"}` : ""
                               } (já tem ciência)`
-                            : `Aberta no e-CAC em ${formatarDataHora(m.lida_em)} (já tem ciência)`}
+                            : `Aberta no ${m.isn.startsWith("DEC:") ? "DeC" : "e-CAC"} em ${formatarDataHora(m.lida_em)} (já tem ciência)`}
                         </span>
                       ) : m.ciencia_em ? (
                         <span className="font-medium text-warning">
@@ -276,6 +278,7 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
                     )}
                     <ConteudoMensagem
                       mensagemId={m.id}
+                      doDec={m.isn.startsWith("DEC:")}
                       corpo={m.corpo ? decodificarEntidades(m.corpo).replace(/^[ \t]+/gm, "") : null}
                       lidoPor={
                         m.corpo_lido_em

@@ -12,12 +12,14 @@ export function ConteudoMensagem({
   lidoPor,
   jaTemCiencia,
   cienciaAutomatica,
+  doDec = false,
 }: {
   mensagemId: string;
   corpo: string | null;
   lidoPor: string | null;
   jaTemCiencia: boolean;
   cienciaAutomatica: string | null; // dd/mm/aaaa, quando ainda não houve ciência
+  doDec?: boolean; // DeC da SEFAZ-RJ: não dá para abrir só esta pelo SOMA
 }) {
   const [corpo, setCorpo] = useState(corpoSalvo);
   const [aberto, setAberto] = useState(false);
@@ -52,6 +54,16 @@ export function ConteudoMensagem({
           </div>
         )}
       </div>
+    );
+  }
+
+  if (doDec) {
+    // A Infosimples só abre as não lidas todas de uma vez (dando ciência de
+    // todas) — então aqui não há botão: quem for tratar abre no DeC.
+    return (
+      <p className="mt-2 text-xs text-foreground/60">
+        Conteúdo no DeC da SEFAZ-RJ. Abrir lá dá ciência; o SOMA mostra o texto depois que a mensagem for lida.
+      </p>
     );
   }
 

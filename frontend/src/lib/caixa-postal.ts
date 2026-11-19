@@ -100,7 +100,67 @@ function linhaReceita(companyId: string, m: MensagemCaixaPostal) {
     excluida_em: m.excluidaEm,
     dados: m.bruto,
     atualizada_em: new Date().toISOString(),
+    // Só o DeC traz o texto já na lista (mensagens já lidas); undefined não
+    // toca na coluna, para a leitura do e-CAC nunca apagar um corpo guardado.
+    ...(m.corpo !== undefined ? { corpo: m.corpo } : {}),
   };
+}
+
+/**
+ * Grava a lista lida de uma caixa (e-CAC ou DeC): mensagens novas entram na
+ * fila (ou já resolvidas, se informativas/histórico); as conhecidas só têm os
+ * dados do órgão atualizados — o tratamento interno nunca é sobrescrito.
+ */
+export async function gravarMensagens(
+  supabase: Supa,
+  companyId: string,
+  mensagens: MensagemCaixaPostal[],
+  opcoes: { primeiraLeitura: boolean; origem: string },
+): Promise<{ ok: true; novas: number } | { ok: false; erro: string }> {
+  const isns = mensagens.map((m) => m.isn);
+  const { data: existentes, error: errExist } = isns.length
+    ? await supabase.from("caixa_postal_mensagens").select("isn").eq("company_id", companyId).in("isn", isns)
+    : { data: [] as { isn: string }[], error: null };
+  if (errExist) return { ok: false, erro: `Banco: ${errExist.message}` };
+
+  const conhecidos = new Set((existentes ?? []).map((e) => e.isn as string));
+  const novas = mensagens.filter((m) => !conhecidos.has(m.isn));
+  const velhas = mensagens.filter((m) => conhecidos.has(m.isn));
+
+  if (velhas.length) {
+    const { error } = await supabase
+      .from("caixa_postal_mensagens")
+      .upsert(velhas.map((m) => linhaReceita(companyId, m)), { onConflict: "company_id,isn" });
+    if (error) return { ok: false, erro: `Banco: ${error.message}` };
+  }
+
+  let novasNaFila = 0;
+  if (novas.length) {
+    const agora = new Date();
+    const linhas = novas.map((m) => {
+      const motivo = motivoResolucaoAutomatica(m, opcoes.primeiraLeitura, agora);
+      const status = motivo ? "resolvida" : "nova";
+      if (status === "nova") novasNaFila += 1;
+      return {
+        ...linhaReceita(companyId, m),
+        status,
+        observacao: motivo,
+        tratamento_em: status === "resolvida" ? agora.toISOString() : null,
+      };
+    });
+    const { data: inseridas, error } = await supabase
+      .from("caixa_postal_mensagens")
+      .upsert(linhas, { onConflict: "company_id,isn", ignoreDuplicates: true })
+      .select("id, status, observacao");
+    if (error) return { ok: false, erro: `Banco: ${error.message}` };
+    const historico = (inseridas ?? []).map((r) => ({
+      mensagem_id: r.id,
+      status: r.status,
+      observacao: r.observacao ?? `Mensagem encontrada ${opcoes.origem}.`,
+    }));
+    if (historico.length) await supabase.from("caixa_postal_tratamentos").insert(historico);
+  }
+  return { ok: true, novas: novasNaFila };
 }
 
 /** Lê a Caixa Postal de uma empresa e grava: mensagens novas entram na fila; as já conhecidas só têm os dados da Receita atualizados (o tratamento interno nunca é sobrescrito). */
@@ -116,50 +176,20 @@ export async function lerCaixaPostalEmpresa(supabase: Supa, empresa: EmpresaCaix
     return lista;
   }
 
-  const [{ data: existentes, error: errExist }, { data: leituraAnterior }] = await Promise.all([
-    supabase.from("caixa_postal_mensagens").select("isn").eq("company_id", empresa.id),
+  const [{ data: leituraAnterior }, { count: jaGuardadas }] = await Promise.all([
     supabase.from("caixa_postal_leituras").select("company_id").eq("company_id", empresa.id).eq("ok", true).maybeSingle(),
+    supabase
+      .from("caixa_postal_mensagens")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", empresa.id)
+      .not("isn", "like", "DEC:%"),
   ]);
-  if (errExist) return { ok: false, erro: `Banco: ${errExist.message}` };
-
-  const conhecidos = new Set((existentes ?? []).map((e) => e.isn as string));
-  const primeiraLeitura = !leituraAnterior && conhecidos.size === 0;
-  const novas = lista.mensagens.filter((m) => !conhecidos.has(m.isn));
-  const velhas = lista.mensagens.filter((m) => conhecidos.has(m.isn));
-
-  if (velhas.length) {
-    const { error } = await supabase
-      .from("caixa_postal_mensagens")
-      .upsert(velhas.map((m) => linhaReceita(empresa.id, m)), { onConflict: "company_id,isn" });
-    if (error) return { ok: false, erro: `Banco: ${error.message}` };
-  }
-
-  let novasNaFila = 0;
-  if (novas.length) {
-    const agora = new Date();
-    const linhas = novas.map((m) => {
-      const motivo = motivoResolucaoAutomatica(m, primeiraLeitura, agora);
-      const status = motivo ? "resolvida" : "nova";
-      if (status === "nova") novasNaFila += 1;
-      return {
-        ...linhaReceita(empresa.id, m),
-        status,
-        observacao: motivo,
-        tratamento_em: status === "resolvida" ? agora.toISOString() : null,
-      };
-    });
-    const { data: inseridas, error } = await supabase
-      .from("caixa_postal_mensagens")
-      .upsert(linhas, { onConflict: "company_id,isn", ignoreDuplicates: true })
-      .select("id, status, observacao");
-    if (error) return { ok: false, erro: `Banco: ${error.message}` };
-    const historico = (inseridas ?? []).map((r) => ({
-      mensagem_id: r.id,
-      status: r.status,
-      observacao: r.observacao ?? "Mensagem encontrada na Caixa Postal do e-CAC.",
-    }));
-    if (historico.length) await supabase.from("caixa_postal_tratamentos").insert(historico);
-  }
+  const gravado = await gravarMensagens(supabase, empresa.id, lista.mensagens, {
+    primeiraLeitura: !leituraAnterior && !jaGuardadas,
+    origem: "na Caixa Postal do e-CAC",
+  });
+  if (!gravado.ok) return gravado;
+  const novasNaFila = gravado.novas;
 
   await supabase.from("caixa_postal_leituras").upsert({
     company_id: empresa.id,

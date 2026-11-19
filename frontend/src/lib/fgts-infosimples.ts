@@ -31,7 +31,7 @@ const MAX_PAGINAS = 3;
 // 12 bytes, saída sal||nonce||cifrado||tag em Base64 url-safe sem "=".
 // Feito com o crypto nativo em vez do pacote aes-bridge, que puxa como
 // dependência o pacote "crypto" obsoleto do npm.
-function criptogramaInfosimples(texto: string, chave: string): string {
+export function criptogramaInfosimples(texto: string, chave: string): string {
   const sal = crypto.randomBytes(16);
   const nonce = crypto.randomBytes(12);
   const chaveDerivada = crypto.pbkdf2Sync(Buffer.from(chave, "utf8"), sal, 100_000, 32, "sha256");
