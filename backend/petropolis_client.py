@@ -542,6 +542,18 @@ class ClientePetropolis:
                 if a.get("href") and not a.get("href").startswith("javascript")
             }
         )[:150]
+        # Menu do site abre as páginas por JavaScript (href="#") — guarda o
+        # destino do onclick/data-* pra descobrir a URL de cada item.
+        acoes = sorted(
+            {
+                f"{' '.join(el.text_content().split())[:40]} -> {(el.get('onclick') or el.get('data-href') or el.get('data-url') or '')[:120]}"
+                for el in tree.xpath("//*[@onclick or @data-href or @data-url]")
+                if ".php" in (el.get("onclick") or el.get("data-href") or el.get("data-url") or "")
+            }
+        )[:150]
+        scripts_php = sorted(
+            set(re.findall(r"[\w./-]+\.php(?:\?[\w=&%-]*)?", " ".join(tree.xpath("//script/text()"))))
+        )[:150]
         tabelas = []
         for t in tree.xpath("//table[not(.//table)]"):
             linhas = [
@@ -557,6 +569,8 @@ class ClientePetropolis:
             "selects": selects,
             "campos": campos,
             "links": links,
+            "acoes": acoes,
+            "scripts_php": scripts_php,
             "tabelas": tabelas[:20],
         }
 
