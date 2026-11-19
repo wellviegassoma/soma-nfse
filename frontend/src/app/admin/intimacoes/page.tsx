@@ -56,7 +56,7 @@ function cienciaTacita(enviadaEm: string): string {
 // Última rodada de cada rotina (vercel.json, toda segunda): quando foi, quantas
 // empresas deram certo nas 24h dela e quantas falharam. Mais de 8 dias sem
 // rodar = a rotina parou, e a tela avisa em vermelho.
-function resumoRotina(linhas: { quando: string; ok: boolean }[]) {
+function resumoRotina(linhas: { quando: string; ok: boolean }[], diasLimite = 8) {
   const ultima = linhas.filter((l) => l.ok).map((l) => l.quando).sort().at(-1) ?? null;
   if (!ultima) return { ultima: null, ok: 0, falhas: linhas.filter((l) => !l.ok).length, atrasada: true };
   const inicio = new Date(ultima).getTime() - 24 * 3600_000;
@@ -65,7 +65,7 @@ function resumoRotina(linhas: { quando: string; ok: boolean }[]) {
     ultima,
     ok: daRodada.filter((l) => l.ok).length,
     falhas: daRodada.filter((l) => !l.ok).length,
-    atrasada: Date.now() - new Date(ultima).getTime() > 8 * 24 * 3600_000,
+    atrasada: Date.now() - new Date(ultima).getTime() > diasLimite * 24 * 3600_000,
   };
 }
 
@@ -167,7 +167,10 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
     {
       nome: "Situação do CNPJ",
       fonte: "BrasilAPI",
-      ...resumoRotina((verificacoesCnpj ?? []).map((v) => ({ quando: v.verificado_em as string, ok: !!v.ok }))),
+      ...resumoRotina(
+        (verificacoesCnpj ?? []).map((v) => ({ quando: v.verificado_em as string, ok: !!v.ok })),
+        2, // roda todo dia
+      ),
     },
   ];
   const proximaSegunda = proximaSegundaBr();
@@ -186,8 +189,8 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
         <div>
           <h1 className="text-xl font-semibold text-foreground">Intimações e mensagens oficiais</h1>
           <p className="text-sm text-foreground/60">
-            Caixa Postal do e-CAC, DeC da SEFAZ-RJ e situação do CNPJ de toda a carteira, lidos sozinhos toda
-            segunda-feira de manhã. Próxima: segunda, {proximaSegunda}, a partir das 7h.
+            Caixa Postal do e-CAC e DeC da SEFAZ-RJ de toda a carteira lidos sozinhos toda segunda-feira (próxima:{" "}
+            {proximaSegunda}, a partir das 7h); situação do CNPJ todo dia às 8h30.
           </p>
         </div>
         <LerCaixaPostalButton
@@ -211,7 +214,7 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
             {r.ultima ? (
               <p className={cn("mt-0.5", r.atrasada ? "font-semibold" : "text-foreground/70")}>
                 Última leitura: {formatarDataHora(r.ultima)}
-                {r.atrasada && " (mais de 8 dias: a rotina pode ter parado)"}
+                {r.atrasada && " (atrasada: a rotina pode ter parado)"}
               </p>
             ) : (
               <p className="mt-0.5 font-semibold">Ainda não rodou.</p>
@@ -241,7 +244,7 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
             </p>
             <p className="mt-0.5 text-xs text-white/85">
               Empresa inapta ou suspensa não emite nota nem tira CND. Verificar no e-CAC e regularizar já. Fonte: BrasilAPI,
-              conferida toda segunda.
+              conferida todo dia.
             </p>
             <ul className="mt-2 flex flex-col gap-1 text-sm">
               {fora.map((x) => (

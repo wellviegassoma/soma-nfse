@@ -3,6 +3,7 @@ import { requireSomaStaff, getCurrentProfileName, isSuperAdmin, temPermissao } f
 import { Logo } from "@/components/Logo";
 import { LogoutButton } from "@/components/LogoutButton";
 import { AdminNav } from "@/components/AdminNav";
+import { AlertaCnpjGlobal } from "@/components/AlertaCnpjGlobal";
 import { contarPedidosPendentes } from "@/lib/actions/pedidos-nota";
 import { contarIntimacoesNovas } from "@/lib/caixa-postal";
 import { createClient } from "@/lib/supabase/server";
@@ -80,6 +81,7 @@ export default async function AdminLayout({
           podeEmitirNotas={podeEmitirNotas}
           pedidosPendentes={pedidosPendentes}
           intimacoesNovas={intimacoesNovas}
+          aviso={<AlertaCnpjGlobal />}
         />
         <div className="pt-6">{children}</div>
       </div>

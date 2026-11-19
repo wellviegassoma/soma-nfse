@@ -11,7 +11,7 @@ type Supa = SupabaseClient<any, any, any>;
 // dados abertos do CNPJ da Receita, que podem ter alguns dias/semanas de
 // atraso: é um alarme, não substitui o e-CAC/Situação Fiscal.
 //
-// Toda empresa ativa no SOMA deveria estar ATIVA na Receita. Se sair disso
+// Roda todo dia (vercel.json). Toda empresa ativa no SOMA deveria estar ATIVA na Receita. Se sair disso
 // (INAPTA, SUSPENSA, BAIXADA, NULA), vira mensagem de ALERTA MÁXIMO na
 // Central de Intimações — fila, responsável e histórico como as demais.
 

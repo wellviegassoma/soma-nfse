@@ -6,7 +6,8 @@ import { verificarSituacaoEmpresa } from "@/lib/situacao-cnpj";
 
 export const maxDuration = 300;
 
-// Situação cadastral do CNPJ de toda a carteira pela BrasilAPI (gratuita).
+// Situação cadastral do CNPJ de toda a carteira pela BrasilAPI (gratuita),
+// todo dia às 8h30 de Brasília (pedido de 19/11/2026).
 // Pula quem foi verificado com sucesso nas últimas 20h, então as rodadas
 // seguidas do vercel.json terminam a carteira. Duas por vez, com uma pausa
 // curta, para não levar 429 da BrasilAPI.

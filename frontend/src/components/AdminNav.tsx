@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { contarPedidosPendentes } from "@/lib/actions/pedidos-nota";
 import { cn } from "@/lib/cn";
 
@@ -76,12 +76,15 @@ export function AdminNav({
   podeEmitirNotas,
   pedidosPendentes = 0,
   intimacoesNovas = 0,
+  aviso,
 }: {
   isSuperAdmin: boolean;
   podeGerenciarUsuarios: boolean;
   podeEmitirNotas: boolean;
   pedidosPendentes?: number;
   intimacoesNovas?: number;
+  /** Faixa fixa acima das abas (ex.: alerta de CNPJ fora de ATIVA). */
+  aviso?: ReactNode;
 }) {
   const pathname = usePathname();
   const pendentes = usePedidosPendentes(podeEmitirNotas, pedidosPendentes, pathname);
@@ -101,7 +104,9 @@ export function AdminNav({
   return (
     // Fixa logo abaixo do header (h-16, também sticky) pra trocar de tela sem
     // rolar até o topo; quebra em mais de uma linha em vez de rolar de lado.
-    <nav className="sticky top-16 z-[9] -mx-4 flex flex-wrap gap-x-1 border-b border-border bg-background/95 px-4 backdrop-blur">
+    <div className="sticky top-16 z-[9] -mx-4">
+      {aviso}
+      <nav className="flex flex-wrap gap-x-1 border-b border-border bg-background/95 px-4 backdrop-blur">
       {[...tabs, ...TABS_SECUNDARIAS].map((tab) => {
         const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
         const secundaria = TABS_SECUNDARIAS.includes(tab);
@@ -141,6 +146,7 @@ export function AdminNav({
           </Link>
         );
       })}
-    </nav>
+      </nav>
+    </div>
   );
 }

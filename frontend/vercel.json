@@ -34,11 +34,11 @@
     },
     {
       "path": "/api/cron/situacao-cnpj",
-      "schedule": "30 11 * * 1"
+      "schedule": "30 11 * * *"
     },
     {
       "path": "/api/cron/situacao-cnpj?rodada=2",
-      "schedule": "45 11 * * 1"
+      "schedule": "45 11 * * *"
     }
   ]
 }
