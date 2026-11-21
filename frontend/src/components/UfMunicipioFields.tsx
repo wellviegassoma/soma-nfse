@@ -47,11 +47,16 @@ export function UfMunicipioFields({
   onChange,
   obrigatorio = false,
   hintMunicipio,
+  hintIbge: hintIbgeExtra,
+  nomeCampoMunicipio = "municipalityName",
 }: {
   value: UfMunicipio;
   onChange: (v: UfMunicipio) => void;
   obrigatorio?: boolean;
   hintMunicipio?: string;
+  hintIbge?: string;
+  /** Nome do campo enviado no formulário com o nome do município (ex.: "city" no tomador). */
+  nomeCampoMunicipio?: string;
 }) {
   const uf = value.uf.toUpperCase();
   const ufValida = (UFS as readonly string[]).includes(uf);
@@ -99,7 +104,7 @@ export function UfMunicipioFields({
     ? "Selecione a UF e o município."
     : !value.ibge
       ? "Preenchido automaticamente ao escolher o município."
-      : undefined;
+      : hintIbgeExtra;
 
   return (
     <>
@@ -148,7 +153,7 @@ export function UfMunicipioFields({
         <Input id="municipalityIbgeCode" value={value.ibge} readOnly tabIndex={-1} className="bg-foreground/5" />
       </Field>
       <input type="hidden" name="state" value={ufValida ? uf : ""} />
-      <input type="hidden" name="municipalityName" value={selecionado ? selecionado[1] : value.municipio} />
+      <input type="hidden" name={nomeCampoMunicipio} value={selecionado ? selecionado[1] : value.municipio} />
       <input type="hidden" name="municipalityIbgeCode" value={value.ibge} />
     </>
   );

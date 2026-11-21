@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useCallback, useState } from "react";
 import Link from "next/link";
 import { saveCustomer, buscarCepAction, buscarDadosTomadorAction } from "@/lib/actions/tomadores";
 import { Button } from "@/components/ui/Button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Field } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Alert";
+import { UfMunicipioFields, type UfMunicipio } from "@/components/UfMunicipioFields";
 import type { Customer } from "@/lib/types";
 
 export function TomadorForm({
@@ -43,6 +44,12 @@ export function TomadorForm({
   const [district, setDistrict] = useState(customer?.district ?? "");
   const [city, setCity] = useState(customer?.city ?? "");
   const [ufEndereco, setUfEndereco] = useState(customer?.state ?? "");
+  const [cidadeIbge, setCidadeIbge] = useState("");
+  const alterarCidade = useCallback((v: UfMunicipio) => {
+    setUfEndereco(v.uf);
+    setCity(v.municipio);
+    setCidadeIbge(v.ibge);
+  }, []);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [erroCep, setErroCep] = useState<string | null>(null);
 
@@ -210,9 +217,6 @@ export function TomadorForm({
             </div>
             {erroCep && <p className="mt-1.5 text-xs text-danger">{erroCep}</p>}
           </Field>
-          <Field label="Cidade" htmlFor="city">
-            <Input id="city" name="city" value={city} onChange={(e) => setCity(e.target.value)} />
-          </Field>
           <Field label="Endereço" htmlFor="address">
             <Input id="address" name="address" value={address} onChange={(e) => setAddress(e.target.value)} />
           </Field>
@@ -230,15 +234,13 @@ export function TomadorForm({
               onChange={(e) => setDistrict(e.target.value)}
             />
           </Field>
-          <Field label="UF" htmlFor="state">
-            <Input
-              id="state"
-              name="state"
-              maxLength={2}
-              value={ufEndereco}
-              onChange={(e) => setUfEndereco(e.target.value.toUpperCase())}
-            />
-          </Field>
+          <UfMunicipioFields
+            value={{ uf: ufEndereco, municipio: city, ibge: cidadeIbge }}
+            onChange={alterarCidade}
+            nomeCampoMunicipio="city"
+            hintMunicipio="Use a busca pelo CEP ou escolha na lista."
+            hintIbge="Só conferência — na nota o município sai do CEP."
+          />
         </div>
       </details>
 
