@@ -18,7 +18,13 @@ export async function buscarFolhaMensal(
     .from("folha_mensal")
     .select("competencia, valor, pro_labore, fgts")
     .eq("company_id", companyId);
-  return (data ?? []).map((r) => ({
+  return montarFolhaMensal(data ?? []);
+}
+
+export function montarFolhaMensal(
+  data: readonly { competencia: string; valor: unknown; pro_labore: unknown; fgts: unknown }[],
+): FolhaMensal[] {
+  return data.map((r) => ({
     competencia: r.competencia,
     valor: Number(r.valor),
     proLabore: r.pro_labore != null ? Number(r.pro_labore) : null,

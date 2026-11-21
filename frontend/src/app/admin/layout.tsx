@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { requireSomaStaff, getCurrentProfileName, isSuperAdmin, temPermissao } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
@@ -12,17 +13,33 @@ export default async function AdminLayout({
   children,
 }: LayoutProps<"/admin">) {
   await requireSomaStaff();
-  const userName = await getCurrentProfileName();
-  const superAdmin = await isSuperAdmin();
-  const podeGerenciarUsuarios =
-    (await temPermissao("usuarios.gerenciar_equipe")) ||
-    (await temPermissao("usuarios.gerenciar_clientes"));
-  const podeEmitirNotas = await temPermissao("notas.emitir");
-  const podeVerComercial = await temPermissao("comercial.ver");
-  // Selo da aba Pedidos de Nota (o AdminNav atualiza sozinho a cada minuto).
-  const pedidosPendentes = podeEmitirNotas ? await contarPedidosPendentes().catch(() => 0) : 0;
-  // Selo da aba Intimações: Caixa Postal do e-CAC sem ninguém tratando.
-  const intimacoesNovas = await contarIntimacoesNovas(await createClient()).catch(() => 0);
+  // Depois do requireSomaStaff, usuário e permissões já estão em cache na
+  // requisição — o resto sai junto, numa ida só ao banco (antes eram ~7
+  // consultas em fila, ~1 s de piso em toda tela do painel).
+  const supabase = await createClient();
+  const [
+    userName,
+    superAdmin,
+    podeGerenciarEquipe,
+    podeGerenciarClientes,
+    podeEmitirNotas,
+    podeVerComercial,
+    // Selo da aba Pedidos de Nota (o AdminNav atualiza sozinho a cada
+    // minuto); contarPedidosPendentes já devolve 0 sem notas.emitir.
+    pedidosPendentes,
+    // Selo da aba Intimações: Caixa Postal do e-CAC sem ninguém tratando.
+    intimacoesNovas,
+  ] = await Promise.all([
+    getCurrentProfileName(),
+    isSuperAdmin(),
+    temPermissao("usuarios.gerenciar_equipe"),
+    temPermissao("usuarios.gerenciar_clientes"),
+    temPermissao("notas.emitir"),
+    temPermissao("comercial.ver"),
+    contarPedidosPendentes().catch(() => 0),
+    contarIntimacoesNovas(supabase).catch(() => 0),
+  ]);
+  const podeGerenciarUsuarios = podeGerenciarEquipe || podeGerenciarClientes;
 
   return (
     <div className="min-h-dvh bg-background">
@@ -81,7 +98,13 @@ export default async function AdminLayout({
           podeEmitirNotas={podeEmitirNotas}
           pedidosPendentes={pedidosPendentes}
           intimacoesNovas={intimacoesNovas}
-          aviso={<AlertaCnpjGlobal />}
+          aviso={
+            // Em Suspense pra não segurar o cabeçalho nem o loading.tsx
+            // enquanto a consulta da faixa vermelha roda.
+            <Suspense fallback={null}>
+              <AlertaCnpjGlobal />
+            </Suspense>
+          }
         />
         <div className="pt-6">{children}</div>
       </div>

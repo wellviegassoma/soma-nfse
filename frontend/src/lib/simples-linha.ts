@@ -1,20 +1,27 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  type NotaFaturamento,
+  type NotaPorAtividade,
+  type RetencaoPorMes,
   buscarFaturamentoMensal,
   buscarFaturamentoPorAtividade,
   buscarReceitaManual,
   buscarRetencoesMensal,
   competenciasRbt12,
+  montarFaturamentoMensal,
+  montarFaturamentoPorAtividade,
+  montarRetencoesMensal,
   receitaComManual,
   resolverRbt12,
   somarFaturamento,
   somarReceitaIssRetido, somarReceitaExportacao,
   somarRetencoes,
 } from "@/lib/faturamento";
-import { buscarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
+import { type FolhaMensal, buscarFolhaMensal, montarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { abaterRetencaoDoDas, calcularSimplesNacional } from "@/lib/calculo-impostos";
 import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import {
   assinaturaConferencia,
   conferirSimples,
@@ -67,6 +74,141 @@ export type CalculoSimples = {
   liberado: boolean;
 };
 
+export type DadosSimplesEmpresa = {
+  notasMensais: NotaFaturamento[];
+  notasPorAtividade: NotaPorAtividade[];
+  receitaManualPorMes: Map<string, number>;
+  folhaMensal: FolhaMensal[];
+  retencoes: RetencaoPorMes[];
+};
+
+async function buscarDadosSimplesEmpresa(supabase: Supa, companyId: string): Promise<DadosSimplesEmpresa> {
+  const [notasMensais, notasPorAtividade, receitaManualPorMes, folhaMensal, retencoes] = await Promise.all([
+    buscarFaturamentoMensal(supabase, companyId),
+    buscarFaturamentoPorAtividade(supabase, companyId),
+    buscarReceitaManual(supabase, companyId),
+    buscarFolhaMensal(supabase, companyId),
+    buscarRetencoesMensal(supabase, companyId),
+  ]);
+  return { notasMensais, notasPorAtividade, receitaManualPorMes, folhaMensal, retencoes };
+}
+
+// Quantas empresas por consulta: a lista de ids vai na URL (filtro "in"),
+// e lotes pequenos deixam as páginas de 1000 linhas correrem em paralelo.
+const EMPRESAS_POR_LOTE = 10;
+
+function agruparPorEmpresa<T extends { company_id: string }>(linhas: T[]): Map<string, T[]> {
+  const mapa = new Map<string, T[]>();
+  for (const l of linhas) {
+    const lista = mapa.get(l.company_id);
+    if (lista) lista.push(l);
+    else mapa.set(l.company_id, [l]);
+  }
+  return mapa;
+}
+
+// Mesmos dados de buscarDadosSimplesEmpresa, mas para várias empresas de
+// uma vez: uma consulta por tabela (em lotes de ids) em vez de ~10 por
+// empresa. A Central do Simples com 160+ empresas fazia ~1.600 consultas
+// e trazia as notas distribuídas duas vezes (9 s pra abrir). O resultado
+// por empresa passa pelas mesmas funções montar* do caminho por empresa,
+// então os números são idênticos.
+export async function carregarDadosSimplesLote(
+  supabase: Supa,
+  companyIds: string[],
+): Promise<Map<string, DadosSimplesEmpresa>> {
+  type LinhaDps = { company_id: string };
+  type LinhaDistribuida = { company_id: string; cancelada: boolean };
+  type LinhaServico = { company_id: string };
+  type LinhaManual = { company_id: string; competencia: string; valor: unknown };
+  type LinhaFolha = { company_id: string; competencia: string; valor: unknown; pro_labore: unknown; fgts: unknown };
+
+  const lotes: string[][] = [];
+  for (let i = 0; i < companyIds.length; i += EMPRESAS_POR_LOTE) {
+    lotes.push(companyIds.slice(i, i + EMPRESAS_POR_LOTE));
+  }
+
+  const porLote = await Promise.all(
+    lotes.map((ids) =>
+      Promise.all([
+        // Colunas de buscarFaturamentoMensal + buscarFaturamentoPorAtividade juntas.
+        buscarTudoPaginado<LinhaDps>((from, to) =>
+          supabase
+            .from("dps")
+            .select(
+              "company_id, valor, status, data_competencia, nfse(status, access_key), services(name, national_tax_code, atividade_simples_nacional, tipo_retencao_issqn)",
+            )
+            .in("company_id", ids)
+            .order("id")
+            .range(from, to),
+        ),
+        // Colunas de faturamento, por atividade e retenções juntas: uma
+        // leitura só das notas de saída.
+        buscarTudoPaginado<LinhaDistribuida>((from, to) =>
+          supabase
+            .from("notas_distribuidas")
+            .select(
+              "company_id, chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar, tipo_retencao_issqn, exportacao, codigo_trib_nacional, descricao_servico, valor_ret_irrf, valor_ret_csll",
+            )
+            .in("company_id", ids)
+            .eq("direcao", "saida")
+            .order("id")
+            .range(from, to),
+        ),
+        buscarTudoPaginado<LinhaServico>((from, to) =>
+          supabase
+            .from("services")
+            .select("company_id, national_tax_code, atividade_simples_nacional")
+            .in("company_id", ids)
+            .not("national_tax_code", "is", null)
+            .not("atividade_simples_nacional", "is", null)
+            .order("id")
+            .range(from, to),
+        ),
+        buscarTudoPaginado<LinhaManual>((from, to) =>
+          supabase
+            .from("receita_mensal_manual")
+            .select("company_id, competencia, valor")
+            .in("company_id", ids)
+            .order("company_id")
+            .order("competencia")
+            .range(from, to),
+        ),
+        buscarTudoPaginado<LinhaFolha>((from, to) =>
+          supabase
+            .from("folha_mensal")
+            .select("company_id, competencia, valor, pro_labore, fgts")
+            .in("company_id", ids)
+            .order("company_id")
+            .order("competencia")
+            .range(from, to),
+        ),
+      ]),
+    ),
+  );
+
+  const dps = agruparPorEmpresa(porLote.flatMap((l) => l[0]));
+  const distribuidas = agruparPorEmpresa(porLote.flatMap((l) => l[1]));
+  const servicos = agruparPorEmpresa(porLote.flatMap((l) => l[2]));
+  const manuais = agruparPorEmpresa(porLote.flatMap((l) => l[3]));
+  const folhas = agruparPorEmpresa(porLote.flatMap((l) => l[4]));
+
+  const resultado = new Map<string, DadosSimplesEmpresa>();
+  for (const id of companyIds) {
+    const notasDps = dps.get(id) ?? [];
+    const notasDist = distribuidas.get(id) ?? [];
+    resultado.set(id, {
+      notasMensais: montarFaturamentoMensal(notasDps, notasDist),
+      notasPorAtividade: montarFaturamentoPorAtividade(notasDps, notasDist, servicos.get(id) ?? []),
+      receitaManualPorMes: new Map((manuais.get(id) ?? []).map((r) => [r.competencia, Number(r.valor)])),
+      folhaMensal: montarFolhaMensal(folhas.get(id) ?? []),
+      // buscarRetencoesMensal filtra cancelada=false no banco.
+      retencoes: montarRetencoesMensal(notasDist.filter((n) => n.cancelada === false)),
+    });
+  }
+  return resultado;
+}
+
 // Mesmo cálculo que a Central Simples Nacional sempre fez por empresa
 // (antes inline em admin/fechamento/simples/page.tsx), agora num lugar só
 // pra a rota de transmissão do PGDAS-D poder conferir exatamente os
@@ -76,14 +218,13 @@ export async function calcularSimplesEmpresa(
   company: EmpresaSimples,
   competencia: string,
   extras: { prefeitura: ConferenciaPrefeituraLinha; aprovacao: AprovacaoConferencia | null },
+  // Já carregados em lote (carregarDadosSimplesLote): a Central do Simples
+  // passa; quem calcula uma empresa só (transmissão, aprovação) deixa
+  // vazio e a função busca sozinha.
+  dadosCarregados?: DadosSimplesEmpresa,
 ): Promise<CalculoSimples> {
-  const [notasMensais, notasPorAtividade, receitaManualPorMes, folhaMensal, retencoes] = await Promise.all([
-    buscarFaturamentoMensal(supabase, company.id),
-    buscarFaturamentoPorAtividade(supabase, company.id),
-    buscarReceitaManual(supabase, company.id),
-    buscarFolhaMensal(supabase, company.id),
-    buscarRetencoesMensal(supabase, company.id),
-  ]);
+  const { notasMensais, notasPorAtividade, receitaManualPorMes, folhaMensal, retencoes } =
+    dadosCarregados ?? (await buscarDadosSimplesEmpresa(supabase, company.id));
 
   const { receitaPorMes, mesesComDados, mesesManuais } = receitaComManual(notasMensais, receitaManualPorMes);
   const { rbt12, estimado: rbt12Estimado } = resolverRbt12({

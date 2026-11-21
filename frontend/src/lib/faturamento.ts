@@ -80,6 +80,13 @@ export async function buscarFaturamentoMensal(
     ),
   ]);
 
+  return montarFaturamentoMensal(notas, distribuidas);
+}
+
+// Parte de transformação, separada da busca pra a Central do Simples
+// poder buscar as linhas de todas as empresas de uma vez (ver
+// carregarDadosSimplesLote) e montar exatamente o mesmo resultado.
+export function montarFaturamentoMensal(notas: readonly unknown[], distribuidas: readonly unknown[]): NotaFaturamento[] {
   // equiparacao_hospitalar só existe em notas_distribuidas (única tabela
   // que a tela de Fechamento deixa marcar por nota) — uma nota emitida
   // por aqui (dps) e já espelhada lá usa o flag de lá, não um "false"
@@ -226,21 +233,21 @@ function resolverAtividadeNota(
 // resolvida por resolverAtividadeNota. Visão preparatória pra segregar o
 // faturamento por atividade do PGDAS-D — sem isso, TRANSDECLARACAO11 não
 // dá pra montar (exige receita por atividade, não um total único).
+type ServicoDaNota = {
+  name: string;
+  national_tax_code: string | null;
+  atividade_simples_nacional: string | null;
+  tipo_retencao_issqn: number;
+};
+type DpsComServicoRow = DpsRow & {
+  services: ServicoDaNota | ServicoDaNota[] | null;
+};
+
 export async function buscarFaturamentoPorAtividade(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any, any, any>,
   companyId: string,
 ): Promise<NotaPorAtividade[]> {
-  type ServicoDaNota = {
-    name: string;
-    national_tax_code: string | null;
-    atividade_simples_nacional: string | null;
-    tipo_retencao_issqn: number;
-  };
-  type DpsComServicoRow = DpsRow & {
-    services: ServicoDaNota | ServicoDaNota[] | null;
-  };
-
   const [{ data: notas }, { data: distribuidas }, { data: todosServicos }] = await Promise.all([
     paginado((from, to) =>
       supabase
@@ -271,6 +278,13 @@ export async function buscarFaturamentoPorAtividade(
       .not("atividade_simples_nacional", "is", null),
   ]);
 
+  return montarFaturamentoPorAtividade(notas, distribuidas, todosServicos);
+}
+
+// Parte de transformação, separada da busca pra a Central do Simples
+// poder buscar as linhas de todas as empresas de uma vez (ver
+// carregarDadosSimplesLote) e montar exatamente o mesmo resultado.
+export function montarFaturamentoPorAtividade(notas: readonly unknown[], distribuidas: readonly unknown[], todosServicos: readonly unknown[] | null): NotaPorAtividade[] {
   // Código LC 116 -> atividade já classificada em QUALQUER serviço dessa
   // empresa (não só o serviço da nota em questão) — é o que permite
   // reaproveitar a classificação pra notas distribuídas sem cadastro
@@ -478,12 +492,22 @@ export async function buscarRetencoesMensal(
   supabase: SupabaseClient<any, any, any>,
   companyId: string,
 ): Promise<RetencaoPorMes[]> {
-  const { data } = await supabase
-    .from("notas_distribuidas")
-    .select("competencia, valor_ret_irrf, valor_ret_csll, cancelada, direcao")
-    .eq("company_id", companyId)
-    .eq("direcao", "saida")
-    .eq("cancelada", false);
+  // Paginado: sem isso o PostgREST cortava em 1000 linhas e empresa com
+  // mais notas de saída (já há com ~2.900) perdia retenções em silêncio.
+  const { data } = await paginado((from, to) =>
+    supabase
+      .from("notas_distribuidas")
+      .select("competencia, valor_ret_irrf, valor_ret_csll, cancelada, direcao")
+      .eq("company_id", companyId)
+      .eq("direcao", "saida")
+      .eq("cancelada", false)
+      .order("id")
+      .range(from, to),
+  );
+  return montarRetencoesMensal(data);
+}
+
+export function montarRetencoesMensal(data: readonly unknown[]): RetencaoPorMes[] {
 
   const porMes = new Map<string, RetencaoPorMes>();
   for (const n of (data ?? []) as {

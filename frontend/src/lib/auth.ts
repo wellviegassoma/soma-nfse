@@ -6,11 +6,20 @@ import { createClient } from "@/lib/supabase/server";
 import type { CompanyAccess } from "@/lib/types";
 import type { Permissao } from "@/lib/permissoes/catalogo";
 
-export async function requireUser() {
+// getUser() vai até o Supabase Auth a cada chamada — numa mesma página o
+// layout, as permissões, o nome do usuário e a própria página pediam o
+// usuário de novo, cada um esperando o anterior. cache() faz uma ida só
+// por requisição.
+const getAuthUser = cache(async () => {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  return user;
+});
+
+export async function requireUser() {
+  const user = await getAuthUser();
   if (!user) redirect("/login");
   return user;
 }
@@ -24,11 +33,9 @@ type MapaPermissoes = {
 // a isSomaStaff/requireFinanceiroAccess/etc. disparava sua própria query.
 const getMapaPermissoes = cache(async (): Promise<MapaPermissoes> => {
   const mapa: MapaPermissoes = { global: new Set(), porEmpresa: new Map() };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return mapa;
+  const supabase = await createClient();
 
   const { data, error } = await supabase.rpc("minhas_permissoes");
   if (error) throw error;
@@ -64,10 +71,7 @@ export async function autorizarApi(
   permissao: Permissao,
   companyId?: string,
 ): Promise<NextResponse | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
@@ -179,7 +183,7 @@ export async function getCompanyAccess(companyId: string): Promise<CompanyAccess
   return companies.find((c) => c.company_id === companyId) ?? null;
 }
 
-export async function getCurrentProfileName(): Promise<string | null> {
+export const getCurrentProfileName = cache(async (): Promise<string | null> => {
   const user = await requireUser();
   const supabase = await createClient();
   const { data } = await supabase
@@ -188,4 +192,4 @@ export async function getCurrentProfileName(): Promise<string | null> {
     .eq("id", user.id)
     .single();
   return data?.full_name ?? null;
-}
+});

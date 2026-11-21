@@ -9,6 +9,7 @@ import {
   COLUNAS_EMPRESA_SIMPLES,
   buscarExtrasConferencia,
   calcularSimplesEmpresa,
+  carregarDadosSimplesLote,
   type EmpresaSimples,
 } from "@/lib/simples-linha";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
@@ -40,40 +41,44 @@ export default async function CentralSimplesPage(props: PageProps<"/admin/fecham
   // antecipadamente (Anexo III fixo, sem Fator R) — ver
   // lib/rotina-fechamento/elegiveis-fechamento.ts pro mesmo critério
   // usado na aba Automação.
-  const { data: fechadas } = await supabase
-    .from("fechamentos_mensais")
-    .select("company_id")
-    .eq("competencia", competencia);
-  const fechadasSet = new Set((fechadas ?? []).map((f) => f.company_id));
+  const companyIds = (companies ?? []).map((c) => c.id);
 
-  // Última conferência com a Prefeitura (só Petrópolis hoje — ver
-  // ConferirPrefeituraLoteButton) e aprovações da conferência do Simples
-  // já dadas pra essa competência.
-  const [extras, dasPagamentos] = await Promise.all([
+  // Tudo de uma vez, em paralelo: antes eram ~10 consultas por empresa
+  // (cada uma esperando a anterior entrar na fila) e a tela levava ~9 s.
+  const [{ data: fechadas }, extras, dasPagamentos, declaracoes, dadosPorEmpresa] = await Promise.all([
+    supabase.from("fechamentos_mensais").select("company_id").eq("competencia", competencia),
+    // Última conferência com a Prefeitura (só Petrópolis hoje — ver
+    // ConferirPrefeituraLoteButton) e aprovações da conferência do Simples
+    // já dadas pra essa competência.
     buscarExtrasConferencia(supabase, competencia),
     buscarDasPagamentos(supabase, competencia),
+    // Mais recente primeiro: vale a última declaração de cada empresa.
+    supabase
+      .from("integra_contador_pgdas_declaracoes")
+      .select("company_id, id_declaracao")
+      .eq("competencia", competencia)
+      .order("created_at", { ascending: false }),
+    carregarDadosSimplesLote(supabase, companyIds),
   ]);
+  const fechadasSet = new Set((fechadas ?? []).map((f) => f.company_id));
+  const ultimaDeclaracao = new Map<string, string | null>();
+  for (const d of (declaracoes.data ?? []) as { company_id: string; id_declaracao: string | null }[]) {
+    if (!ultimaDeclaracao.has(d.company_id)) ultimaDeclaracao.set(d.company_id, d.id_declaracao);
+  }
 
   const linhas = await Promise.all(
     (companies ?? []).map(async (company) => {
-      let jaEnviado = false;
-      try {
-        const { data } = await supabase
-          .from("integra_contador_pgdas_declaracoes")
-          .select("id_declaracao")
-          .eq("company_id", company.id)
-          .eq("competencia", competencia)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        jaEnviado = Boolean(data?.id_declaracao);
-      } catch {
-        jaEnviado = false;
-      }
+      const jaEnviado = Boolean(ultimaDeclaracao.get(company.id));
 
       const prefeitura = extras.prefeitura.get(company.id) ?? null;
       const aprovacao = extras.aprovacoes.get(company.id) ?? null;
-      const calculo = await calcularSimplesEmpresa(supabase, company, competencia, { prefeitura, aprovacao });
+      const calculo = await calcularSimplesEmpresa(
+        supabase,
+        company,
+        competencia,
+        { prefeitura, aprovacao },
+        dadosPorEmpresa.get(company.id),
+      );
 
       return {
         id: company.id,
