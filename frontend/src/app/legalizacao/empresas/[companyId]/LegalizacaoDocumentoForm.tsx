@@ -8,27 +8,56 @@ import {
   apagarBlobOrfao,
 } from "@/lib/actions/legalizacao";
 import { Button } from "@/components/ui/Button";
+import { calcularVencimento, descreverRegra, type RegraVencimento } from "@/lib/legalizacao-licencas";
+
+export type DocumentoAtual = {
+  numero: string | null;
+  orgao: string | null;
+  data_emissao: string | null;
+  data_vencimento: string | null;
+};
+
+const inputClass = "h-9 rounded border border-border bg-surface px-2 text-sm disabled:opacity-40";
 
 export function LegalizacaoDocumentoForm({
   companyId,
   tipoId,
-  dataVencimentoAtual,
-  indeterminadoAtual,
+  documentoAtual,
+  regra,
 }: {
   companyId: string;
   tipoId: string;
-  dataVencimentoAtual: string | null;
-  indeterminadoAtual: boolean;
+  documentoAtual: DocumentoAtual | null;
+  regra: Pick<RegraVencimento, "modo" | "dia" | "mes" | "meses" | "municipality_name"> | null;
 }) {
   const [pending, setPending] = useState(false);
   const [analisando, setAnalisando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [avisoCnpj, setAvisoCnpj] = useState<string | null>(null);
-  const [indeterminado, setIndeterminado] = useState(indeterminadoAtual);
+  const [numero, setNumero] = useState(documentoAtual?.numero ?? "");
+  const [orgao, setOrgao] = useState(documentoAtual?.orgao ?? "");
+  const [dataEmissao, setDataEmissao] = useState(documentoAtual?.data_emissao ?? "");
+  const [dataVencimento, setDataVencimento] = useState(documentoAtual?.data_vencimento ?? "");
+  const [indeterminado, setIndeterminado] = useState(
+    documentoAtual != null ? documentoAtual.data_vencimento == null : regra?.modo === "INDETERMINADO",
+  );
   const [blobPronto, setBlobPronto] = useState<{ url: string; pathname: string; nome: string } | null>(
     null,
   );
+
+  // Ao mudar a emissão, a regra do município sugere o vencimento — dá pra
+  // sobrescrever à mão depois.
+  function aplicarRegra(emissao: string) {
+    if (!regra) return;
+    const sugerido = calcularVencimento(regra, emissao || null);
+    if (sugerido === null) {
+      setIndeterminado(true);
+    } else if (sugerido) {
+      setIndeterminado(false);
+      setDataVencimento(sugerido);
+    }
+  }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     setError(null);
@@ -53,9 +82,7 @@ export function LegalizacaoDocumentoForm({
 
       const analise = await analisarDocumentoLegalizacao(blob.pathname, companyId);
       if (analise.dataVencimentoSugerida && !indeterminado) {
-        const form = e.target.form;
-        const dataInput = form?.elements.namedItem("dataVencimento") as HTMLInputElement | null;
-        if (dataInput) dataInput.value = analise.dataVencimentoSugerida;
+        setDataVencimento(analise.dataVencimentoSugerida);
       }
       if (analise.cnpjConfere === false) {
         setAvisoCnpj(
@@ -73,15 +100,13 @@ export function LegalizacaoDocumentoForm({
     e.preventDefault();
     setError(null);
     setSuccess(false);
-
     const form = e.currentTarget;
-    const dataInput = form.elements.namedItem("dataVencimento") as HTMLInputElement;
 
-    if (!blobPronto) {
+    if (!blobPronto && !documentoAtual) {
       setError("Selecione o arquivo do documento.");
       return;
     }
-    if (!indeterminado && !dataInput.value) {
+    if (!indeterminado && !dataVencimento) {
       setError("Informe a data de vencimento ou marque validade indeterminada.");
       return;
     }
@@ -94,17 +119,25 @@ export function LegalizacaoDocumentoForm({
       if (indeterminado) {
         formData.set("indeterminado", "on");
       } else {
-        formData.set("dataVencimento", dataInput.value);
+        formData.set("dataVencimento", dataVencimento);
       }
-      formData.set("blobUrl", blobPronto.url);
-      formData.set("blobPathname", blobPronto.pathname);
-      formData.set("nomeArquivo", blobPronto.nome);
+      formData.set("numero", numero);
+      formData.set("orgao", orgao);
+      formData.set("dataEmissao", dataEmissao);
+      if (blobPronto) {
+        formData.set("blobUrl", blobPronto.url);
+        formData.set("blobPathname", blobPronto.pathname);
+        formData.set("nomeArquivo", blobPronto.nome);
+      }
 
       const result = await salvarDocumentoLegalizacao(undefined, formData);
       if (result?.error) {
         setError(result.error);
       } else {
         setSuccess(true);
+        setBlobPronto(null);
+        const arquivo = form.elements.namedItem("arquivo") as HTMLInputElement | null;
+        if (arquivo) arquivo.value = "";
       }
     } catch {
       setError("Não foi possível salvar. Tente de novo.");
@@ -117,13 +150,46 @@ export function LegalizacaoDocumentoForm({
     <form onSubmit={handleSubmit} className="flex flex-col gap-2">
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
+          <label className="text-xs text-foreground/50">Número</label>
+          <input
+            name="numero"
+            value={numero}
+            onChange={(e) => setNumero(e.target.value)}
+            className={`${inputClass} w-36`}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-foreground/50">Órgão emissor</label>
+          <input
+            name="orgao"
+            value={orgao}
+            onChange={(e) => setOrgao(e.target.value)}
+            placeholder="Ex.: Vigilância Sanitária Municipal"
+            className={`${inputClass} w-64`}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-foreground/50">Emissão</label>
+          <input
+            name="dataEmissao"
+            type="date"
+            value={dataEmissao}
+            onChange={(e) => {
+              setDataEmissao(e.target.value);
+              aplicarRegra(e.target.value);
+            }}
+            className={inputClass}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
           <label className="text-xs text-foreground/50">Vencimento</label>
           <input
             name="dataVencimento"
             type="date"
-            defaultValue={dataVencimentoAtual ?? ""}
+            value={dataVencimento}
+            onChange={(e) => setDataVencimento(e.target.value)}
             disabled={indeterminado}
-            className="h-9 rounded border border-border bg-surface px-2 text-sm disabled:opacity-40"
+            className={inputClass}
           />
         </div>
         <label className="flex items-center gap-2 pb-2 text-xs text-foreground/70">
@@ -135,8 +201,12 @@ export function LegalizacaoDocumentoForm({
           />
           Validade indeterminada
         </label>
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-foreground/50">Arquivo (PDF, JPG ou PNG)</label>
+          <label className="text-xs text-foreground/50">
+            {documentoAtual ? "Nova licença (PDF, JPG ou PNG) — opcional" : "Arquivo (PDF, JPG ou PNG)"}
+          </label>
           <input
             name="arquivo"
             type="file"
@@ -153,12 +223,18 @@ export function LegalizacaoDocumentoForm({
           loading={pending}
           disabled={analisando}
         >
-          Salvar
+          {documentoAtual && blobPronto ? "Salvar nova licença" : "Salvar"}
         </Button>
         {analisando && <span className="text-xs text-foreground/50">Lendo documento…</span>}
         {error && <span className="text-xs text-danger">{error}</span>}
         {success && <span className="text-xs text-success">Salvo</span>}
       </div>
+      <p className="text-xs text-foreground/45">
+        {regra
+          ? `Regra${regra.municipality_name ? ` de ${regra.municipality_name}` : " padrão"}: ${descreverRegra(regra)}. Preencha a emissão e o vencimento é sugerido.`
+          : "Sem regra de vencimento cadastrada para este tipo/município — informe o vencimento à mão."}
+        {documentoAtual && " Anexar um arquivo novo guarda a licença atual no histórico."}
+      </p>
       {avisoCnpj && <span className="text-xs text-danger">{avisoCnpj}</span>}
     </form>
   );

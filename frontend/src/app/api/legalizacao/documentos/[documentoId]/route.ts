@@ -11,11 +11,21 @@ export async function GET(
   const { documentoId } = await props.params;
 
   const supabase = await createClient();
-  const { data: documento } = await supabase
+  // Licença vigente ou uma versão anterior (histórico de renovações).
+  const { data: vigente } = await supabase
     .from("legalizacao_documentos")
     .select("blob_pathname, nome_arquivo")
     .eq("id", documentoId)
     .maybeSingle();
+  const documento =
+    vigente ??
+    (
+      await supabase
+        .from("legalizacao_documentos_historico")
+        .select("blob_pathname, nome_arquivo")
+        .eq("id", documentoId)
+        .maybeSingle()
+    ).data;
 
   if (!documento) {
     return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });

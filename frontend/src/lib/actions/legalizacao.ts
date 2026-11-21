@@ -5,7 +5,7 @@ import { del, get } from "@vercel/blob";
 import { PDFParse } from "pdf-parse";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { requireLegalizacaoAccess, requireUser } from "@/lib/auth";
+import { requireLegalizacaoAccess, requirePermissao, requireUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { uuidLike } from "@/lib/zod-helpers";
 import { analisarTextoDocumento } from "@/lib/pdf-import/legalizacao-analise";
@@ -23,20 +23,32 @@ const salvarDocumentoSchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.")
       .optional(),
     indeterminado: z.literal("on").optional(),
-    blobUrl: z.string().url(),
-    blobPathname: z.string().min(1),
-    nomeArquivo: z.string().min(1),
+    numero: z.string().trim().max(120).optional(),
+    orgao: z.string().trim().max(200).optional(),
+    dataEmissao: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de emissão inválida.")
+      .optional(),
+    // Sem arquivo novo = só corrige os dados da licença vigente.
+    blobUrl: z.string().url().optional(),
+    blobPathname: z.string().min(1).optional(),
+    nomeArquivo: z.string().min(1).optional(),
   })
   .refine((v) => v.indeterminado === "on" || v.dataVencimento, {
     message: "Informe a data de vencimento ou marque validade indeterminada.",
+    path: ["dataVencimento"],
+  })
+  .refine((v) => !v.dataEmissao || !v.dataVencimento || v.dataVencimento >= v.dataEmissao, {
+    message: "O vencimento não pode ser antes da emissão.",
     path: ["dataVencimento"],
   });
 
 // O upload em si já aconteceu no cliente, direto pro Vercel Blob (ver
 // /api/legalizacao/upload) — essa action só grava a referência depois que o
-// arquivo já está lá. Se já existia um documento desse tipo pra essa
-// empresa, apaga o blob antigo do Blob (senão fica órfão, ocupando espaço
-// sem nenhuma linha apontando pra ele).
+// arquivo já está lá. Se já existia uma licença desse tipo pra essa empresa
+// e veio arquivo novo, a anterior vai pro histórico (com o arquivo, que
+// continua no Blob) — é a renovação. Sem arquivo novo, só atualiza os dados
+// (número, órgão, datas) da licença vigente.
 export async function salvarDocumentoLegalizacao(
   _prevState: LegalizacaoActionState,
   formData: FormData,
@@ -48,53 +60,101 @@ export async function salvarDocumentoLegalizacao(
     tipoId: formData.get("tipoId"),
     dataVencimento: formData.get("dataVencimento") || undefined,
     indeterminado: formData.get("indeterminado") || undefined,
-    blobUrl: formData.get("blobUrl"),
-    blobPathname: formData.get("blobPathname"),
-    nomeArquivo: formData.get("nomeArquivo"),
+    numero: formData.get("numero") || undefined,
+    orgao: formData.get("orgao") || undefined,
+    dataEmissao: formData.get("dataEmissao") || undefined,
+    blobUrl: formData.get("blobUrl") || undefined,
+    blobPathname: formData.get("blobPathname") || undefined,
+    nomeArquivo: formData.get("nomeArquivo") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
   const { companyId, tipoId, indeterminado, blobUrl, blobPathname, nomeArquivo } = parsed.data;
   const dataVencimento = indeterminado === "on" ? null : (parsed.data.dataVencimento ?? null);
+  const dados = {
+    numero: parsed.data.numero || null,
+    orgao: parsed.data.orgao || null,
+    data_emissao: parsed.data.dataEmissao || null,
+    data_vencimento: dataVencimento,
+  };
 
   const user = await requireUser();
   const supabase = await createClient();
 
   const { data: existente } = await supabase
     .from("legalizacao_documentos")
-    .select("blob_pathname")
+    .select(
+      "id, numero, orgao, data_emissao, data_vencimento, blob_url, blob_pathname, nome_arquivo, uploaded_by, created_at, updated_at",
+    )
     .eq("company_id", companyId)
     .eq("tipo_id", tipoId)
     .maybeSingle();
 
-  const { error } = await supabase.from("legalizacao_documentos").upsert(
-    {
-      company_id: companyId,
-      tipo_id: tipoId,
-      data_vencimento: dataVencimento,
-      blob_url: blobUrl,
-      blob_pathname: blobPathname,
-      nome_arquivo: nomeArquivo,
-      uploaded_by: user.id,
-    },
-    { onConflict: "company_id,tipo_id" },
-  );
-  if (error) return { error: "Não foi possível salvar o documento." };
+  const arquivoNovo = blobUrl && blobPathname && nomeArquivo ? { blobUrl, blobPathname, nomeArquivo } : null;
 
-  if (existente && existente.blob_pathname !== blobPathname) {
-    await del(existente.blob_pathname).catch(() => {});
+  if (!arquivoNovo) {
+    if (!existente) return { error: "Selecione o arquivo do documento." };
+    const { error } = await supabase.from("legalizacao_documentos").update(dados).eq("id", existente.id);
+    if (error) return { error: "Não foi possível salvar os dados da licença." };
+    await logAudit({
+      companyId,
+      action: "UPDATE",
+      entity: "legalizacao_documento",
+      entityId: existente.id,
+      oldValue: {
+        numero: existente.numero,
+        orgao: existente.orgao,
+        data_emissao: existente.data_emissao,
+        data_vencimento: existente.data_vencimento,
+      },
+      newValue: dados,
+    });
+  } else {
+    if (existente && existente.blob_pathname !== arquivoNovo.blobPathname) {
+      const { error: errHist } = await supabase.from("legalizacao_documentos_historico").insert({
+        company_id: companyId,
+        tipo_id: tipoId,
+        numero: existente.numero,
+        orgao: existente.orgao,
+        data_emissao: existente.data_emissao,
+        data_vencimento: existente.data_vencimento,
+        blob_url: existente.blob_url,
+        blob_pathname: existente.blob_pathname,
+        nome_arquivo: existente.nome_arquivo,
+        uploaded_by: existente.uploaded_by,
+        enviado_em: existente.updated_at ?? existente.created_at,
+        substituido_por: user.id,
+      });
+      if (errHist) return { error: "Não foi possível guardar a licença anterior no histórico." };
+    }
+
+    const { error } = await supabase.from("legalizacao_documentos").upsert(
+      {
+        company_id: companyId,
+        tipo_id: tipoId,
+        ...dados,
+        blob_url: arquivoNovo.blobUrl,
+        blob_pathname: arquivoNovo.blobPathname,
+        nome_arquivo: arquivoNovo.nomeArquivo,
+        uploaded_by: user.id,
+      },
+      { onConflict: "company_id,tipo_id" },
+    );
+    if (error) return { error: "Não foi possível salvar o documento." };
+
+    await logAudit({
+      companyId,
+      action: "UPLOAD",
+      entity: "legalizacao_documento",
+      newValue: { tipo_id: tipoId, ...dados, nome_arquivo: arquivoNovo.nomeArquivo },
+    });
   }
 
-  await logAudit({
-    companyId,
-    action: "UPLOAD",
-    entity: "legalizacao_documento",
-    newValue: { tipo_id: tipoId, data_vencimento: dataVencimento, nome_arquivo: nomeArquivo },
-  });
-
   revalidatePath(`/legalizacao/empresas/${companyId}`);
+  revalidatePath(`/legalizacao/empresas/${companyId}/gerenciar`);
   revalidatePath("/legalizacao");
+  revalidatePath("/legalizacao/licencas");
   return { success: true };
 }
 
@@ -299,4 +359,84 @@ export async function definirEmpresasAplicaveisDoTipo(tipoId: string, companyIds
   revalidatePath(`/legalizacao/tipos/${tipoId}/empresas`);
   revalidatePath("/legalizacao/tipos");
   revalidatePath("/legalizacao");
+}
+
+const salvarRegraSchema = z
+  .object({
+    tipoId: uuidLike,
+    municipalityIbgeCode: z.string().regex(/^\d{7}$/).optional(),
+    municipalityName: z.string().trim().optional(),
+    state: z.string().trim().optional(),
+    modo: z.enum(["DATA_FIXA", "MESES_APOS_EMISSAO", "INDETERMINADO"]),
+    dia: z.coerce.number().int().min(1).max(31).optional(),
+    mes: z.coerce.number().int().min(1).max(12).optional(),
+    meses: z.coerce.number().int().min(1).max(120).optional(),
+    antecedenciaDias: z.coerce.number().int().min(0, "Antecedência inválida.").max(365, "Antecedência máxima: 365 dias."),
+    observacao: z.string().trim().max(500).optional(),
+  })
+  .refine((v) => v.modo !== "DATA_FIXA" || (v.dia && v.mes), { message: "Informe o dia e o mês do vencimento.", path: ["dia"] })
+  .refine((v) => v.modo !== "MESES_APOS_EMISSAO" || v.meses, { message: "Informe quantos meses após a emissão.", path: ["meses"] });
+
+// Cria ou substitui a regra de vencimento de um tipo num município (ou a
+// regra padrão do tipo, sem município). Uma regra por tipo+município.
+export async function salvarRegraVencimento(
+  _prevState: LegalizacaoActionState,
+  formData: FormData,
+): Promise<LegalizacaoActionState> {
+  await requirePermissao("legalizacao.editar");
+
+  const parsed = salvarRegraSchema.safeParse({
+    tipoId: formData.get("tipoId"),
+    municipalityIbgeCode: formData.get("municipalityIbgeCode") || undefined,
+    municipalityName: formData.get("municipalityName") || undefined,
+    state: formData.get("state") || undefined,
+    modo: formData.get("modo"),
+    dia: formData.get("dia") || undefined,
+    mes: formData.get("mes") || undefined,
+    meses: formData.get("meses") || undefined,
+    antecedenciaDias: formData.get("antecedenciaDias") || 60,
+    observacao: formData.get("observacao") || undefined,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const v = parsed.data;
+  const linha = {
+    tipo_id: v.tipoId,
+    municipality_ibge_code: v.municipalityIbgeCode ?? null,
+    municipality_name: v.municipalityIbgeCode ? (v.municipalityName ?? null) : null,
+    state: v.municipalityIbgeCode ? (v.state ?? null) : null,
+    modo: v.modo,
+    dia: v.modo === "DATA_FIXA" ? v.dia! : null,
+    mes: v.modo === "DATA_FIXA" ? v.mes! : null,
+    meses: v.modo === "MESES_APOS_EMISSAO" ? v.meses! : null,
+    antecedencia_dias: v.antecedenciaDias,
+    observacao: v.observacao || null,
+  };
+
+  const supabase = await createClient();
+  let busca = supabase.from("legalizacao_regras_vencimento").select("id").eq("tipo_id", v.tipoId);
+  busca = linha.municipality_ibge_code
+    ? busca.eq("municipality_ibge_code", linha.municipality_ibge_code)
+    : busca.is("municipality_ibge_code", null);
+  const { data: existente } = await busca.maybeSingle();
+
+  const { error } = existente
+    ? await supabase.from("legalizacao_regras_vencimento").update(linha).eq("id", existente.id)
+    : await supabase.from("legalizacao_regras_vencimento").insert(linha);
+  if (error) return { error: "Não foi possível salvar a regra." };
+
+  await logAudit({ action: existente ? "UPDATE" : "CREATE", entity: "legalizacao_regra_vencimento", newValue: linha });
+  revalidatePath("/legalizacao/regras");
+  revalidatePath("/legalizacao/licencas");
+  return { success: true };
+}
+
+export async function apagarRegraVencimento(regraId: string) {
+  await requirePermissao("legalizacao.editar");
+  const supabase = await createClient();
+  await supabase.from("legalizacao_regras_vencimento").delete().eq("id", regraId);
+  await logAudit({ action: "DELETE", entity: "legalizacao_regra_vencimento", entityId: regraId });
+  revalidatePath("/legalizacao/regras");
+  revalidatePath("/legalizacao/licencas");
 }
