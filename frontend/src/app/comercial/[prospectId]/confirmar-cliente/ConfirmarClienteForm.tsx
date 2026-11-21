@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useCallback, useState } from "react";
 import Link from "next/link";
 import { confirmarClienteAtivo, buscarCnpjParaProspect } from "@/lib/actions/comercial";
 import { Button } from "@/components/ui/Button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Field } from "@/components/ui/Field";
 import { Alert } from "@/components/ui/Alert";
+import { UfMunicipioFields, type UfMunicipio } from "@/components/UfMunicipioFields";
 import { TAX_REGIME_LABELS, type TaxRegime, type CustomerType } from "@/lib/types";
 
 const TAX_REGIME_VALUES = new Set(Object.keys(TAX_REGIME_LABELS));
@@ -37,6 +38,11 @@ export function ConfirmarClienteForm({ prospect }: { prospect: Prospect }) {
   const [municipalityIbgeCode, setMunicipalityIbgeCode] = useState("");
   const [municipalityName, setMunicipalityName] = useState(prospect.cidade ?? "");
   const [uf, setUf] = useState("");
+  const alterarMunicipio = useCallback((v: UfMunicipio) => {
+    setUf(v.uf);
+    setMunicipalityName(v.municipio);
+    setMunicipalityIbgeCode(v.ibge);
+  }, []);
   const [addressStreet, setAddressStreet] = useState("");
   const [addressNumber, setAddressNumber] = useState("");
   const [addressComplement, setAddressComplement] = useState("");
@@ -187,15 +193,10 @@ export function ConfirmarClienteForm({ prospect }: { prospect: Prospect }) {
         <Field label="CEP" htmlFor="addressZip" hint="Opcional">
           <Input id="addressZip" name="addressZip" value={addressZip} onChange={(e) => setAddressZip(e.target.value)} />
         </Field>
-        <Field label="UF" htmlFor="state" hint="Opcional">
-          <Input id="state" name="state" maxLength={2} value={uf} onChange={(e) => setUf(e.target.value.toUpperCase())} />
-        </Field>
-        <Field label="Município" htmlFor="municipalityName" hint="Opcional">
-          <Input id="municipalityName" name="municipalityName" value={municipalityName} onChange={(e) => setMunicipalityName(e.target.value)} />
-        </Field>
-        <Field label="Código IBGE do município" htmlFor="municipalityIbgeCode" hint="Obrigatório pra emitir NFS-e depois">
-          <Input id="municipalityIbgeCode" name="municipalityIbgeCode" value={municipalityIbgeCode} onChange={(e) => setMunicipalityIbgeCode(e.target.value)} />
-        </Field>
+        <UfMunicipioFields
+          value={{ uf, municipio: municipalityName, ibge: municipalityIbgeCode }}
+          onChange={alterarMunicipio}
+        />
       </div>
 
       <div className="mt-2 flex items-center gap-3">

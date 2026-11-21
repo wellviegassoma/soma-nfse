@@ -114,7 +114,13 @@ export function FiscalForm({ company }: { company: Company }) {
           <Field label="CNAE principal" htmlFor="cnae">
             <Input id="cnae" name="cnae" defaultValue={company.cnae ?? ""} />
           </Field>
-          <MunicipioIbgeField defaultValue={company.municipality_ibge_code ?? ""} />
+          <MunicipioIbgeField
+            defaultValue={{
+              uf: company.state ?? "",
+              municipio: company.municipality_name ?? "",
+              ibge: company.municipality_ibge_code ?? "",
+            }}
+          />
           {company.municipality_ibge_code === IBGE_PETROPOLIS && (
             <Field
               label="CMC no ISS de Petrópolis"

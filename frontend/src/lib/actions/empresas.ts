@@ -436,6 +436,8 @@ const updateFiscalSchema = z.object({
   taxRegime: z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "IMUNE_ISENTO"]).optional(),
   cnae: z.string().trim().optional(),
   municipalityIbgeCode: z.string().trim().optional(),
+  municipalityName: z.string().trim().optional(),
+  state: z.string().trim().optional(),
   petropolisCmc: z.string().trim().optional(),
   nfseAmbiente: z.enum(["HOMOLOGACAO", "PRODUCAO"]),
   dpsSeries: z.string().trim().min(1, "Informe a série."),
@@ -465,6 +467,8 @@ export async function updateCompanyFiscal(
     taxRegime: formData.get("taxRegime") || undefined,
     cnae: formData.get("cnae") || undefined,
     municipalityIbgeCode: formData.get("municipalityIbgeCode") || undefined,
+    municipalityName: formData.get("municipalityName") || undefined,
+    state: formData.get("state") || undefined,
     petropolisCmc: formData.get("petropolisCmc") || undefined,
     nfseAmbiente: formData.get("nfseAmbiente"),
     dpsSeries: formData.get("dpsSeries"),
@@ -489,7 +493,7 @@ export async function updateCompanyFiscal(
   const { data: before } = await supabase
     .from("companies")
     .select(
-      "municipal_registration, inscricao_estadual, data_abertura, tax_regime, cnae, municipality_ibge_code, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
+      "municipal_registration, inscricao_estadual, data_abertura, tax_regime, cnae, municipality_ibge_code, municipality_name, state, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
     )
     .eq("id", companyId)
     .single();
@@ -518,6 +522,8 @@ export async function updateCompanyFiscal(
     tax_regime: rest.taxRegime || null,
     cnae: rest.cnae || null,
     municipality_ibge_code: rest.municipalityIbgeCode || null,
+    municipality_name: rest.municipalityName || null,
+    state: rest.state || null,
     petropolis_cmc: rest.petropolisCmc || null,
     nfse_ambiente: rest.nfseAmbiente,
     dps_series: rest.dpsSeries,
