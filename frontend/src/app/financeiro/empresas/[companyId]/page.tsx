@@ -16,6 +16,7 @@ import { paginarTudo } from "@/lib/supabase-paginacao";
 import { AtivarFinanceiroButton } from "./AtivarFinanceiroButton";
 import { FluxoCaixaChart } from "@/components/financeiro/FluxoCaixaChart";
 import { ProximasContas, type ProximaConta } from "@/components/financeiro/ProximasContas";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 
 export const metadata = { title: "Financeiro — Empresa" };
 
@@ -66,11 +67,9 @@ export default async function FinanceiroEmpresaPage(
       // .limit(1) basta: só precisamos saber se existe alguma, não a lista
       // inteira (contagem de categorias é decoração de outra tela).
       supabase.from("fin_categorias").select("id").eq("company_id", companyId).limit(1),
-      supabase
-        .from("fin_contatos")
-        .select("id, nome")
-        .eq("company_id", companyId)
-        .eq("ativo", true),
+      buscarTudoPaginado<{ id: string; nome: string }>((from, to) =>
+        supabase.from("fin_contatos").select("id, nome").eq("company_id", companyId).eq("ativo", true).order("id").range(from, to),
+      ).then((data) => ({ data })),
     ]);
 
   if (!company) notFound();

@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
+import { buscarAgregadoNotasDistribuidas } from "@/lib/notas-distribuidas-agregado";
 import { mesCorrenteBrasilia } from "@/lib/competencia";
 import { competenciasRbt12, resolverRbt12 } from "@/lib/faturamento";
 import { buscarAtividade } from "@/lib/simples-nacional-atividades";
@@ -79,12 +80,12 @@ export async function carregarBasesReforma(
     .order("legal_name", { ascending: true });
   if (opcoes.companyId) companiesQuery = companiesQuery.eq("id", opcoes.companyId);
 
-  const [{ data: companies }, dpsRows, folhas, { data: manuais }, { data: servicos }, { data: analises }] = await Promise.all([
+  const [{ data: companies }, dpsRows, folhas, manuais, servicos, { data: analises }] = await Promise.all([
     companiesQuery,
     buscarTudoPaginado<DpsRow>((from, to) => {
       let q = supabase.from("dps").select("company_id, valor, status, data_competencia, nfse(status, access_key)");
       if (opcoes.companyId) q = q.eq("company_id", opcoes.companyId);
-      return q.range(from, to);
+      return q.order("id").range(from, to);
     }),
     buscarTudoPaginado<{ company_id: string; competencia: string; valor: number; pro_labore: number | null; fgts: number | null }>(
       (from, to) => {
@@ -93,16 +94,25 @@ export async function carregarBasesReforma(
         return q.order("company_id").order("competencia").range(from, to);
       },
     ),
-    (() => {
+    // receita_mensal_manual já passou de 1000 linhas — paginado.
+    buscarTudoPaginado<{ company_id: string; competencia: string; valor: number }>((from, to) => {
       let q = supabase.from("receita_mensal_manual").select("company_id, competencia, valor");
       if (opcoes.companyId) q = q.eq("company_id", opcoes.companyId);
-      return q;
-    })(),
-    (() => {
-      let q = supabase.from("services").select("company_id, ibscbs_cclasstrib, atividade_simples_nacional, national_tax_code").eq("active", true);
+      return q.order("company_id").order("competencia").range(from, to);
+    }),
+    buscarTudoPaginado<{
+      company_id: string;
+      ibscbs_cclasstrib: string | null;
+      atividade_simples_nacional: string | null;
+      national_tax_code: string | null;
+    }>((from, to) => {
+      let q = supabase
+        .from("services")
+        .select("company_id, ibscbs_cclasstrib, atividade_simples_nacional, national_tax_code")
+        .eq("active", true);
       if (opcoes.companyId) q = q.eq("company_id", opcoes.companyId);
-      return q;
-    })(),
+      return q.order("id").range(from, to);
+    }),
     (() => {
       let q = supabase
         .from("reforma_analises")
@@ -143,9 +153,8 @@ export async function carregarBasesReforma(
     const nfse = Array.isArray(nota.nfse) ? nota.nfse : nota.nfse ? [nota.nfse] : [];
     if (nfse[0]?.access_key) chavesDps.push(nfse[0].access_key);
   }
-  const { data: agregado } = await supabase.rpc("dashboard_agregado_notas_distribuidas", {
-    p_chaves_excluir: chavesDps,
-  });
+  // Uma linha por empresa/mês: já passou de 1000 — paginado.
+  const agregado = await buscarAgregadoNotasDistribuidas(supabase, chavesDps);
 
   const receita = new Map<string, Map<string, number>>();
   const hospitalar = new Map<string, Map<string, number>>();

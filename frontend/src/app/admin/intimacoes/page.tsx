@@ -11,6 +11,7 @@ import { empresasParaLer } from "@/lib/caixa-postal";
 import { TratamentoMensagem } from "./TratamentoMensagem";
 import { ConteudoMensagem } from "./ConteudoMensagem";
 import { LerCaixaPostalButton } from "./LerCaixaPostalButton";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 
 export const metadata = { title: "Intimações — Painel SOMA" };
 export const maxDuration = 300;
@@ -112,8 +113,17 @@ export default async function IntimacoesPage({ searchParams }: PageProps<"/admin
     await Promise.all([
       consulta,
       empresasParaLer(supabase),
-      supabase.from("caixa_postal_leituras").select("company_id, lida_em, ok, erro"),
-      supabase.from("caixa_postal_mensagens").select("status, relevante, assunto").neq("status", "resolvida"),
+      buscarTudoPaginado<{ company_id: string; lida_em: string; ok: boolean; erro: string | null }>((from, to) =>
+        supabase.from("caixa_postal_leituras").select("company_id, lida_em, ok, erro").order("company_id").range(from, to),
+      ).then((data) => ({ data })),
+      buscarTudoPaginado<{ status: string; relevante: boolean | null; assunto: string | null }>((from, to) =>
+        supabase
+          .from("caixa_postal_mensagens")
+          .select("status, relevante, assunto")
+          .neq("status", "resolvida")
+          .order("id")
+          .range(from, to),
+      ).then((data) => ({ data })),
       admin.from("usuario_permissoes").select("user_id").is("company_id", null),
     ]);
 

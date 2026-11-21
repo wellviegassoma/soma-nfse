@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { proximaCompetencia } from "@/lib/competencia";
 import { IBGE_PETROPOLIS } from "@/lib/iss-petropolis";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import {
   eventosDaNota,
   lerRetencoes,
@@ -107,17 +108,25 @@ export async function carregarCentralReinf(
   const inicio = `${competencia}-01`;
   const fim = `${proximaCompetencia(competencia)}-01`;
 
-  let q = supabase
-    .from("notas_distribuidas")
-    .select(COLUNAS_NOTA)
-    .eq("direcao", "entrada")
-    .eq("cancelada", false)
-    .eq("tem_retencao", true)
-    .gte("competencia", inicio)
-    .lt("competencia", fim)
-    .limit(5000);
-  if (opcoes.companyIds?.length) q = q.in("company_id", opcoes.companyIds);
-  const { data: doMes, error } = await q;
+  // Paginado: .limit(5000) não adiantava — a API corta em 1000 linhas.
+  let doMes: LinhaNota[] | null = null;
+  let error: { message: string } | null = null;
+  try {
+    doMes = await buscarTudoPaginado<LinhaNota>((from, to) => {
+      let q = supabase
+        .from("notas_distribuidas")
+        .select(COLUNAS_NOTA)
+        .eq("direcao", "entrada")
+        .eq("cancelada", false)
+        .eq("tem_retencao", true)
+        .gte("competencia", inicio)
+        .lt("competencia", fim);
+      if (opcoes.companyIds?.length) q = q.in("company_id", opcoes.companyIds);
+      return q.order("id").range(from, to);
+    });
+  } catch (e) {
+    error = { message: e instanceof Error ? e.message : String(e) };
+  }
   if (error) {
     // Coluna/tabelas da fase BN ainda não aplicadas.
     if (/tem_retencao|reinf_/.test(error.message)) return { empresas: [], migracaoPendente: true };

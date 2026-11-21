@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePermissao } from "@/lib/auth";
 import { hojeBrasilia } from "@/lib/competencia";
 import { createClient } from "@/lib/supabase/server";
+import { listarTomadoresEmpresa } from "@/lib/tomadores-lista";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { Selo, STATUS_PEDIDO, FONTE_EMPRESA } from "../status";
@@ -45,7 +46,7 @@ export default async function PedidoNotaPage(props: { params: Promise<{ pedidoId
       ? supabase.from("services").select("id, name, description").eq("company_id", companyId).eq("active", true).order("name")
       : Promise.resolve({ data: [] as { id: string; name: string; description: string | null }[] }),
     companyId
-      ? supabase.from("customers").select("id, name, cpf_cnpj").eq("company_id", companyId).order("name").limit(2000)
+      ? listarTomadoresEmpresa<{ id: string; name: string; cpf_cnpj: string | null }>(supabase, companyId, "id, name, cpf_cnpj")
       : Promise.resolve({ data: [] as { id: string; name: string; cpf_cnpj: string | null }[] }),
     ["RECEBIDO", "ERRO", "AGUARDANDO_APROVACAO", "PARCIAL"].includes(pedido.status)
       ? supabase.from("companies").select("id, legal_name, trade_name, codigo_cliente, cnpj, cpf").eq("ativa", true).order("legal_name")

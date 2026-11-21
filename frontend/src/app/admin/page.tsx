@@ -10,6 +10,7 @@ import { mesAnteriorBrasilia } from "@/lib/competencia";
 import { competenciasTrimestre, resolverRbt12 } from "@/lib/faturamento";
 import { resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { calcularImpostoResumo, resolverIssMensal } from "@/lib/calculo-impostos";
+import { buscarAgregadoNotasDistribuidas, buscarEquiparacaoPorChaves } from "@/lib/notas-distribuidas-agregado";
 
 export const metadata = { title: "Visão geral — Painel SOMA" };
 
@@ -164,8 +165,8 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
     { data: companies },
     dpsRows,
     folhas,
-    { data: receitasManuais },
-    { data: certificadosRaw },
+    receitasManuais,
+    certificadosRaw,
   ] = await Promise.all([
       supabase
         .from("companies")
@@ -178,7 +179,7 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
         supabase
           .from("dps")
           .select("company_id, valor, status, data_competencia, nfse(status, access_key)")
-          .range(from, to),
+          .order("id").range(from, to),
       ),
       // Cresce ~2 linhas por empresa/mês (ainda mais com a importação em
       // lote do Resumo da folha) — passa de 1000 rápido.
@@ -190,8 +191,19 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
           .order("competencia")
           .range(from, to),
       ),
-      supabase.from("receita_mensal_manual").select("company_id, competencia, valor"),
-      supabase.from("certificates").select("company_id, expires_at"),
+      // Já passou de 1000 linhas (1.301 em 20/11/2026) — sem paginar, o
+      // resto vinha cortado em silêncio.
+      buscarTudoPaginado<{ company_id: string; competencia: string; valor: number }>((from, to) =>
+        supabase
+          .from("receita_mensal_manual")
+          .select("company_id, competencia, valor")
+          .order("company_id")
+          .order("competencia")
+          .range(from, to),
+      ),
+      buscarTudoPaginado<{ company_id: string; expires_at: string }>((from, to) =>
+        supabase.from("certificates").select("company_id, expires_at").order("id").range(from, to),
+      ),
     ]);
 
   const empresas = companies ?? [];
@@ -203,11 +215,12 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
   // excluída da soma da RPC pra não contar duas vezes; sua contribuição
   // (dps é pequena) entra em montarAgregadoPorMes.
   const chavesDps = extrairChavesDps(dpsRows);
-  const [{ data: agregadoDistribuidas }, { data: equiparacaoRows }] = await Promise.all([
-    supabase.rpc("dashboard_agregado_notas_distribuidas", { p_chaves_excluir: chavesDps }),
-    chavesDps.length > 0
-      ? supabase.from("notas_distribuidas").select("chave_acesso, equiparacao_hospitalar").in("chave_acesso", chavesDps)
-      : Promise.resolve({ data: [] as { chave_acesso: string; equiparacao_hospitalar: boolean }[] }),
+  // A RPC devolve uma linha por empresa/mês — já são 1.527 (20/11/2026), e
+  // a API corta qualquer resposta em 1000 linhas: sem paginar, a Visão
+  // geral perdia o faturamento de parte das empresas/meses.
+  const [agregadoDistribuidas, equiparacaoRows] = await Promise.all([
+    buscarAgregadoNotasDistribuidas(supabase, chavesDps),
+    buscarEquiparacaoPorChaves(supabase, chavesDps),
   ]);
   const equiparacaoPorChave = new Map<string, boolean>();
   for (const row of equiparacaoRows ?? []) {

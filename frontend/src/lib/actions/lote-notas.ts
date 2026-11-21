@@ -112,7 +112,7 @@ export async function conferirLote(formData: FormData): Promise<ConferenciaLote>
       .single(),
     buscarTudoPaginado<{ id: string; name: string; cpf_cnpj: string | null; zip_code: string | null }>(
       (from, to) =>
-        supabase.from("customers").select("id, name, cpf_cnpj, zip_code").eq("company_id", companyId).range(from, to),
+        supabase.from("customers").select("id, name, cpf_cnpj, zip_code").eq("company_id", companyId).order("id").range(from, to),
     ),
     supabase
       .from("services")

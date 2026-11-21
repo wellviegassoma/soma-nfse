@@ -9,6 +9,7 @@ import { formatarDataHora, formatarData, formatarCpfCnpj } from "@/lib/formatter
 import { BuscarAgoraButton } from "./BuscarAgoraButton";
 import { BuscarHistoricoButton } from "./BuscarHistoricoButton";
 import { EquiparacaoHospitalarToggle } from "./EquiparacaoHospitalarToggle";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 
 export const metadata = { title: "Fechamento — Painel SOMA" };
 export const maxDuration = 300;
@@ -81,14 +82,19 @@ export default async function AdminFechamentoPage(
       )
       .eq("id", companyId)
       .single(),
-    supabase
-      .from("notas_distribuidas")
-      .select(
-        "id, numero, direcao, cancelada, valor_servico, prestador_nome, prestador_cnpj, tomador_nome, tomador_cnpj, descricao_servico, equiparacao_hospitalar, motivo_cancelamento, data_emissao",
-      )
-      .eq("company_id", companyId)
-      .gte("competencia", `${competencia}-01`)
-      .lt("competencia", primeiroDiaMesSeguinte(competencia)),
+    // Paginado: a API corta qualquer resposta em 1000 linhas.
+    buscarTudoPaginado<NotaRow>((from, to) =>
+      supabase
+        .from("notas_distribuidas")
+        .select(
+          "id, numero, direcao, cancelada, valor_servico, prestador_nome, prestador_cnpj, tomador_nome, tomador_cnpj, descricao_servico, equiparacao_hospitalar, motivo_cancelamento, data_emissao",
+        )
+        .eq("company_id", companyId)
+        .gte("competencia", `${competencia}-01`)
+        .lt("competencia", primeiroDiaMesSeguinte(competencia))
+        .order("id")
+        .range(from, to),
+    ).then((data) => ({ data })),
   ]);
 
   const linhas = (notas ?? []) as NotaRow[];

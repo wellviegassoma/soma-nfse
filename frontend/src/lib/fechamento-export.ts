@@ -93,7 +93,7 @@ export async function gerarZipDaEmpresa(
       .eq("company_id", company.id)
       .gte("competencia", `${competencia}-01`)
       .lt("competencia", primeiroDiaMesSeguinte(competencia))
-      .range(from, to),
+      .order("id").range(from, to),
   );
 
   if (notas.length === 0) return null;

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 
 export const metadata = { title: "Usuários — Painel SOMA" };
 
@@ -17,13 +18,15 @@ export default async function UsuariosPage() {
 
   const admin = createAdminClient();
 
-  const { data: permissoes } = await admin
-    .from("usuario_permissoes")
-    .select("user_id, company_id");
-
-  const { data: profiles } = await admin
-    .from("profiles")
-    .select("id, full_name, email, ativo");
+  // Paginado: a API corta qualquer resposta em 1000 linhas.
+  const [permissoes, profiles] = await Promise.all([
+    buscarTudoPaginado<{ user_id: string; company_id: string | null }>((from, to) =>
+      admin.from("usuario_permissoes").select("user_id, company_id").order("id").range(from, to),
+    ),
+    buscarTudoPaginado<{ id: string; full_name: string | null; email: string | null; ativo: boolean | null }>(
+      (from, to) => admin.from("profiles").select("id, full_name, email, ativo").order("id").range(from, to),
+    ),
+  ]);
 
   const perfilPorId = new Map((profiles ?? []).map((p) => [p.id, p]));
 

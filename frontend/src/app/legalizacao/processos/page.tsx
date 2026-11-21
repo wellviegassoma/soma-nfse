@@ -16,6 +16,7 @@ import {
   type StatusEfetivo,
 } from "@/app/legalizacao/processos/status";
 import { ProcessosTable, type ProcessoLinha } from "./ProcessosTable";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 
 export const metadata = { title: "Processos — Legalização" };
 
@@ -65,16 +66,29 @@ export default async function ProcessosPage(
   if (error) throw error;
 
   const ids = (processos ?? []).map((p) => p.id);
-  const { data: todasFases, error: fasesError } = ids.length
-    ? await supabase
-        .from("legalizacao_processo_fases")
-        .select(
-          "id, processo_id, nome, ordem, acao, responsavel_id, prazo, status_manual, data_conclusao, responsavel:profiles!legalizacao_processo_fases_responsavel_id_fkey(full_name)",
-        )
-        .in("processo_id", ids)
-        .order("ordem", { ascending: true })
-    : { data: [] as never[], error: null };
-  if (fasesError) throw fasesError;
+  // Paginado (a API corta em 1000 linhas) e em blocos de processos (a
+  // lista de ids vai na URL).
+  const blocosIds: string[][] = [];
+  for (let i = 0; i < ids.length; i += 100) blocosIds.push(ids.slice(i, i + 100));
+  const todasFases = (
+    await Promise.all(
+      blocosIds.map((bloco) =>
+        buscarTudoPaginado((from, to) =>
+          supabase
+            .from("legalizacao_processo_fases")
+            .select(
+              "id, processo_id, nome, ordem, acao, responsavel_id, prazo, status_manual, data_conclusao, responsavel:profiles!legalizacao_processo_fases_responsavel_id_fkey(full_name)",
+            )
+            .in("processo_id", bloco)
+            .order("ordem", { ascending: true })
+            .order("id")
+            .range(from, to),
+        ),
+      ),
+    )
+  )
+    .flat()
+    .sort((a, b) => a.ordem - b.ordem);
 
   const fasesPorProcesso = new Map<string, typeof todasFases>();
   for (const fase of todasFases ?? []) {

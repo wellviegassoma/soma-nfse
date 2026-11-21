@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { fetchComAlertaLimite } from "@/lib/supabase/alerta-limite";
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -8,6 +9,7 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: { fetch: fetchComAlertaLimite },
       cookies: {
         getAll() {
           return cookieStore.getAll();

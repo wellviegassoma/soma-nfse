@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePermissao } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { listarTomadoresEmpresa } from "@/lib/tomadores-lista";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Alert } from "@/components/ui/Alert";
 import { carregarPrefillEmissao } from "@/lib/emissao-prefill";
@@ -32,7 +33,7 @@ export default async function AdminEmitirNotaPage(props: PageProps<"/admin/emiss
       )
       .eq("id", companyId)
       .maybeSingle(),
-    supabase.from("customers").select("id, name, cpf_cnpj").eq("company_id", companyId).order("name"),
+    listarTomadoresEmpresa<{ id: string; name: string; cpf_cnpj: string | null }>(supabase, companyId, "id, name, cpf_cnpj"),
     supabase
       .from("services")
       .select(

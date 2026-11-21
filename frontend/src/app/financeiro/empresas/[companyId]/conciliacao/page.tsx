@@ -7,6 +7,7 @@ import { formatarBRL, formatarDataBr, valorEmAberto } from "@/lib/financeiro";
 import { ImportarExtratoForm } from "@/components/financeiro/ImportarExtratoForm";
 import { LinhaExtrato } from "@/components/financeiro/LinhaExtrato";
 import { DesconciliarButton } from "@/components/financeiro/DesconciliarButton";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 
 export const metadata = { title: "Financeiro — Conciliação" };
 
@@ -73,12 +74,17 @@ export default async function ConciliacaoPage(
         .eq("status", "CONCILIADO")
         .order("data", { ascending: false })
         .limit(20),
-      supabase
-        .from("fin_agendamentos")
-        .select("id, tipo, descricao, vencimento, valor_liquido, valor_liquidado")
-        .eq("company_id", companyId)
-        .in("status", ["ABERTO", "PARCIAL"])
-        .order("vencimento"),
+      // Paginado: empresa migrada do Nibo já tem milhares de agendamentos.
+      buscarTudoPaginado((from, to) =>
+        supabase
+          .from("fin_agendamentos")
+          .select("id, tipo, descricao, vencimento, valor_liquido, valor_liquidado")
+          .eq("company_id", companyId)
+          .in("status", ["ABERTO", "PARCIAL"])
+          .order("vencimento")
+          .order("id")
+          .range(from, to),
+      ).then((data) => ({ data })),
     ]);
 
   if (!company) notFound();

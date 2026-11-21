@@ -10,6 +10,7 @@ import {
 } from "@/lib/financeiro";
 import { ContatoForm } from "./ContatoForm";
 import { ToggleContatoButton } from "./ToggleContatoButton";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 
 export const metadata = { title: "Financeiro — Contatos" };
 
@@ -26,11 +27,15 @@ export default async function FinanceiroContatosPage(
       .select("id, legal_name, trade_name, codigo_cliente")
       .eq("id", companyId)
       .single(),
-    supabase
-      .from("fin_contatos")
-      .select("id, company_id, tipo, nome, cpf_cnpj, email, telefone, observacoes, customer_id, ativo")
-      .eq("company_id", companyId)
-      .order("nome", { ascending: true }),
+    buscarTudoPaginado((from, to) =>
+      supabase
+        .from("fin_contatos")
+        .select("id, company_id, tipo, nome, cpf_cnpj, email, telefone, observacoes, customer_id, ativo")
+        .eq("company_id", companyId)
+        .order("nome", { ascending: true })
+        .order("id")
+        .range(from, to),
+    ).then((data) => ({ data })),
   ]);
 
   if (!company) notFound();

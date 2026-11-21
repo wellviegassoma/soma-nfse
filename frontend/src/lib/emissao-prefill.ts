@@ -68,7 +68,7 @@ const nfsesDa = (d: DpsLinha) => (Array.isArray(d.nfse) ? d.nfse : d.nfse ? [d.n
 async function carregarMapas(supabase: Supa, companyId: string) {
   const [customers, { data: services }] = await Promise.all([
     buscarTudoPaginado<{ id: string; cpf_cnpj: string | null }>((from, to) =>
-      supabase.from("customers").select("id, cpf_cnpj").eq("company_id", companyId).range(from, to),
+      supabase.from("customers").select("id, cpf_cnpj").eq("company_id", companyId).order("id").range(from, to),
     ),
     supabase.from("services").select("id, national_tax_code").eq("company_id", companyId).eq("active", true),
   ]);

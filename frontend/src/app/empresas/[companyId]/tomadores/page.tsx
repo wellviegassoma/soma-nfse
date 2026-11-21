@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { listarTomadoresEmpresa } from "@/lib/tomadores-lista";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
@@ -11,11 +12,14 @@ export default async function TomadoresPage(
   const { companyId } = await props.params;
   const supabase = await createClient();
 
-  const { data: customers } = await supabase
-    .from("customers")
-    .select("id, name, cpf_cnpj, type, city, state")
-    .eq("company_id", companyId)
-    .order("name");
+  const { data: customers } = await listarTomadoresEmpresa<{
+    id: string;
+    name: string;
+    cpf_cnpj: string | null;
+    type: string;
+    city: string | null;
+    state: string | null;
+  }>(supabase, companyId, "id, name, cpf_cnpj, type, city, state");
 
   return (
     <div className="flex flex-col gap-6">

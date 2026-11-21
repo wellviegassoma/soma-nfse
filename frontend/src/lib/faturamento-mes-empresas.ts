@@ -28,7 +28,7 @@ export async function faturamentoDoMesPorEmpresa(
       .select("company_id, valor, status, nfse(status, access_key)")
       .gte("data_competencia", inicio)
       .lt("data_competencia", fim)
-      .range(from, to),
+      .order("id").range(from, to),
   );
 
   const porEmpresa = new Map<string, number>();

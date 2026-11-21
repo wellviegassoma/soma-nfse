@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { autorizarApi } from "@/lib/auth";
+import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 
 export async function GET(
   request: Request,
@@ -31,14 +32,19 @@ export async function GET(
     return NextResponse.json({ error: "Empresa sem CNPJ cadastrado." }, { status: 400 });
   }
 
-  const { data: notas } = await supabase
-    .from("notas_distribuidas")
-    .select(
-      "nsu, chave_acesso, data_emissao, xml, prestador_cnpj, tomador_cnpj, numero, competencia, tomador_nome, prestador_nome, descricao_servico, local_incidencia, codigo_trib_nacional, codigo_nbs, aliquota_issqn, valor_servico, valor_issqn, valor_pis, valor_cofins, valor_ret_cp, valor_ret_irrf, valor_ret_csll, cancelada, motivo_cancelamento, bate_competencia",
-    )
-    .eq("company_id", companyId)
-    .gte("competencia", `${competencia}-01`)
-    .lt("competencia", `${proximoAno}-${proximoMes}-01`);
+  // Paginado: a API corta qualquer resposta em 1000 linhas.
+  const notas = await buscarTudoPaginado<Record<string, unknown>>((from, to) =>
+    supabase
+      .from("notas_distribuidas")
+      .select(
+        "nsu, chave_acesso, data_emissao, xml, prestador_cnpj, tomador_cnpj, numero, competencia, tomador_nome, prestador_nome, descricao_servico, local_incidencia, codigo_trib_nacional, codigo_nbs, aliquota_issqn, valor_servico, valor_issqn, valor_pis, valor_cofins, valor_ret_cp, valor_ret_irrf, valor_ret_csll, cancelada, motivo_cancelamento, bate_competencia",
+      )
+      .eq("company_id", companyId)
+      .gte("competencia", `${competencia}-01`)
+      .lt("competencia", `${proximoAno}-${proximoMes}-01`)
+      .order("id")
+      .range(from, to),
+  );
 
   let response: Response;
   try {

@@ -328,7 +328,7 @@ export async function iniciarExportacaoFechamento(
       .select("company_id")
       .gte("competencia", `${competencia}-01`)
       .lt("competencia", primeiroDiaMesSeguinteLocal(competencia))
-      .range(from, to),
+      .order("id").range(from, to),
   );
 
   const idsComNota = [...new Set(notas.map((n) => n.company_id))];

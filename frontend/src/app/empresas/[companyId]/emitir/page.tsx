@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { listarTomadoresEmpresa } from "@/lib/tomadores-lista";
 import { carregarPrefillEmissao } from "@/lib/emissao-prefill";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -15,7 +16,7 @@ export default async function EmitirNotaPage(props: PageProps<"/empresas/[compan
   const prefillPromise = carregarPrefillEmissao(supabase, companyId, de);
 
   const [{ data: customers }, { data: services }, { data: company }] = await Promise.all([
-    supabase.from("customers").select("id, name, cpf_cnpj").eq("company_id", companyId).order("name"),
+    listarTomadoresEmpresa<{ id: string; name: string; cpf_cnpj: string | null }>(supabase, companyId, "id, name, cpf_cnpj"),
     supabase
       .from("services")
       .select(
