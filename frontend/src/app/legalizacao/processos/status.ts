@@ -82,6 +82,7 @@ export const TIPO_PROCESSO_LABELS: Record<string, string> = {
   ABERTURA: "Abertura de empresa",
   ALTERACAO: "Alteração contratual",
   ENCERRAMENTO: "Encerramento de empresa",
+  RENOVACAO: "Renovação de licença",
 };
 
 export const ALTERACAO_ITEM_LABELS: Record<string, string> = {

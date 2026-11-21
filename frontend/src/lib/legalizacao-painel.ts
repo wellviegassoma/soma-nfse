@@ -32,6 +32,7 @@ export type LinhaLicenca = {
   situacao: Situacao;
   dias: number | null;
   antecedencia: number;
+  renovacao: { processoId: string; responsavel: string | null; etapa: string | null; protocolo: string | null } | null;
 };
 
 // Lista (e não objeto) porque chaves numéricas ("30") seriam reordenadas
@@ -42,6 +43,7 @@ export const FILTROS = [
   ["30", "Vencem em 30 dias"],
   ["60", "Em 60 dias"],
   ["90", "Em 90 dias"],
+  ["em_renovacao", "Em renovação"],
   ["sem_vencimento", "Sem vencimento"],
   ["pendentes", "Pendentes de cadastro"],
 ] as const;
@@ -113,6 +115,31 @@ export async function carregarPainelLicencas(p: ParametrosPainel) {
     supabase.from("legalizacao_tipos_empresas_excecao").select("company_id, tipo_id, aplicavel"),
     supabase.from("legalizacao_regras_vencimento").select("*"),
   ]);
+  const { data: renovacoesData } = await supabase
+    .from("legalizacao_processos")
+    .select(
+      "id, company_id, licenca_tipo_id, protocolo_numero, responsavel:profiles!legalizacao_processos_responsavel_id_fkey(full_name), fases:legalizacao_processo_fases(nome, ordem, data_conclusao)",
+    )
+    .eq("tipo_processo", "RENOVACAO")
+    .is("data_conclusao", null)
+    .is("arquivado_em", null);
+  type RenovacaoAberta = {
+    id: string;
+    company_id: string;
+    licenca_tipo_id: string;
+    protocolo_numero: string | null;
+    responsavel: { full_name: string } | null;
+    fases: { nome: string; ordem: number; data_conclusao: string | null }[] | null;
+  };
+  const renovacaoPorChave = new Map(
+    ((renovacoesData ?? []) as unknown as RenovacaoAberta[]).map((r) => {
+      const atual = [...(r.fases ?? [])].sort((a, b) => a.ordem - b.ordem).find((f) => !f.data_conclusao);
+      return [
+        `${r.company_id}:${r.licenca_tipo_id}`,
+        { processoId: r.id, responsavel: r.responsavel?.full_name ?? null, etapa: atual?.nome ?? null, protocolo: r.protocolo_numero },
+      ];
+    }),
+  );
 
   const empresas = (empresasData ?? []) as unknown as Empresa[];
   const listaRegras = (regras ?? []) as RegraVencimento[];
@@ -127,7 +154,10 @@ export async function carregarPainelLicencas(p: ParametrosPainel) {
       const doc = docPorTipo.get(t.id) ?? null;
       const antecedencia =
         regraAplicavel(listaRegras, t.id, e.municipality_ibge_code)?.antecedencia_dias ?? ANTECEDENCIA_PADRAO_DIAS;
-      const { situacao, dias } = situacaoLicenca(doc, hoje, antecedencia);
+      const base = situacaoLicenca(doc, hoje, antecedencia);
+      const renovacao = renovacaoPorChave.get(`${e.id}:${t.id}`) ?? null;
+      const situacao: Situacao = renovacao ? "EM_RENOVACAO" : base.situacao;
+      const dias = base.dias;
       todas.push({
         companyId: e.id,
         codigoCliente: e.codigo_cliente,
@@ -145,6 +175,7 @@ export async function carregarPainelLicencas(p: ParametrosPainel) {
         situacao,
         dias,
         antecedencia,
+        renovacao,
       });
     }
   }
@@ -165,14 +196,23 @@ export async function carregarPainelLicencas(p: ParametrosPainel) {
     return true;
   });
 
-  const contagem: Record<Situacao, number> = { PENDENTE: 0, VENCIDA: 0, A_VENCER: 0, EM_DIA: 0, SEM_VENCIMENTO: 0 };
+  const contagem: Record<Situacao, number> = {
+    PENDENTE: 0,
+    VENCIDA: 0,
+    A_VENCER: 0,
+    EM_DIA: 0,
+    SEM_VENCIMENTO: 0,
+    EM_RENOVACAO: 0,
+  };
   for (const l of filtradas) contagem[l.situacao] += 1;
 
   // Aba (só a tabela).
   const naAba = filtradas.filter((l) => {
     switch (p.f) {
       case "vencidas":
-        return l.situacao === "VENCIDA";
+        return l.dias != null && l.dias < 0;
+      case "em_renovacao":
+        return l.situacao === "EM_RENOVACAO";
       case "30":
       case "60":
       case "90":

@@ -85,7 +85,7 @@ export function diasEntre(deIso: string, ateIso: string): number {
   return Math.round((Date.UTC(a2, m2 - 1, d2) - Date.UTC(a1, m1 - 1, d1)) / 86_400_000);
 }
 
-export type Situacao = "PENDENTE" | "VENCIDA" | "A_VENCER" | "EM_DIA" | "SEM_VENCIMENTO";
+export type Situacao = "PENDENTE" | "VENCIDA" | "A_VENCER" | "EM_DIA" | "SEM_VENCIMENTO" | "EM_RENOVACAO";
 
 export const SITUACAO_LABELS: Record<Situacao, string> = {
   PENDENTE: "Pendente de cadastro",
@@ -93,6 +93,7 @@ export const SITUACAO_LABELS: Record<Situacao, string> = {
   A_VENCER: "A vencer",
   EM_DIA: "Em dia",
   SEM_VENCIMENTO: "Sem vencimento",
+  EM_RENOVACAO: "Em renovação",
 };
 
 export const SITUACAO_TONES: Record<Situacao, StatusTone> = {
@@ -101,6 +102,7 @@ export const SITUACAO_TONES: Record<Situacao, StatusTone> = {
   A_VENCER: "warning",
   EM_DIA: "success",
   SEM_VENCIMENTO: "success",
+  EM_RENOVACAO: "warning",
 };
 
 // "A vencer" começa na antecedência da regra (padrão 60 dias) — é a janela

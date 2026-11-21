@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 const TABS = [
   { href: "/legalizacao", label: "Visão geral", exact: true },
   { href: "/legalizacao/licencas", label: "Alvarás e licenças" },
+  { href: "/legalizacao/renovacoes", label: "Renovações" },
   { href: "/legalizacao/processos", label: "Processos" },
   { href: "/legalizacao/fluxos", label: "Fluxos", editarOnly: true },
   { href: "/legalizacao/tipos", label: "Tipos de documento" },

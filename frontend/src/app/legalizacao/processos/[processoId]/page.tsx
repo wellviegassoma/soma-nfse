@@ -22,6 +22,7 @@ import { AnexoSection } from "./AnexoSection";
 import { AtividadeSection } from "./AtividadeSection";
 import { ArquivarExcluirProcesso } from "./ArquivarExcluirProcesso";
 import { InativarEmpresaCard } from "./InativarEmpresaCard";
+import { RenovacaoSection, type Requisito } from "./RenovacaoSection";
 
 export const metadata = { title: "Processo — Legalização" };
 
@@ -44,7 +45,7 @@ export default async function ProcessoDetailPage(
     supabase
       .from("legalizacao_processos")
       .select(
-        "id, tipo_processo, nome, fluxo_nome, company_id, cnpj, data_inicio, prazo_final, data_conclusao, responsavel_id, detalhes, contato_nome, contato_email, contato_whatsapp, alteracao_itens, arquivado_em, company:companies(id, legal_name, trade_name, codigo_cliente, ativa)",
+        "id, tipo_processo, nome, fluxo_nome, company_id, cnpj, data_inicio, prazo_final, data_conclusao, responsavel_id, detalhes, contato_nome, contato_email, contato_whatsapp, alteracao_itens, arquivado_em, licenca_tipo_id, licenca_vencimento, protocolo_numero, protocolo_data, guia_valor, guia_vencimento, licenca_tipo:legalizacao_tipos_documento(nome), company:companies(id, legal_name, trade_name, codigo_cliente, ativa)",
       )
       .eq("id", processoId)
       .maybeSingle(),
@@ -100,6 +101,25 @@ export default async function ProcessoDetailPage(
   const status = statusEfetivoProcesso(processo, fasesTipadas as FaseParaStatus[], hoje);
   const progresso = andamento(fasesTipadas);
 
+  // Renovação: checklist e licença vigente (pra saber se já foi renovada).
+  const ehRenovacao = processo.tipo_processo === "RENOVACAO" && processo.company_id && processo.licenca_tipo_id;
+  const [{ data: requisitos }, { data: licencaAtual }] = ehRenovacao
+    ? await Promise.all([
+        supabase
+          .from("legalizacao_processo_requisitos")
+          .select("id, item, recebido_em")
+          .eq("processo_id", processoId)
+          .order("ordem")
+          .order("created_at"),
+        supabase
+          .from("legalizacao_documentos")
+          .select("data_vencimento")
+          .eq("company_id", processo.company_id!)
+          .eq("tipo_id", processo.licenca_tipo_id!)
+          .maybeSingle(),
+      ])
+    : [{ data: null }, { data: null }];
+
   const faseCriarEmpresaPendente = fasesTipadas.some((f) => f.acao === "CRIAR_EMPRESA" && !f.data_conclusao);
   const mostrarCadastrarEmpresa = processo.tipo_processo === "ABERTURA" && !processo.company_id && faseCriarEmpresaPendente;
   const mostrarInativarEmpresa =
@@ -145,6 +165,28 @@ export default async function ProcessoDetailPage(
 
       {mostrarInativarEmpresa && company && podeEditar && (
         <InativarEmpresaCard companyId={company.id} processoId={processo.id} />
+      )}
+
+      {ehRenovacao && (
+        <Card className="p-6">
+          <h2 className="mb-4 text-sm font-semibold text-foreground/70">Renovação</h2>
+          <RenovacaoSection
+            dados={{
+              processoId: processo.id,
+              companyId: processo.company_id!,
+              licencaTipoNome:
+                (processo.licenca_tipo as unknown as { nome: string } | null)?.nome ?? "Licença",
+              licencaVencimento: processo.licenca_vencimento,
+              licencaAtualVencimento: licencaAtual?.data_vencimento ?? null,
+              protocolo_numero: processo.protocolo_numero,
+              protocolo_data: processo.protocolo_data,
+              guia_valor: processo.guia_valor != null ? Number(processo.guia_valor) : null,
+              guia_vencimento: processo.guia_vencimento,
+            }}
+            requisitos={(requisitos ?? []) as Requisito[]}
+            podeEditar={podeEditar}
+          />
+        </Card>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">

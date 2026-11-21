@@ -74,6 +74,7 @@ export function FaseTemplateForm({
           <Select id={`acao-${suffix}`} name="acao" defaultValue={fase?.acao ?? ""} className="w-44">
             <option value="">Nenhuma</option>
             <option value="CRIAR_EMPRESA">Criar empresa</option>
+            <option value="ANEXAR_LICENCA">Anexar licença nova</option>
           </Select>
         </Field>
         <Field label="Documento associado" htmlFor={`doc-${suffix}`} hint="Opcional">

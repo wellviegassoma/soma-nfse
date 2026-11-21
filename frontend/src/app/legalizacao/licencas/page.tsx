@@ -5,6 +5,8 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { STATUS_PILL_CLASSES, formatarCpfCnpj } from "@/lib/formatters";
+import { temPermissao } from "@/lib/auth";
+import { RenovarButton } from "./RenovarButton";
 import { SITUACAO_LABELS, SITUACAO_TONES, textoDias, type Situacao } from "@/lib/legalizacao-licencas";
 import {
   FILTROS,
@@ -37,13 +39,14 @@ const CARDS: { situacao: Situacao | "TOTAL"; filtro: Filtro; classe: string }[] 
   { situacao: "EM_DIA", filtro: "todas", classe: "bg-success-soft" },
   { situacao: "A_VENCER", filtro: "90", classe: "bg-warning-soft" },
   { situacao: "VENCIDA", filtro: "vencidas", classe: "bg-danger-soft" },
+  { situacao: "EM_RENOVACAO", filtro: "em_renovacao", classe: "" },
   { situacao: "SEM_VENCIMENTO", filtro: "sem_vencimento", classe: "" },
   { situacao: "PENDENTE", filtro: "pendentes", classe: "" },
 ];
 
 export default async function LicencasPage(props: PageProps<"/legalizacao/licencas">) {
   const p = lerParametros(await props.searchParams);
-  const painel = await carregarPainelLicencas(p);
+  const [painel, podeEditar] = await Promise.all([carregarPainelLicencas(p), temPermissao("legalizacao.editar")]);
   const total = painel.totalFiltradas;
   const visiveis = painel.linhas.slice(0, LIMITE_LINHAS);
 
@@ -61,7 +64,7 @@ export default async function LicencasPage(props: PageProps<"/legalizacao/licenc
         </a>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
         {CARDS.map((c) => {
           const valor = c.situacao === "TOTAL" ? total : painel.contagem[c.situacao];
           const rotulo = c.situacao === "TOTAL" ? "Total" : SITUACAO_LABELS[c.situacao];
@@ -165,6 +168,7 @@ export default async function LicencasPage(props: PageProps<"/legalizacao/licenc
                   <th className="px-3 py-2.5 font-medium">Vencimento</th>
                   <th className="px-3 py-2.5 font-medium">Dias para vencer</th>
                   <th className="px-3 py-2.5 font-medium">Situação</th>
+                  <th className="px-3 py-2.5 font-medium">Responsável</th>
                   <th className="px-4 py-2.5" />
                 </tr>
               </thead>
@@ -204,14 +208,38 @@ export default async function LicencasPage(props: PageProps<"/legalizacao/licenc
                       >
                         {SITUACAO_LABELS[l.situacao]}
                       </span>
+                      {l.renovacao?.etapa && (
+                        <div className="mt-1 text-[11px] text-foreground/50">{l.renovacao.etapa}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-foreground/70">
+                      {l.renovacao ? (l.renovacao.responsavel ?? "—") : ""}
+                      {l.renovacao?.protocolo && (
+                        <div className="text-[11px] text-foreground/50">Prot. {l.renovacao.protocolo}</div>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-right">
-                      <Link
-                        href={`/legalizacao/empresas/${l.companyId}/gerenciar`}
-                        className="text-xs font-medium text-brand hover:underline"
-                      >
-                        {l.situacao === "PENDENTE" ? "Cadastrar" : "Abrir"}
-                      </Link>
+                      <div className="flex items-center justify-end gap-3">
+                        {l.renovacao ? (
+                          <Link
+                            href={`/legalizacao/processos/${l.renovacao.processoId}`}
+                            className="text-xs font-medium text-brand hover:underline"
+                          >
+                            Ver renovação
+                          </Link>
+                        ) : (
+                          podeEditar &&
+                          (l.situacao === "VENCIDA" || l.situacao === "A_VENCER") && (
+                            <RenovarButton companyId={l.companyId} tipoId={l.tipoId} />
+                          )
+                        )}
+                        <Link
+                          href={`/legalizacao/empresas/${l.companyId}/gerenciar`}
+                          className="text-xs font-medium text-brand hover:underline"
+                        >
+                          {l.situacao === "PENDENTE" ? "Cadastrar" : "Abrir"}
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

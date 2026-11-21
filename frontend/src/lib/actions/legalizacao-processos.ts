@@ -410,13 +410,45 @@ export async function concluirFase(
 
   const [{ data: fase }, { data: processo }] = await Promise.all([
     supabase.from("legalizacao_processo_fases").select("nome, acao, data_conclusao").eq("id", faseId).single(),
-    supabase.from("legalizacao_processos").select("company_id").eq("id", processoId).single(),
+    supabase
+      .from("legalizacao_processos")
+      .select("company_id, licenca_tipo_id, created_at")
+      .eq("id", processoId)
+      .single(),
   ]);
   if (!fase || !processo) return { error: "Processo ou fase não encontrados." };
   if (fase.data_conclusao) return undefined;
 
   if (fase.acao === "CRIAR_EMPRESA" && !processo.company_id) {
     return { redirectTo: `/legalizacao/processos/${processoId}/cadastrar-empresa` };
+  }
+
+  // Renovação: só conclui depois que a licença nova foi anexada (a anterior
+  // foi pro histórico depois de o processo abrir, ou a primeira licença do
+  // tipo foi cadastrada depois disso).
+  if (fase.acao === "ANEXAR_LICENCA" && processo.company_id && processo.licenca_tipo_id) {
+    const [{ data: doc }, { data: substituida }] = await Promise.all([
+      supabase
+        .from("legalizacao_documentos")
+        .select("created_at")
+        .eq("company_id", processo.company_id)
+        .eq("tipo_id", processo.licenca_tipo_id)
+        .maybeSingle(),
+      supabase
+        .from("legalizacao_documentos_historico")
+        .select("id")
+        .eq("company_id", processo.company_id)
+        .eq("tipo_id", processo.licenca_tipo_id)
+        .gte("substituido_em", processo.created_at)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const anexada = Boolean(substituida) || Boolean(doc && doc.created_at >= processo.created_at);
+    if (!anexada) {
+      return {
+        error: "Anexe a licença nova em Gerenciar documentos da empresa antes de concluir esta fase.",
+      };
+    }
   }
 
   const { error } = await supabase
@@ -449,6 +481,8 @@ export async function concluirFase(
 
   revalidatePath(`/legalizacao/processos/${processoId}`);
   revalidatePath("/legalizacao/processos");
+  revalidatePath("/legalizacao/renovacoes");
+  revalidatePath("/legalizacao/licencas");
   return undefined;
 }
 
@@ -892,7 +926,7 @@ const fluxoSchema = z.object({
   fluxoId: uuidLike.optional(),
   chave: z.string().trim().min(2, "Informe a chave.").regex(/^[A-Z0-9_]+$/, "Use maiúsculas, números e _."),
   nome: z.string().trim().min(2, "Informe o nome."),
-  tipoProcesso: z.enum(["ABERTURA", "ALTERACAO", "ENCERRAMENTO"]),
+  tipoProcesso: z.enum(["ABERTURA", "ALTERACAO", "ENCERRAMENTO", "RENOVACAO"]),
   prazoPadraoDias: z.coerce.number().int().positive().optional().or(z.literal("")),
   ordem: z.coerce.number().int(),
 });
@@ -950,7 +984,7 @@ const faseTemplateSchema = z.object({
   nome: z.string().trim().min(2, "Informe o nome."),
   ordem: z.coerce.number().int(),
   descricao: z.string().trim().optional(),
-  acao: z.enum(["CRIAR_EMPRESA"]).optional().or(z.literal("")),
+  acao: z.enum(["CRIAR_EMPRESA", "ANEXAR_LICENCA"]).optional().or(z.literal("")),
   tipoDocumentoId: uuidLike.optional().or(z.literal("")),
 });
 

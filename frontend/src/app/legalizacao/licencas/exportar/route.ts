@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const s = v == null ? "" : String(v);
     return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const cabecalho = ["Código", "Cliente", "CNPJ/CPF", "Município", "Tipo", "Número", "Órgão", "Emissão", "Vencimento", "Dias para vencer", "Situação"];
+  const cabecalho = ["Código", "Cliente", "CNPJ/CPF", "Município", "Tipo", "Número", "Órgão", "Emissão", "Vencimento", "Dias para vencer", "Situação", "Etapa da renovação", "Responsável", "Protocolo"];
   const corpo = linhas.map((l) =>
     [
       l.codigoCliente,
@@ -30,6 +30,9 @@ export async function GET(request: Request) {
       br(l.dataVencimento),
       l.dias,
       SITUACAO_LABELS[l.situacao],
+      l.renovacao?.etapa ?? null,
+      l.renovacao?.responsavel ?? null,
+      l.renovacao?.protocolo ?? null,
     ]
       .map(cel)
       .join(";"),

@@ -64,6 +64,7 @@ export function FluxoForm({ fluxo, compact }: { fluxo?: Fluxo; compact?: boolean
             <option value="ABERTURA">Abertura de empresa</option>
             <option value="ALTERACAO">Alteração contratual</option>
             <option value="ENCERRAMENTO">Encerramento de empresa</option>
+            <option value="RENOVACAO">Renovação de licença</option>
           </Select>
         </Field>
         <Field label="Prazo padrão (dias)" htmlFor={`prazo-${suffix}`} hint="Opcional">
