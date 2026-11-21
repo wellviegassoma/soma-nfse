@@ -27,3 +27,37 @@ export async function buscarTudoPaginado<T>(
   }
   return todos;
 }
+
+// Igual a buscarTudoPaginado, mas as páginas correm em paralelo: a
+// primeira pede também o total (count exact) e as demais saem todas de
+// uma vez. Usar com ordem ÚNICA (ex.: .order("id")), senão páginas
+// paralelas podem repetir/pular linhas.
+export async function buscarTudoPaginadoParalelo<T>(
+  buscarPagina: (
+    from: number,
+    to: number,
+    contar: boolean,
+  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null; count?: number | null }>,
+  pageSize = 1000,
+): Promise<T[]> {
+  const primeira = await buscarPagina(0, pageSize - 1, true);
+  if (primeira.error) throw new Error(primeira.error.message);
+  const dados = primeira.data ?? [];
+  const total = primeira.count ?? null;
+  // Sem total (não deveria acontecer): cai no caminho sequencial a partir da 2ª página.
+  if (total == null) {
+    if (dados.length < pageSize) return dados;
+    const resto = await buscarTudoPaginado((from, to) => buscarPagina(from + pageSize, to + pageSize, false), pageSize);
+    return [...dados, ...resto];
+  }
+  const inicios: number[] = [];
+  for (let from = pageSize; from < total; from += pageSize) inicios.push(from);
+  const paginas = await Promise.all(
+    inicios.map(async (from) => {
+      const { data, error } = await buscarPagina(from, from + pageSize - 1, false);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    }),
+  );
+  return [dados, ...paginas].flat();
+}

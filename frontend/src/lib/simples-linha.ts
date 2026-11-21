@@ -21,7 +21,7 @@ import {
 import { type FolhaMensal, buscarFolhaMensal, montarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { abaterRetencaoDoDas, calcularSimplesNacional } from "@/lib/calculo-impostos";
 import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
-import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
+import { buscarTudoPaginado, buscarTudoPaginadoParalelo } from "@/lib/supabase/paginacao";
 import {
   assinaturaConferencia,
   conferirSimples,
@@ -132,24 +132,20 @@ export async function carregarDadosSimplesLote(
     lotes.map((ids) =>
       Promise.all([
         // Colunas de buscarFaturamentoMensal + buscarFaturamentoPorAtividade juntas.
-        buscarTudoPaginado<LinhaDps>((from, to) =>
+        buscarTudoPaginadoParalelo<LinhaDps>((from, to, contar) =>
           supabase
             .from("dps")
-            .select(
-              "company_id, valor, status, data_competencia, nfse(status, access_key), services(name, national_tax_code, atividade_simples_nacional, tipo_retencao_issqn)",
-            )
+            .select("company_id, valor, status, data_competencia, nfse(status, access_key), services(name, national_tax_code, atividade_simples_nacional, tipo_retencao_issqn)", contar ? { count: "exact" } : undefined)
             .in("company_id", ids)
             .order("id")
             .range(from, to),
         ),
         // Colunas de faturamento, por atividade e retenções juntas: uma
         // leitura só das notas de saída.
-        buscarTudoPaginado<LinhaDistribuida>((from, to) =>
+        buscarTudoPaginadoParalelo<LinhaDistribuida>((from, to, contar) =>
           supabase
             .from("notas_distribuidas")
-            .select(
-              "company_id, chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar, tipo_retencao_issqn, exportacao, codigo_trib_nacional, descricao_servico, valor_ret_irrf, valor_ret_csll",
-            )
+            .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar, tipo_retencao_issqn, exportacao, codigo_trib_nacional, descricao_servico, valor_ret_irrf, valor_ret_csll", contar ? { count: "exact" } : undefined)
             .in("company_id", ids)
             .eq("direcao", "saida")
             .order("id")

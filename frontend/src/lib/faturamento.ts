@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sugerirAtividade } from "@/lib/lc116-sugestao-atividade";
-import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
+import { buscarTudoPaginado, buscarTudoPaginadoParalelo } from "@/lib/supabase/paginacao";
 
 export type NotaFaturamento = {
   competencia: string; // "YYYY-MM"
@@ -680,20 +680,18 @@ export async function buscarFaturamentoMensalLote(
   const porLote = await Promise.all(
     lotes.map((ids) =>
       Promise.all([
-        buscarTudoPaginado<Linha>((from, to) =>
+        buscarTudoPaginadoParalelo<Linha>((from, to, contar) =>
           supabase
             .from("dps")
-            .select("company_id, valor, status, data_competencia, nfse(status, access_key), services(tipo_retencao_issqn)")
+            .select("company_id, valor, status, data_competencia, nfse(status, access_key), services(tipo_retencao_issqn)", contar ? { count: "exact" } : undefined)
             .in("company_id", ids)
             .order("id")
             .range(from, to),
         ),
-        buscarTudoPaginado<LinhaDistribuida>((from, to) =>
+        buscarTudoPaginadoParalelo<LinhaDistribuida>((from, to, contar) =>
           supabase
             .from("notas_distribuidas")
-            .select(
-              "company_id, chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar, tipo_retencao_issqn, exportacao, valor_ret_irrf, valor_ret_csll",
-            )
+            .select("company_id, chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar, tipo_retencao_issqn, exportacao, valor_ret_irrf, valor_ret_csll", contar ? { count: "exact" } : undefined)
             .in("company_id", ids)
             .eq("direcao", "saida")
             .order("id")
