@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { mesAnteriorBrasilia } from "@/lib/competencia";
-import { buscarFaturamentoMensal, somarFaturamento, somarFaturamentoIssRetido } from "@/lib/faturamento";
+import { buscarFaturamentoMensalLote, somarFaturamento, somarFaturamentoIssRetido } from "@/lib/faturamento";
 import { resolverIssMensal } from "@/lib/calculo-impostos";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import { temPermissao } from "@/lib/auth";
@@ -46,14 +46,18 @@ export default async function CentralIssRioPage(props: PageProps<"/admin/fechame
     .neq("tax_regime", "SIMPLES_NACIONAL")
     .order("codigo_cliente");
 
-  const [fechamentos, podeMarcarFechamento] = await Promise.all([
-    buscarFechamentosIss(supabase, competencia, (companies ?? []).map((c) => c.id)),
+  const companyIds = (companies ?? []).map((c) => c.id);
+  // Tudo em paralelo e o faturamento em lote (antes: uma busca por empresa).
+  const [fechamentos, podeMarcarFechamento, faturamentoPorEmpresa, pagamentos] = await Promise.all([
+    buscarFechamentosIss(supabase, competencia, companyIds),
     temPermissao("fechamento.executar"),
+    buscarFaturamentoMensalLote(supabase, companyIds),
+    buscarPagamentosIss(supabase, "rio", competencia),
   ]);
 
   const empresasSemConferencia = await Promise.all(
     (companies ?? []).map(async (company) => {
-      const notas = await buscarFaturamentoMensal(supabase, company.id);
+      const notas = faturamentoPorEmpresa.get(company.id)?.notas ?? [];
       const receita = somarFaturamento(notas, [competencia]);
       const certificado = Array.isArray(company.certificates) ? company.certificates[0] : company.certificates;
       const situacao = situacaoCertificado(certificado?.expires_at);
@@ -90,7 +94,6 @@ export default async function CentralIssRioPage(props: PageProps<"/admin/fechame
     competencia,
     new Map(empresasSemConferencia.map((e) => [e.id, e.assinaturaSoma])),
   );
-  const pagamentos = await buscarPagamentosIss(supabase, "rio", competencia);
   const empresas: EmpresaIssRio[] = empresasSemConferencia.map((e) => ({
     ...e,
     conferenciaSalva: conferencias.get(e.id) ?? null,

@@ -6,7 +6,7 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { temPermissao } from "@/lib/auth";
 import { mesAnteriorBrasilia } from "@/lib/competencia";
-import { buscarFaturamentoMensal, somarFaturamento, somarFaturamentoIssRetido } from "@/lib/faturamento";
+import { buscarFaturamentoMensalLote, somarFaturamento, somarFaturamentoIssRetido } from "@/lib/faturamento";
 import { resolverIssMensal } from "@/lib/calculo-impostos";
 import { prefixoArquivoEmpresa } from "@/lib/nome-arquivo-empresa";
 import { buscarFechamentosIss } from "@/lib/iss-fechamentos";
@@ -44,15 +44,19 @@ export default async function CentralIssPetropolisPage(props: PageProps<"/admin/
   ]);
   const comLogin = new Set((credenciais ?? []).map((c) => c.company_id as string));
 
-  const [fechamentos, podeMarcarFechamento, podeEmitir] = await Promise.all([
-    buscarFechamentosIss(supabase, competencia, (companies ?? []).map((c) => c.id)),
+  const companyIds = (companies ?? []).map((c) => c.id);
+  // Tudo em paralelo e o faturamento em lote (antes: uma busca por empresa).
+  const [fechamentos, podeMarcarFechamento, podeEmitir, faturamentoPorEmpresa, pagamentos] = await Promise.all([
+    buscarFechamentosIss(supabase, competencia, companyIds),
     temPermissao("fechamento.executar"),
     temPermissao("impostos.emitir_iss"),
+    buscarFaturamentoMensalLote(supabase, companyIds),
+    buscarPagamentosIss(supabase, "petropolis", competencia),
   ]);
 
   const empresasSemConferencia = await Promise.all(
     (companies ?? []).map(async (company) => {
-      const notas = await buscarFaturamentoMensal(supabase, company.id);
+      const notas = faturamentoPorEmpresa.get(company.id)?.notas ?? [];
       const receita = somarFaturamento(notas, [competencia]);
       const retido = somarFaturamentoIssRetido(notas, [competencia]);
       const issSoma = resolverIssMensal({
@@ -86,7 +90,6 @@ export default async function CentralIssPetropolisPage(props: PageProps<"/admin/
     competencia,
     new Map(empresasSemConferencia.map((e) => [e.id, e.assinaturaSoma])),
   );
-  const pagamentos = await buscarPagamentosIss(supabase, "petropolis", competencia);
   const empresas: EmpresaIssPetropolis[] = empresasSemConferencia.map((e) => ({
     ...e,
     conferenciaSalva: conferencias.get(e.id) ?? null,

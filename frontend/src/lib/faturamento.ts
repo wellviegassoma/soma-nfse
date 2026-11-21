@@ -653,3 +653,75 @@ export function resolverRbt12(params: {
     empresaNova: false,
   };
 }
+
+export type FaturamentoEmpresaLote = { notas: NotaFaturamento[]; retencoes: RetencaoPorMes[] };
+
+// Quantas empresas por consulta: a lista de ids vai na URL (filtro "in"),
+// e lotes pequenos deixam as páginas de 1000 linhas correrem em paralelo.
+const EMPRESAS_POR_LOTE = 10;
+
+// buscarFaturamentoMensal + buscarRetencoesMensal para várias empresas de
+// uma vez (Centrais ISS Rio/Petrópolis e MIT). Antes cada central fazia
+// 2–4 consultas por empresa; aqui é uma leitura de dps e uma de notas de
+// saída por lote de empresas, e cada empresa passa pelas mesmas funções
+// montar* do caminho por empresa — os números são os mesmos.
+export async function buscarFaturamentoMensalLote(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any, any, any>,
+  companyIds: string[],
+): Promise<Map<string, FaturamentoEmpresaLote>> {
+  type Linha = { company_id: string };
+  type LinhaDistribuida = Linha & { cancelada: boolean };
+
+  const lotes: string[][] = [];
+  for (let i = 0; i < companyIds.length; i += EMPRESAS_POR_LOTE) {
+    lotes.push(companyIds.slice(i, i + EMPRESAS_POR_LOTE));
+  }
+  const porLote = await Promise.all(
+    lotes.map((ids) =>
+      Promise.all([
+        buscarTudoPaginado<Linha>((from, to) =>
+          supabase
+            .from("dps")
+            .select("company_id, valor, status, data_competencia, nfse(status, access_key), services(tipo_retencao_issqn)")
+            .in("company_id", ids)
+            .order("id")
+            .range(from, to),
+        ),
+        buscarTudoPaginado<LinhaDistribuida>((from, to) =>
+          supabase
+            .from("notas_distribuidas")
+            .select(
+              "company_id, chave_acesso, valor_servico, competencia, cancelada, direcao, equiparacao_hospitalar, tipo_retencao_issqn, exportacao, valor_ret_irrf, valor_ret_csll",
+            )
+            .in("company_id", ids)
+            .eq("direcao", "saida")
+            .order("id")
+            .range(from, to),
+        ),
+      ]),
+    ),
+  );
+
+  const dps = new Map<string, Linha[]>();
+  const dist = new Map<string, LinhaDistribuida[]>();
+  for (const [linhasDps, linhasDist] of porLote) {
+    for (const l of linhasDps) dps.set(l.company_id, [...(dps.get(l.company_id) ?? []), l]);
+    for (const l of linhasDist) {
+      const lista = dist.get(l.company_id);
+      if (lista) lista.push(l);
+      else dist.set(l.company_id, [l]);
+    }
+  }
+
+  const resultado = new Map<string, FaturamentoEmpresaLote>();
+  for (const id of companyIds) {
+    const notasDist = dist.get(id) ?? [];
+    resultado.set(id, {
+      notas: montarFaturamentoMensal(dps.get(id) ?? [], notasDist),
+      // buscarRetencoesMensal filtra cancelada=false no banco.
+      retencoes: montarRetencoesMensal(notasDist.filter((n) => n.cancelada === false)),
+    });
+  }
+  return resultado;
+}

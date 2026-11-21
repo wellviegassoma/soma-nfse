@@ -6,8 +6,7 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { mesAnteriorBrasilia } from "@/lib/competencia";
 import {
-  buscarFaturamentoMensal,
-  buscarRetencoesMensal,
+  buscarFaturamentoMensalLote,
   competenciasTrimestre,
   somarFaturamento,
   somarFaturamentoPorEquiparacao,
@@ -41,27 +40,29 @@ export default async function CentralMitPage(props: PageProps<"/admin/fechamento
   const mesesTrimestre = competenciasTrimestre(competencia);
   const ehUltimoMesDoTrimestre = competencia === mesesTrimestre[2];
 
+  // Tudo de uma vez: antes eram 3 consultas por empresa (encerramento,
+  // faturamento e retenções), cada empresa na fila da anterior.
+  const [faturamentoPorEmpresa, { data: encerramentos }] = await Promise.all([
+    buscarFaturamentoMensalLote(
+      supabase,
+      (companies ?? []).map((c) => c.id),
+    ),
+    // Mais recente primeiro: vale o último encerramento de cada empresa.
+    supabase
+      .from("integra_contador_mit_encerramentos")
+      .select("company_id, situacao_apuracao")
+      .eq("competencia", competencia)
+      .order("created_at", { ascending: false }),
+  ]);
+  const ultimaSituacao = new Map<string, string | null>();
+  for (const e of (encerramentos ?? []) as { company_id: string; situacao_apuracao: string | null }[]) {
+    if (!ultimaSituacao.has(e.company_id)) ultimaSituacao.set(e.company_id, e.situacao_apuracao);
+  }
+
   const linhas = await Promise.all(
     (companies ?? []).map(async (company) => {
-      let situacaoExistente: string | null = null;
-      try {
-        const { data } = await supabase
-          .from("integra_contador_mit_encerramentos")
-          .select("situacao_apuracao")
-          .eq("company_id", company.id)
-          .eq("competencia", competencia)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        situacaoExistente = data?.situacao_apuracao ?? null;
-      } catch {
-        situacaoExistente = null;
-      }
-
-      const [notas, retencoes] = await Promise.all([
-        buscarFaturamentoMensal(supabase, company.id),
-        buscarRetencoesMensal(supabase, company.id),
-      ]);
+      const situacaoExistente = ultimaSituacao.get(company.id) ?? null;
+      const { notas, retencoes } = faturamentoPorEmpresa.get(company.id) ?? { notas: [], retencoes: [] };
 
       const receitaMes = somarFaturamento(notas, [competencia]);
       const retencaoMes = somarRetencoes(retencoes, [competencia]);
