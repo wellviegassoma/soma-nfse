@@ -17,7 +17,7 @@ import {
   type IssTipo,
   type NfseAmbiente,
 } from "@/lib/types";
-import { MunicipioIbgeField } from "./MunicipioIbgeField";
+import { EnderecoFields } from "./EnderecoFields";
 
 // Mesmo valor de IBGE_PETROPOLIS em lib/iss-petropolis.ts — não importado
 // direto porque aquele arquivo é "server-only" (não pode entrar num
@@ -114,13 +114,6 @@ export function FiscalForm({ company }: { company: Company }) {
           <Field label="CNAE principal" htmlFor="cnae">
             <Input id="cnae" name="cnae" defaultValue={company.cnae ?? ""} />
           </Field>
-          <MunicipioIbgeField
-            defaultValue={{
-              uf: company.state ?? "",
-              municipio: company.municipality_name ?? "",
-              ibge: company.municipality_ibge_code ?? "",
-            }}
-          />
           {company.municipality_ibge_code === IBGE_PETROPOLIS && (
             <Field
               label="CMC no ISS de Petrópolis"
@@ -149,6 +142,24 @@ export function FiscalForm({ company }: { company: Company }) {
             </Select>
           </Field>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-4 border-t border-border pt-6">
+        <h2 className="text-sm font-semibold text-foreground/70">Endereço</h2>
+        <EnderecoFields
+          inicial={{
+            cep: company.address_zip ?? "",
+            logradouro: company.address_street ?? "",
+            numero: company.address_number ?? "",
+            complemento: company.address_complement ?? "",
+            bairro: company.address_neighborhood ?? "",
+            municipio: {
+              uf: company.state ?? "",
+              municipio: company.municipality_name ?? "",
+              ibge: company.municipality_ibge_code ?? "",
+            },
+          }}
+        />
       </div>
 
       <div className="flex flex-col gap-4 border-t border-border pt-6">

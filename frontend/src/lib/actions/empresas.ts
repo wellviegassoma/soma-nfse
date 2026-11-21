@@ -438,6 +438,11 @@ const updateFiscalSchema = z.object({
   municipalityIbgeCode: z.string().trim().optional(),
   municipalityName: z.string().trim().optional(),
   state: z.string().trim().optional(),
+  addressStreet: z.string().trim().optional(),
+  addressNumber: z.string().trim().optional(),
+  addressComplement: z.string().trim().optional(),
+  addressNeighborhood: z.string().trim().optional(),
+  addressZip: z.string().trim().optional().transform((v) => (v ? v.replace(/\D/g, "") || null : null)),
   petropolisCmc: z.string().trim().optional(),
   nfseAmbiente: z.enum(["HOMOLOGACAO", "PRODUCAO"]),
   dpsSeries: z.string().trim().min(1, "Informe a série."),
@@ -469,6 +474,11 @@ export async function updateCompanyFiscal(
     municipalityIbgeCode: formData.get("municipalityIbgeCode") || undefined,
     municipalityName: formData.get("municipalityName") || undefined,
     state: formData.get("state") || undefined,
+    addressStreet: formData.get("addressStreet") || undefined,
+    addressNumber: formData.get("addressNumber") || undefined,
+    addressComplement: formData.get("addressComplement") || undefined,
+    addressNeighborhood: formData.get("addressNeighborhood") || undefined,
+    addressZip: formData.get("addressZip") || undefined,
     petropolisCmc: formData.get("petropolisCmc") || undefined,
     nfseAmbiente: formData.get("nfseAmbiente"),
     dpsSeries: formData.get("dpsSeries"),
@@ -493,7 +503,7 @@ export async function updateCompanyFiscal(
   const { data: before } = await supabase
     .from("companies")
     .select(
-      "municipal_registration, inscricao_estadual, data_abertura, tax_regime, cnae, municipality_ibge_code, municipality_name, state, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
+      "municipal_registration, inscricao_estadual, data_abertura, tax_regime, cnae, municipality_ibge_code, municipality_name, state, address_street, address_number, address_complement, address_neighborhood, address_zip, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
     )
     .eq("id", companyId)
     .single();
@@ -524,6 +534,11 @@ export async function updateCompanyFiscal(
     municipality_ibge_code: rest.municipalityIbgeCode || null,
     municipality_name: rest.municipalityName || null,
     state: rest.state || null,
+    address_street: rest.addressStreet || null,
+    address_number: rest.addressNumber || null,
+    address_complement: rest.addressComplement || null,
+    address_neighborhood: rest.addressNeighborhood || null,
+    address_zip: rest.addressZip,
     petropolis_cmc: rest.petropolisCmc || null,
     nfse_ambiente: rest.nfseAmbiente,
     dps_series: rest.dpsSeries,
