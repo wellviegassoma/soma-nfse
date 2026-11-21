@@ -226,10 +226,15 @@ export async function carregarPainelLicencas(p: ParametrosPainel) {
     }
   });
 
-  // Mais urgente primeiro: vencidas (mais atrasada antes), depois por
-  // vencimento; sem vencimento e pendentes por último.
-  const peso = (l: LinhaLicenca) => (l.dias != null ? l.dias : l.situacao === "PENDENTE" ? 100_000 : 200_000);
-  naAba.sort((a, b) => peso(a) - peso(b) || a.empresa.localeCompare(b.empresa) || a.tipo.localeCompare(b.tipo));
+  // Pelo código do cliente (numérico: "048" antes de "289"); sem código no
+  // fim, por nome; dentro do cliente, por tipo de licença.
+  const codigo = (l: LinhaLicenca) => {
+    const n = Number((l.codigoCliente ?? "").replace(/\D/g, ""));
+    return l.codigoCliente && Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+  };
+  naAba.sort(
+    (a, b) => codigo(a) - codigo(b) || a.empresa.localeCompare(b.empresa) || a.tipo.localeCompare(b.tipo),
+  );
 
   const municipios = new Map<string, { nome: string; total: number }>();
   let empresasSemMunicipio = 0;
