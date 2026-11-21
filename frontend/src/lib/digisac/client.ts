@@ -192,6 +192,23 @@ export async function enviarArquivo(p: {
   });
 }
 
+/** Mensagem de texto para o cliente (vai para o WhatsApp dele). */
+export async function enviarTexto(p: { contactId: string; serviceId: string | null; texto: string }): Promise<void> {
+  await chamar("POST", "/messages", {
+    contactId: p.contactId,
+    ...(p.serviceId ? { serviceId: p.serviceId } : {}),
+    userId: await idUsuarioIntegracao(),
+    origin: "bot",
+    text: p.texto,
+  });
+}
+
+/** Conexão (número de WhatsApp) do contato/grupo, pra mandar pelo canal certo. */
+export async function servicoDoContato(contactId: string): Promise<string | null> {
+  const c = await chamar<{ serviceId?: string | null } | null>("GET", `/contacts/${encodeURIComponent(contactId)}`);
+  return c?.serviceId ?? null;
+}
+
 const TAMANHO_MAX_ARQUIVO = 20 * 1024 * 1024;
 
 /**

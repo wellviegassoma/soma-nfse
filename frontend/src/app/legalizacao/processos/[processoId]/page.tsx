@@ -23,6 +23,8 @@ import { AtividadeSection } from "./AtividadeSection";
 import { ArquivarExcluirProcesso } from "./ArquivarExcluirProcesso";
 import { InativarEmpresaCard } from "./InativarEmpresaCard";
 import { RenovacaoSection, type Requisito } from "./RenovacaoSection";
+import { WhatsappRenovacao } from "./WhatsappRenovacao";
+import { gruposWhatsappDaEmpresa, mensagemDocumentos, mensagemGuia } from "@/lib/legalizacao-whatsapp";
 
 export const metadata = { title: "Processo — Legalização" };
 
@@ -119,6 +121,7 @@ export default async function ProcessoDetailPage(
           .maybeSingle(),
       ])
     : [{ data: null }, { data: null }];
+  const gruposWhatsapp = ehRenovacao ? await gruposWhatsappDaEmpresa(processo.company_id!) : [];
 
   const faseCriarEmpresaPendente = fasesTipadas.some((f) => f.acao === "CRIAR_EMPRESA" && !f.data_conclusao);
   const mostrarCadastrarEmpresa = processo.tipo_processo === "ABERTURA" && !processo.company_id && faseCriarEmpresaPendente;
@@ -185,6 +188,34 @@ export default async function ProcessoDetailPage(
             }}
             requisitos={(requisitos ?? []) as Requisito[]}
             podeEditar={podeEditar}
+          />
+        </Card>
+      )}
+
+      {ehRenovacao && podeEditar && company && (
+        <Card className="p-6">
+          <h2 className="mb-4 text-sm font-semibold text-foreground/70">WhatsApp do cliente</h2>
+          <WhatsappRenovacao
+            // Recria (e refaz o texto sugerido) quando a guia ou o checklist mudam.
+            key={`${processo.guia_valor}-${processo.guia_vencimento}-${((requisitos ?? []) as Requisito[]).filter((r) => !r.recebido_em).length}-${(anexos ?? []).length}`}
+            processoId={processo.id}
+            grupos={gruposWhatsapp}
+            anexos={(anexos ?? []).map((a) => ({ id: a.id, nome_arquivo: a.nome_arquivo }))}
+            mensagens={{
+              guia: mensagemGuia({
+                tipo: (processo.licenca_tipo as unknown as { nome: string } | null)?.nome ?? "licença",
+                empresa: company.trade_name || company.legal_name,
+                valor: processo.guia_valor != null ? Number(processo.guia_valor) : null,
+                vencimento: processo.guia_vencimento,
+              }),
+              documentos: mensagemDocumentos({
+                tipo: (processo.licenca_tipo as unknown as { nome: string } | null)?.nome ?? "licença",
+                empresa: company.trade_name || company.legal_name,
+                pendentes: ((requisitos ?? []) as Requisito[]).filter((r) => !r.recebido_em).map((r) => r.item),
+              }),
+            }}
+            faseGuiaPendente={fasesTipadas.some((f) => f.nome === "Guia enviada ao cliente" && !f.data_conclusao)}
+            temPendentes={((requisitos ?? []) as Requisito[]).some((r) => !r.recebido_em)}
           />
         </Card>
       )}

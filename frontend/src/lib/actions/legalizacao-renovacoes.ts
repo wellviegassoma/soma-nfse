@@ -5,7 +5,12 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao, requireUser } from "@/lib/auth";
 import { uuidLike } from "@/lib/zod-helpers";
+import { get } from "@vercel/blob";
 import { abrirRenovacaoCore } from "@/lib/legalizacao-renovacao-core";
+import { gruposWhatsappDaEmpresa } from "@/lib/legalizacao-whatsapp";
+import { enviarArquivo, enviarTexto, servicoDoContato } from "@/lib/digisac/client";
+import { concluirFase } from "@/lib/actions/legalizacao-processos";
+import { hojeSaoPaulo } from "@/app/legalizacao/processos/status";
 
 function revalidarRenovacao(processoId?: string, companyId?: string | null) {
   if (processoId) revalidatePath(`/legalizacao/processos/${processoId}`);
@@ -133,4 +138,92 @@ export async function removerRequisito(requisitoId: string, processoId: string) 
   const supabase = await createClient();
   await supabase.from("legalizacao_processo_requisitos").delete().eq("id", requisitoId).eq("processo_id", processoId);
   revalidatePath(`/legalizacao/processos/${processoId}`);
+}
+
+const envioWhatsappSchema = z.object({
+  processoId: uuidLike,
+  contactId: z.string().trim().min(1, "Escolha o grupo do WhatsApp."),
+  texto: z.string().trim().min(5, "Escreva a mensagem.").max(4000),
+  anexoId: uuidLike.optional(),
+  concluirFase: z.string().optional(), // nome da fase a concluir junto
+});
+
+export type EnvioWhatsappState = { error?: string; success?: string } | undefined;
+
+// Envia a mensagem (com a guia anexada, se escolhida) pelo Digisac ao grupo
+// do cliente vinculado à empresa, registra na atividade do processo e, se
+// pedido, conclui a fase correspondente ("Guia enviada ao cliente").
+export async function enviarWhatsappRenovacao(
+  _prev: EnvioWhatsappState,
+  formData: FormData,
+): Promise<EnvioWhatsappState> {
+  await requirePermissao("legalizacao.editar");
+  const user = await requireUser();
+  const parsed = envioWhatsappSchema.safeParse({
+    processoId: formData.get("processoId"),
+    contactId: formData.get("contactId"),
+    texto: formData.get("texto"),
+    anexoId: formData.get("anexoId") || undefined,
+    concluirFase: formData.get("concluirFase") || undefined,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  const v = parsed.data;
+
+  const supabase = await createClient();
+  const { data: processo } = await supabase
+    .from("legalizacao_processos")
+    .select("company_id, tipo_processo")
+    .eq("id", v.processoId)
+    .single();
+  if (!processo?.company_id || processo.tipo_processo !== "RENOVACAO") return { error: "Processo não encontrado." };
+
+  const grupo = (await gruposWhatsappDaEmpresa(processo.company_id)).find((g) => g.contactId === v.contactId);
+  if (!grupo) return { error: "Esse grupo não está vinculado a esta empresa." };
+
+  let arquivo: { base64: string; mimetype: string; nome: string } | null = null;
+  if (v.anexoId) {
+    const { data: anexo } = await supabase
+      .from("legalizacao_processo_anexos")
+      .select("blob_pathname, nome_arquivo")
+      .eq("id", v.anexoId)
+      .eq("processo_id", v.processoId)
+      .maybeSingle();
+    if (!anexo) return { error: "Anexo não encontrado neste processo." };
+    const blob = await get(anexo.blob_pathname, { access: "private" }).catch(() => null);
+    if (!blob || blob.statusCode !== 200) return { error: "Não foi possível ler o arquivo anexado." };
+    const buffer = Buffer.from(await new Response(blob.stream).arrayBuffer());
+    if (buffer.byteLength > 20 * 1024 * 1024) return { error: "Arquivo maior que 20 MB." };
+    arquivo = { base64: buffer.toString("base64"), mimetype: blob.blob.contentType || "application/pdf", nome: anexo.nome_arquivo };
+  }
+
+  try {
+    const serviceId = await servicoDoContato(v.contactId).catch(() => null);
+    if (arquivo) await enviarArquivo({ contactId: v.contactId, serviceId, texto: v.texto, arquivo });
+    else await enviarTexto({ contactId: v.contactId, serviceId, texto: v.texto });
+  } catch (e) {
+    console.error("[renovacao-whatsapp] falha ao enviar:", e instanceof Error ? e.message : e);
+    return { error: "Não foi possível enviar pelo WhatsApp agora. Tente de novo em instantes." };
+  }
+
+  await supabase.from("legalizacao_processo_atividade").insert({
+    processo_id: v.processoId,
+    tipo: "COMENTARIO",
+    autor_id: user.id,
+    corpo: `Enviou pelo WhatsApp (${grupo.nome})${arquivo ? ` com o arquivo "${arquivo.nome}"` : ""}:\n\n${v.texto}`,
+  });
+
+  if (v.concluirFase) {
+    const { data: fase } = await supabase
+      .from("legalizacao_processo_fases")
+      .select("id, data_conclusao")
+      .eq("processo_id", v.processoId)
+      .eq("nome", v.concluirFase)
+      .maybeSingle();
+    if (fase && !fase.data_conclusao) {
+      await concluirFase(fase.id, v.processoId, hojeSaoPaulo());
+    }
+  }
+
+  revalidarRenovacao(v.processoId, processo.company_id);
+  return { success: `Enviado para ${grupo.nome}.` };
 }
