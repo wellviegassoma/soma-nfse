@@ -49,6 +49,10 @@ function somarDias(iso: string, n: number) {
   return d.toISOString().slice(0, 10);
 }
 
+function diasAte(de: string, ate: string) {
+  return Math.round((dataUtc(ate).getTime() - dataUtc(de).getTime()) / 86_400_000);
+}
+
 function dataPorExtenso(iso: string) {
   const d = dataUtc(iso);
   return `${DIAS_SEMANA[d.getUTCDay()]}, ${d.getUTCDate()} de ${NOMES_MES[d.getUTCMonth()].toLowerCase()}`;
@@ -260,27 +264,43 @@ export function AgendaTributariaLista({
                   className={cn(
                     "group relative flex min-h-14 flex-col items-stretch rounded-lg border p-1 text-left transition sm:min-h-[86px] sm:p-1.5",
                     !doMes && "invisible",
-                    tem
-                      ? "cursor-pointer border-border bg-surface shadow-sm hover:border-brand/60 hover:shadow"
-                      : "cursor-default border-border/50",
-                    !tem && fimDeSemana && "bg-surface-muted/50",
-                    tem && proximo && "bg-warning-soft/60 border-warning/30",
-                    tem && ehHoje && "bg-danger-soft/60 border-danger/40",
+                    // Próximos 7 dias: amarelo forte. Hoje: vinho — o mais chamativo.
+                    // (classes exclusivas: o cn não resolve conflito de bg/border)
+                    !tem
+                      ? cn("cursor-default border-border/50", fimDeSemana && "bg-surface-muted/50")
+                      : ehHoje
+                        ? "cursor-pointer border-rose-950 bg-rose-900 text-white shadow-md"
+                        : proximo
+                          ? "cursor-pointer border-amber-500 bg-amber-300 text-amber-950 shadow-sm hover:border-amber-600"
+                          : "cursor-pointer border-border bg-surface shadow-sm hover:border-brand/60 hover:shadow",
                     tem && passou && !selecionado && "opacity-55",
-                    selecionado && "ring-2 ring-brand border-brand",
+                    selecionado && "ring-2 ring-brand ring-offset-1 ring-offset-surface",
                   )}
                 >
                   <span className="flex items-center justify-between">
                     <span
                       className={cn(
                         "flex h-6 w-6 items-center justify-center rounded-full text-xs",
-                        ehHoje ? "bg-brand font-bold text-brand-foreground" : tem ? "font-bold text-brand" : "text-foreground/40",
+                        ehHoje && tem
+                          ? "bg-white font-bold text-rose-900"
+                          : ehHoje
+                            ? "bg-brand font-bold text-brand-foreground"
+                            : tem && proximo
+                              ? "font-bold text-amber-950"
+                              : tem
+                                ? "font-bold text-brand"
+                                : "text-foreground/40",
                       )}
                     >
                       {Number(d.slice(8, 10))}
                     </span>
                     {tem && (
-                      <span className="rounded-full bg-surface-muted px-1.5 text-[10px] font-medium text-foreground/60">
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 text-[10px] font-semibold",
+                          ehHoje ? "bg-white/20 text-white" : proximo ? "bg-white/60 text-amber-950" : "bg-surface-muted text-foreground/60",
+                        )}
+                      >
                         {itens.length}
                       </span>
                     )}
@@ -292,20 +312,28 @@ export function AgendaTributariaLista({
                           key={t.tipo + t.rotulo}
                           className={cn(
                             "max-w-full truncate rounded px-1 text-[10px] font-medium leading-4",
-                            t.tipo === "TRIBUTO" ? "bg-brand-soft text-brand" : "bg-success-soft text-success",
+                            ehHoje || proximo ? "bg-white/90" : t.tipo === "TRIBUTO" ? "bg-brand-soft" : "bg-success-soft",
+                            t.tipo === "TRIBUTO" ? "text-brand" : "text-success",
                           )}
                         >
                           {t.rotulo}
                         </span>
                       ))}
                       {tags.length > 3 && (
-                        <span className="px-0.5 text-[10px] leading-4 text-foreground/50">+{tags.length - 3}</span>
+                        <span className={cn("px-0.5 text-[10px] leading-4", ehHoje ? "text-white/80" : "text-foreground/50")}>
+                          +{tags.length - 3}
+                        </span>
                       )}
+                    </span>
+                  )}
+                  {tem && (ehHoje || proximo) && (
+                    <span className="mt-auto hidden pt-1 text-[10px] font-bold uppercase tracking-wide sm:block">
+                      {ehHoje ? "Vence hoje" : `Em ${diasAte(hoje, d)} ${diasAte(hoje, d) === 1 ? "dia" : "dias"}`}
                     </span>
                   )}
                   {tem && (
                     <span className="mt-auto flex justify-center gap-0.5 pt-1 sm:hidden">
-                      {itens.some((i) => i.tipo === "TRIBUTO") && <span className="h-1.5 w-1.5 rounded-full bg-brand" />}
+                      {itens.some((i) => i.tipo === "TRIBUTO") && <span className={cn("h-1.5 w-1.5 rounded-full", ehHoje ? "bg-white" : "bg-brand")} />}
                       {itens.some((i) => i.tipo === "DECLARACAO") && <span className="h-1.5 w-1.5 rounded-full bg-success" />}
                     </span>
                   )}
@@ -319,8 +347,8 @@ export function AgendaTributariaLista({
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-success-soft ring-1 ring-success/40" />Declaração</span>
             {mesCorrente && (
               <>
-                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-danger-soft ring-1 ring-danger/40" />Hoje ({venceHoje})</span>
-                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-warning-soft ring-1 ring-warning/40" />Próximos 7 dias ({venceSemana})</span>
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-900" />Hoje ({venceHoje})</span>
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-amber-300 ring-1 ring-amber-500" />Próximos 7 dias ({venceSemana})</span>
               </>
             )}
             {(["diario", "outros"] as const).map((k) =>
@@ -398,12 +426,12 @@ function PainelItens({
       <div
         className={cn(
           "rounded-t-xl border-b border-border px-4 py-3",
-          destaque === "hoje" && "bg-danger-soft",
-          destaque === "semana" && "bg-warning-soft",
+          destaque === "hoje" && "bg-rose-900 text-white",
+          destaque === "semana" && "bg-amber-300 text-amber-950",
         )}
       >
-        <div className="text-sm font-semibold text-foreground">{titulo}</div>
-        <div className="text-xs text-foreground/60">{subtitulo}</div>
+        <div className={cn("text-sm font-semibold", destaque ? "" : "text-foreground")}>{titulo}</div>
+        <div className={cn("text-xs", destaque ? "opacity-80" : "text-foreground/60")}>{subtitulo}</div>
       </div>
       <ul className="max-h-[440px] divide-y divide-border overflow-y-auto">
         {itens.map((i) => (
