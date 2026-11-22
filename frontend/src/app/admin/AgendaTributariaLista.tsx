@@ -30,11 +30,12 @@ const NOMES_MES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
-const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const DIAS_SEMANA_CURTO = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const DIAS_SEMANA = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
 function nomeMes(mes: string) {
   const [a, m] = mes.split("-").map(Number);
-  return `${NOMES_MES[m - 1]}/${a}`;
+  return `${NOMES_MES[m - 1]} de ${a}`;
 }
 
 function dataUtc(iso: string) {
@@ -48,16 +49,46 @@ function somarDias(iso: string, n: number) {
   return d.toISOString().slice(0, 10);
 }
 
-function rotuloData(iso: string) {
+function dataPorExtenso(iso: string) {
   const d = dataUtc(iso);
-  return `${DIAS_SEMANA[d.getUTCDay()]} ${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+  return `${DIAS_SEMANA[d.getUTCDay()]}, ${d.getUTCDate()} de ${NOMES_MES[d.getUTCMonth()].toLowerCase()}`;
 }
 
 function semAcento(s: string) {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-type Grupo = { chave: string; titulo: string; data: string | null; itens: AgendaLinha[] };
+// Rótulo curto de cada obrigação para caber na célula do calendário.
+const ABREVIACOES: Record<string, string> = {
+  "Contribuição Previdenciária": "INSS",
+  "Simples Nacional": "DAS",
+  "Simples Doméstico": "DAE",
+  "PIS/Pasep": "PIS",
+  "Cide - Combustíveis": "Cide",
+  "Cide - Remessas ao Exterior": "Cide",
+};
+
+function rotuloCurto(l: AgendaLinha): string {
+  if (l.tipo === "DECLARACAO") return l.descricao.split(/\s[–-]\s/)[0].trim();
+  return ABREVIACOES[l.grupo ?? ""] ?? l.grupo ?? "—";
+}
+
+type Etiqueta = { rotulo: string; tipo: AgendaLinha["tipo"]; n: number };
+
+function etiquetas(itens: AgendaLinha[]): Etiqueta[] {
+  const m = new Map<string, Etiqueta>();
+  for (const l of itens) {
+    const rotulo = rotuloCurto(l);
+    const k = `${l.tipo}:${rotulo}`;
+    const e = m.get(k) ?? { rotulo, tipo: l.tipo, n: 0 };
+    e.n++;
+    m.set(k, e);
+  }
+  // Pagamentos primeiro, depois declarações; dentro de cada, os mais frequentes.
+  return [...m.values()].sort((a, b) => (a.tipo === b.tipo ? b.n - a.n : a.tipo === "TRIBUTO" ? -1 : 1));
+}
+
+type Selecao = string; // YYYY-MM-DD | "diario" | "outros"
 
 export function AgendaTributariaLista({
   mes,
@@ -96,84 +127,66 @@ export function AgendaTributariaLista({
     });
   }, [linhas, todas, busca]);
 
-  const grupos = useMemo(() => {
-    const porData = new Map<string, Grupo>();
-    const diario: AgendaLinha[] = [];
-    const outros: AgendaLinha[] = [];
+  const porChave = useMemo(() => {
+    const m = new Map<Selecao, AgendaLinha[]>();
     for (const l of filtradas) {
-      if (l.vencimento) {
-        const g = porData.get(l.vencimento) ?? {
-          chave: l.vencimento, titulo: rotuloData(l.vencimento), data: l.vencimento, itens: [],
-        };
-        g.itens.push(l);
-        porData.set(l.vencimento, g);
-      } else if (l.dia === 0) diario.push(l);
-      else outros.push(l);
+      const k = l.vencimento ?? (l.dia === 0 ? "diario" : "outros");
+      const arr = m.get(k) ?? [];
+      arr.push(l);
+      m.set(k, arr);
     }
-    const lista = [...porData.values()].sort((a, b) => a.chave.localeCompare(b.chave));
-    if (diario.length) lista.push({ chave: "diario", titulo: "Diário (fato gerador no dia)", data: null, itens: diario });
-    if (outros.length) lista.push({ chave: "outros", titulo: "Outros prazos", data: null, itens: outros });
-    return lista;
+    return m;
   }, [filtradas]);
 
-  const venceHoje = filtradas.filter((l) => l.vencimento === hoje).length;
+  // Dia aberto por padrão: hoje, senão o próximo vencimento, senão o 1º do mês.
+  const datas = [...porChave.keys()].filter((k) => /^\d{4}/.test(k)).sort();
+  const padrao: Selecao | null =
+    (porChave.has(hoje) ? hoje : null) ?? datas.find((d) => d >= hoje) ?? datas[0] ?? null;
+  const [escolhida, setEscolhida] = useState<Selecao | null>(null);
+  const selecao = escolhida && porChave.has(escolhida) ? escolhida : padrao;
+
+  // Grade do mês: começa no domingo da 1ª semana, termina no sábado da última.
+  const primeiro = `${mes}-01`;
+  const [ano, m] = mes.split("-").map(Number);
+  const ultimo = new Date(Date.UTC(ano, m, 0)).toISOString().slice(0, 10);
+  const inicioGrade = somarDias(primeiro, -dataUtc(primeiro).getUTCDay());
+  const fimGrade = somarDias(ultimo, 6 - dataUtc(ultimo).getUTCDay());
+  const celulas: string[] = [];
+  for (let d = inicioGrade; d <= fimGrade; d = somarDias(d, 1)) celulas.push(d);
+
+  const venceHoje = porChave.get(hoje)?.length ?? 0;
   const venceSemana = filtradas.filter(
     (l) => l.vencimento && l.vencimento >= hoje && l.vencimento <= fimSemana,
   ).length;
   const totalRelevantes = linhas.filter((l) => l.relevante).length;
+  const buscando = busca.trim() !== "";
+  const mesCorrente = mes === hoje.slice(0, 7);
 
   return (
     <Card id="agenda-tributaria" className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
         <div>
-          <div className="text-sm font-semibold text-foreground/70">Agenda tributária · Receita Federal</div>
+          <div className="text-base font-semibold text-foreground">Prazos e vencimentos</div>
           <div className="text-xs text-foreground/50">
-            {info ? (
+            Agenda tributária da Receita Federal
+            {info && (
               <>
-                {info.ade ?? "Agenda oficial"}
-                {info.fonte_url?.startsWith("http") && (
-                  <>
-                    {" · "}
-                    <a href={info.fonte_url} target="_blank" rel="noreferrer" className="underline">
-                      fonte
-                    </a>
-                  </>
+                {" · "}
+                {info.fonte_url?.startsWith("http") ? (
+                  <a href={info.fonte_url} target="_blank" rel="noreferrer" className="underline">
+                    {info.ade ?? "fonte"}
+                  </a>
+                ) : (
+                  info.ade
                 )}
                 {" · importada em "}
                 {new Date(info.importado_em).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
               </>
-            ) : (
-              "Vencimentos oficiais do mês (ADE Corat)"
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          <Link href={hrefAnterior} scroll={false} className="rounded-lg px-2 py-1 text-sm text-foreground/70 hover:bg-surface-muted" aria-label="Mês anterior">
-            ‹
-          </Link>
-          <Link href={hrefAtual} scroll={false} className="min-w-[130px] rounded-lg px-2 py-1 text-center text-sm font-semibold text-foreground hover:bg-surface-muted">
-            {nomeMes(mes)}
-          </Link>
-          <Link href={hrefProximo} scroll={false} className="rounded-lg px-2 py-1 text-sm text-foreground/70 hover:bg-surface-muted" aria-label="Próximo mês">
-            ›
-          </Link>
-        </div>
-      </div>
-
-      {erro && (
-        <div className="px-5 pt-4">
-          <Alert>Não foi possível ler a agenda: {erro}</Alert>
-        </div>
-      )}
-
-      {!info && !erro ? (
-        <div className="px-5 py-6 text-sm text-foreground/60">
-          A agenda de {nomeMes(mes)} ainda não foi importada. A Receita publica a agenda do mês seguinte por
-          volta do dia 25 — a rotina diária busca sozinha assim que sair.
-        </div>
-      ) : info ? (
-        <>
-          <div className="flex flex-wrap items-center gap-2 px-5 py-3">
+        {info && (
+          <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-lg border border-border p-0.5 text-xs">
               <button
                 type="button"
@@ -195,90 +208,235 @@ export function AgendaTributariaLista({
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar código ou tributo"
-              className="h-8 min-w-[200px] flex-1 rounded-lg border border-border bg-surface px-3 text-sm text-foreground"
+              className="h-8 w-52 rounded-lg border border-border bg-surface px-3 text-sm text-foreground"
             />
-            {mes === hoje.slice(0, 7) && (
-              <div className="flex gap-2 text-xs">
-                <span className={cn("rounded-full px-2.5 py-1", venceHoje ? "bg-danger-soft text-danger" : "bg-surface-muted text-foreground/60")}>
-                  Vence hoje: {venceHoje}
-                </span>
-                <span className={cn("rounded-full px-2.5 py-1", venceSemana ? "bg-warning-soft text-warning" : "bg-surface-muted text-foreground/60")}>
-                  Próximos 7 dias: {venceSemana}
-                </span>
-              </div>
-            )}
+          </div>
+        )}
+      </div>
+
+      {erro && (
+        <div className="px-5 pt-4">
+          <Alert>Não foi possível ler a agenda: {erro}</Alert>
+        </div>
+      )}
+
+      <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        {/* ------------------------------------------------ calendário */}
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <Link href={hrefAnterior} scroll={false} aria-label="Mês anterior"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-soft text-brand hover:bg-brand hover:text-brand-foreground">
+              ‹
+            </Link>
+            <Link href={hrefAtual} scroll={false} className="text-sm font-semibold text-foreground hover:underline">
+              {nomeMes(mes)}
+            </Link>
+            <Link href={hrefProximo} scroll={false} aria-label="Próximo mês"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-soft text-brand hover:bg-brand hover:text-brand-foreground">
+              ›
+            </Link>
           </div>
 
-          <div className="divide-y divide-border border-t border-border">
-            {grupos.length === 0 && (
-              <div className="px-5 py-6 text-sm text-foreground/60">Nenhuma obrigação com esse filtro.</div>
-            )}
-            {grupos.map((g) => {
-              const ehHoje = g.data === hoje;
-              const ehSemana = !!g.data && g.data > hoje && g.data <= fimSemana;
-              const passou = !!g.data && g.data < hoje;
+          <div className="grid grid-cols-7 gap-1">
+            {DIAS_SEMANA_CURTO.map((d) => (
+              <div key={d} className="pb-1 text-center text-xs font-medium text-foreground/50">{d}</div>
+            ))}
+            {celulas.map((d) => {
+              const doMes = d.slice(0, 7) === mes;
+              const itens = doMes ? porChave.get(d) ?? [] : [];
+              const tem = itens.length > 0;
+              const ehHoje = d === hoje;
+              const proximo = d > hoje && d <= fimSemana;
+              const passou = d < hoje;
+              const selecionado = selecao === d;
+              const fimDeSemana = [0, 6].includes(dataUtc(d).getUTCDay());
+              const tags = etiquetas(itens);
               return (
-                <details
-                  key={`${g.chave}-${busca ? "b" : ""}`}
-                  open={ehHoje || ehSemana || busca.trim() !== ""}
-                  className={cn(ehHoje && "bg-danger-soft/40", ehSemana && "bg-warning-soft/40")}
+                <button
+                  key={d}
+                  type="button"
+                  disabled={!tem}
+                  onClick={() => setEscolhida(d)}
+                  className={cn(
+                    "group relative flex min-h-14 flex-col items-stretch rounded-lg border p-1 text-left transition sm:min-h-[86px] sm:p-1.5",
+                    !doMes && "invisible",
+                    tem
+                      ? "cursor-pointer border-border bg-surface shadow-sm hover:border-brand/60 hover:shadow"
+                      : "cursor-default border-border/50",
+                    !tem && fimDeSemana && "bg-surface-muted/50",
+                    tem && proximo && "bg-warning-soft/60 border-warning/30",
+                    tem && ehHoje && "bg-danger-soft/60 border-danger/40",
+                    tem && passou && !selecionado && "opacity-55",
+                    selecionado && "ring-2 ring-brand border-brand",
+                  )}
                 >
-                  <summary className="flex cursor-pointer items-center gap-3 px-5 py-2.5 text-sm">
-                    <span className={cn("w-24 font-semibold", passou ? "text-foreground/40" : "text-foreground")}>
-                      {g.titulo}
+                  <span className="flex items-center justify-between">
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 items-center justify-center rounded-full text-xs",
+                        ehHoje ? "bg-brand font-bold text-brand-foreground" : tem ? "font-bold text-brand" : "text-foreground/40",
+                      )}
+                    >
+                      {Number(d.slice(8, 10))}
                     </span>
-                    <span className="text-foreground/60">
-                      {g.itens.length} {g.itens.length === 1 ? "obrigação" : "obrigações"}
+                    {tem && (
+                      <span className="rounded-full bg-surface-muted px-1.5 text-[10px] font-medium text-foreground/60">
+                        {itens.length}
+                      </span>
+                    )}
+                  </span>
+                  {tem && (
+                    <span className="mt-1 hidden flex-wrap gap-0.5 sm:flex">
+                      {tags.slice(0, 3).map((t) => (
+                        <span
+                          key={t.tipo + t.rotulo}
+                          className={cn(
+                            "max-w-full truncate rounded px-1 text-[10px] font-medium leading-4",
+                            t.tipo === "TRIBUTO" ? "bg-brand-soft text-brand" : "bg-success-soft text-success",
+                          )}
+                        >
+                          {t.rotulo}
+                        </span>
+                      ))}
+                      {tags.length > 3 && (
+                        <span className="px-0.5 text-[10px] leading-4 text-foreground/50">+{tags.length - 3}</span>
+                      )}
                     </span>
-                    {ehHoje && <span className="rounded-full bg-danger px-2 py-0.5 text-xs text-white">Hoje</span>}
-                    {ehSemana && <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs text-warning">Próximos 7 dias</span>}
-                    <span className="ml-auto hidden truncate text-xs text-foreground/50 sm:block">
-                      {[...new Set(g.itens.map((i) => (i.tipo === "DECLARACAO" ? i.descricao.split(/ [–-] /)[0] : i.grupo)))]
-                        .filter(Boolean)
-                        .slice(0, 6)
-                        .join(" · ")}
+                  )}
+                  {tem && (
+                    <span className="mt-auto flex justify-center gap-0.5 pt-1 sm:hidden">
+                      {itens.some((i) => i.tipo === "TRIBUTO") && <span className="h-1.5 w-1.5 rounded-full bg-brand" />}
+                      {itens.some((i) => i.tipo === "DECLARACAO") && <span className="h-1.5 w-1.5 rounded-full bg-success" />}
                     </span>
-                  </summary>
-                  <div className="overflow-x-auto px-5 pb-3">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs text-foreground/50">
-                          <th className="py-1 pr-3 font-medium">Código</th>
-                          <th className="py-1 pr-3 font-medium">Tributo / obrigação</th>
-                          <th className="py-1 pr-3 font-medium">Descrição</th>
-                          <th className="py-1 pr-3 font-medium">Período de apuração</th>
-                          <th className="py-1 font-medium">Doc.</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {g.itens.map((i) => (
-                          <tr key={i.id} className="border-t border-border/60 align-top">
-                            <td className="py-1.5 pr-3 font-mono text-xs text-foreground">{i.codigo ?? "—"}</td>
-                            <td className="py-1.5 pr-3 whitespace-nowrap text-foreground">
-                              {i.tipo === "DECLARACAO" ? `Declaração (${i.grupo ?? "—"})` : i.grupo}
-                            </td>
-                            <td className="py-1.5 pr-3 text-foreground/80">
-                              {i.descricao}
-                              {g.chave === "outros" && i.dia_texto && (
-                                <div className="text-xs text-foreground/50">Prazo: {i.dia_texto}</div>
-                              )}
-                            </td>
-                            <td className="py-1.5 pr-3 text-foreground/70">{i.periodo ?? "—"}</td>
-                            <td className="py-1.5 text-xs text-foreground/60">{i.documento ?? ""}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
+                  )}
+                </button>
               );
             })}
           </div>
-        </>
-      ) : null}
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-foreground/60">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-brand-soft ring-1 ring-brand/40" />Pagamento</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-success-soft ring-1 ring-success/40" />Declaração</span>
+            {mesCorrente && (
+              <>
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-danger-soft ring-1 ring-danger/40" />Hoje ({venceHoje})</span>
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-warning-soft ring-1 ring-warning/40" />Próximos 7 dias ({venceSemana})</span>
+              </>
+            )}
+            {(["diario", "outros"] as const).map((k) =>
+              porChave.has(k) ? (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setEscolhida(k)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-0.5",
+                    selecao === k ? "border-brand bg-brand-soft text-brand" : "border-border hover:bg-surface-muted",
+                  )}
+                >
+                  {k === "diario" ? "Diárias" : "Outros prazos"} ({porChave.get(k)!.length})
+                </button>
+              ) : null,
+            )}
+          </div>
+        </div>
+
+        {/* ------------------------------------------------ painel do dia */}
+        <div className="flex min-h-0 flex-col rounded-xl border border-border bg-surface-muted/40">
+          {!info ? (
+            <div className="p-5 text-sm text-foreground/60">
+              A agenda de {nomeMes(mes)} ainda não foi importada. A Receita publica a agenda do mês seguinte
+              por volta do dia 25 — a rotina diária busca sozinha assim que sair.
+            </div>
+          ) : buscando ? (
+            <PainelItens
+              titulo={`Resultados para “${busca.trim()}”`}
+              subtitulo={`${filtradas.length} ${filtradas.length === 1 ? "obrigação" : "obrigações"}`}
+              itens={filtradas}
+              mostrarData
+            />
+          ) : selecao ? (
+            <PainelItens
+              titulo={
+                selecao === "diario" ? "Diárias" : selecao === "outros" ? "Outros prazos" : dataPorExtenso(selecao)
+              }
+              subtitulo={
+                selecao === "diario"
+                  ? "Vencem no próprio dia do fato gerador"
+                  : `${porChave.get(selecao)!.length} ${porChave.get(selecao)!.length === 1 ? "obrigação" : "obrigações"}` +
+                    (selecao === hoje ? " · vence hoje" : selecao > hoje && selecao <= fimSemana ? " · próximos 7 dias" : "")
+              }
+              itens={porChave.get(selecao)!}
+              destaque={selecao === hoje ? "hoje" : selecao > hoje && selecao <= fimSemana ? "semana" : undefined}
+            />
+          ) : (
+            <div className="p-5 text-sm text-foreground/60">Nenhuma obrigação com esse filtro.</div>
+          )}
+        </div>
+      </div>
 
       <AtualizarAgenda mes={mes} />
     </Card>
+  );
+}
+
+function PainelItens({
+  titulo,
+  subtitulo,
+  itens,
+  mostrarData,
+  destaque,
+}: {
+  titulo: string;
+  subtitulo: string;
+  itens: AgendaLinha[];
+  mostrarData?: boolean;
+  destaque?: "hoje" | "semana";
+}) {
+  return (
+    <>
+      <div
+        className={cn(
+          "rounded-t-xl border-b border-border px-4 py-3",
+          destaque === "hoje" && "bg-danger-soft",
+          destaque === "semana" && "bg-warning-soft",
+        )}
+      >
+        <div className="text-sm font-semibold text-foreground">{titulo}</div>
+        <div className="text-xs text-foreground/60">{subtitulo}</div>
+      </div>
+      <ul className="max-h-[440px] divide-y divide-border overflow-y-auto">
+        {itens.map((i) => (
+          <li key={i.id} className="px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "rounded px-1.5 text-[11px] font-semibold leading-5",
+                  i.tipo === "TRIBUTO" ? "bg-brand-soft text-brand" : "bg-success-soft text-success",
+                )}
+              >
+                {rotuloCurto(i)}
+              </span>
+              {i.codigo && <span className="font-mono text-xs text-foreground">{i.codigo}</span>}
+              {i.documento && i.documento !== rotuloCurto(i) && (
+                <span className="text-[11px] text-foreground/50">{i.documento}</span>
+              )}
+              {mostrarData && (
+                <span className="ml-auto text-xs text-foreground/50">
+                  {i.vencimento ? `${i.vencimento.slice(8, 10)}/${i.vencimento.slice(5, 7)}` : i.dia === 0 ? "Diário" : "Outro prazo"}
+                </span>
+              )}
+            </div>
+            <div className="mt-1 text-sm text-foreground/85">{i.descricao}</div>
+            <div className="mt-0.5 text-xs text-foreground/55">
+              {i.tipo === "DECLARACAO" ? "Referência" : "Apuração"}: {i.periodo ?? "—"}
+              {i.tipo === "DECLARACAO" && i.grupo ? ` · ${i.grupo}` : ""}
+              {i.dia_texto && i.dia !== 0 ? ` · Prazo: ${i.dia_texto}` : ""}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 

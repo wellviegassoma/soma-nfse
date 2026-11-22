@@ -74,6 +74,7 @@ export async function AgendaTributariaBloco({
   };
   return (
     <AgendaTributariaLista
+      key={d.mes}
       mes={d.mes}
       hoje={hojeBrasilia()}
       info={d.info}
