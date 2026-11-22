@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { Card } from "@/components/ui/Card";
@@ -10,6 +11,7 @@ import { mesAnteriorBrasilia } from "@/lib/competencia";
 import { competenciasTrimestre, resolverRbt12 } from "@/lib/faturamento";
 import { resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { calcularImpostoResumo, resolverIssMensal } from "@/lib/calculo-impostos";
+import { AgendaTributariaBloco, AgendaTributariaCarregando, carregarAgenda, mesAgendaDoParam } from "./AgendaTributaria";
 import { buscarAgregadoNotasDistribuidas, buscarEquiparacaoPorChaves } from "@/lib/notas-distribuidas-agregado";
 
 export const metadata = { title: "Visão geral — Painel SOMA" };
@@ -155,6 +157,10 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
       : mesAnteriorBrasilia();
 
   const supabase = await createClient();
+
+  // Agenda tributária: dispara já (antes das consultas pesadas) e resolve
+  // dentro de um <Suspense> — não atrasa os indicadores.
+  const agendaPromise = carregarAgenda(supabase, mesAgendaDoParam(searchParams.agenda));
 
   // dps é pequena — continua buscada inteira. notas_distribuidas já
   // passou de 34 mil linhas e trazer tudo pro Next.js (como era antes)
@@ -506,6 +512,10 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
           </div>
         )}
       </Card>
+
+      <Suspense fallback={<AgendaTributariaCarregando />}>
+        <AgendaTributariaBloco dados={agendaPromise} searchParams={searchParams} />
+      </Suspense>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Card className="p-4">
