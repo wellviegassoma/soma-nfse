@@ -32,7 +32,7 @@ const TAB_EMISSAO_NOTAS: Tab = { href: "/admin/emissao-notas", label: "Emissão 
 // Pedidos sinalizados com #nota no Digisac (docs/pedido-nota-ia.md).
 const TAB_PEDIDOS_NOTA: Tab = { href: "/admin/pedidos-nota", label: "Pedidos de Nota" };
 const TAB_USUARIOS: Tab = { href: "/admin/usuarios", label: "Usuários" };
-const TAB_SUPER_ADMIN: Tab = { href: "/admin/configuracoes/contador-responsavel", label: "Configurações" };
+const TAB_SUPER_ADMIN: Tab = { href: "/admin/configuracoes", label: "Configurações" };
 
 // Selo de pendências da aba Pedidos de Nota: começa com o número que o layout
 // (server) contou e atualiza a cada minuto, ao voltar para a aba do navegador

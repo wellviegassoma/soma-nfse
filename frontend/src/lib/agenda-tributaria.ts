@@ -407,3 +407,36 @@ export function itemRelevante(i: Pick<AgendaItem, "tipo" | "codigo" | "grupo" | 
   const g = semAcento(i.grupo ?? "");
   return GRUPOS_RELEVANTES.some((p) => g.startsWith(p));
 }
+
+// ------------------------------------------------------------ metas SOMA
+
+/**
+ * Identifica a obrigação em qualquer mês (a meta é da obrigação, não do
+ * mês). Tributo com código: o código; sem código (Simples Nacional,
+ * declarações): a descrição normalizada.
+ */
+export function chaveObrigacao(i: Pick<AgendaItem, "tipo" | "codigo" | "descricao">): string {
+  if (i.tipo === "TRIBUTO" && i.codigo) return `TRIBUTO:${i.codigo}`;
+  return `${i.tipo}:${semAcento(i.descricao).replace(/\s+/g, " ")}`;
+}
+
+/**
+ * Data da meta SOMA (YYYY-MM-DD) no mês do vencimento: o dia cadastrado;
+ * sábado/domingo antecipa para sexta (sem sair do mês — aí vai para a
+ * segunda); nunca depois do prazo da Receita. Null se a obrigação não tem
+ * vencimento em dia fixo (diária, prazo em texto).
+ */
+export function dataMeta(vencimento: string | null, diaMeta: number): string | null {
+  if (!vencimento) return null;
+  const [a, m] = vencimento.split("-").map(Number);
+  const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate();
+  const d = new Date(Date.UTC(a, m - 1, Math.min(diaMeta, ultimo)));
+  const dow = d.getUTCDay();
+  if (dow === 6) d.setUTCDate(d.getUTCDate() - 1);
+  if (dow === 0) d.setUTCDate(d.getUTCDate() - 2);
+  if (d.getUTCMonth() !== m - 1) {
+    d.setUTCDate(d.getUTCDate() + 3); // saiu do mês (sexta anterior) → segunda seguinte
+  }
+  const iso = d.toISOString().slice(0, 10);
+  return iso > vencimento ? vencimento : iso;
+}

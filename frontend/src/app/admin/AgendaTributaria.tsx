@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/Card";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
-import { itemRelevante } from "@/lib/agenda-tributaria";
+import { chaveObrigacao, dataMeta, itemRelevante } from "@/lib/agenda-tributaria";
 import { hojeBrasilia, mesCorrenteBrasilia, proximaCompetencia } from "@/lib/competencia";
 import { AgendaTributariaLista, type AgendaLinha } from "./AgendaTributariaLista";
 
@@ -26,13 +26,13 @@ export function mesAgendaDoParam(v: string | string[] | undefined): string {
  */
 export async function carregarAgenda(supabase: SupabaseServer, mes: string): Promise<AgendaDados> {
   try {
-    const [{ data: info, error }, itens] = await Promise.all([
+    const [{ data: info, error }, itens, { data: metas, error: erroMetas }] = await Promise.all([
       supabase
         .from("agenda_tributaria_meses")
         .select("ade, fonte_url, origem, importado_em")
         .eq("mes", `${mes}-01`)
         .maybeSingle(),
-      buscarTudoPaginado<Omit<AgendaLinha, "relevante">>((from, to) =>
+      buscarTudoPaginado<Omit<AgendaLinha, "relevante" | "meta">>((from, to) =>
         supabase
           .from("agenda_tributaria_itens")
           .select("id, tipo, dia, dia_texto, vencimento, codigo, grupo, descricao, periodo, documento")
@@ -40,12 +40,24 @@ export async function carregarAgenda(supabase: SupabaseServer, mes: string): Pro
           .order("ordem")
           .range(from, to),
       ),
+      // Metas SOMA (Configurações): poucas linhas, uma por obrigação.
+      supabase.from("agenda_tributaria_metas").select("chave, dia_meta, observacao"),
     ]);
     if (error) throw new Error(error.message);
+    if (erroMetas) throw new Error(erroMetas.message);
+    const metaPorChave = new Map((metas ?? []).map((m) => [m.chave, m]));
     return {
       mes,
       info,
-      linhas: itens.map((i) => ({ ...i, relevante: itemRelevante(i) })),
+      linhas: itens.map((i) => {
+        const m = metaPorChave.get(chaveObrigacao(i));
+        const data = m ? dataMeta(i.vencimento, m.dia_meta) : null;
+        return {
+          ...i,
+          relevante: itemRelevante(i),
+          meta: data ? { data, observacao: m!.observacao } : null,
+        };
+      }),
       erro: null,
     };
   } catch (e) {

@@ -24,6 +24,8 @@ export type AgendaLinha = {
   periodo: string | null;
   documento: string | null;
   relevante: boolean;
+  // Meta SOMA (Configurações › Metas da agenda): data no mês, já ajustada.
+  meta: { data: string; observacao: string | null } | null;
 };
 
 const NOMES_MES = [
@@ -72,7 +74,7 @@ const ABREVIACOES: Record<string, string> = {
   "Cide - Remessas ao Exterior": "Cide",
 };
 
-function rotuloCurto(l: AgendaLinha): string {
+export function rotuloCurto(l: Pick<AgendaLinha, "tipo" | "grupo" | "descricao">): string {
   if (l.tipo === "DECLARACAO") return l.descricao.split(/\s[–-]\s/)[0].trim();
   return ABREVIACOES[l.grupo ?? ""] ?? l.grupo ?? "—";
 }
@@ -123,7 +125,7 @@ export function AgendaTributariaLista({
   const filtradas = useMemo(() => {
     const q = semAcento(busca.trim());
     return linhas.filter((l) => {
-      if (!todas && !l.relevante) return false;
+      if (!todas && !l.relevante && !l.meta) return false;
       if (!q) return true;
       return semAcento(
         [l.codigo, l.grupo, l.descricao, l.periodo, l.documento].filter(Boolean).join(" "),
@@ -142,12 +144,25 @@ export function AgendaTributariaLista({
     return m;
   }, [filtradas]);
 
-  // Dia aberto por padrão: hoje, senão o próximo vencimento, senão o 1º do mês.
-  const datas = [...porChave.keys()].filter((k) => /^\d{4}/.test(k)).sort();
+  // A mesma obrigação aparece também no dia da meta SOMA.
+  const metasPorData = useMemo(() => {
+    const m = new Map<string, AgendaLinha[]>();
+    for (const l of filtradas) {
+      if (!l.meta) continue;
+      const arr = m.get(l.meta.data) ?? [];
+      arr.push(l);
+      m.set(l.meta.data, arr);
+    }
+    return m;
+  }, [filtradas]);
+  const temNoDia = (k: string) => porChave.has(k) || metasPorData.has(k);
+
+  // Dia aberto por padrão: hoje, senão o próximo prazo/meta, senão o 1º do mês.
+  const datas = [...new Set([...porChave.keys(), ...metasPorData.keys()])].filter((k) => /^\d{4}/.test(k)).sort();
   const padrao: Selecao | null =
-    (porChave.has(hoje) ? hoje : null) ?? datas.find((d) => d >= hoje) ?? datas[0] ?? null;
+    (temNoDia(hoje) ? hoje : null) ?? datas.find((d) => d >= hoje) ?? datas[0] ?? null;
   const [escolhida, setEscolhida] = useState<Selecao | null>(null);
-  const selecao = escolhida && porChave.has(escolhida) ? escolhida : padrao;
+  const selecao = escolhida && temNoDia(escolhida) ? escolhida : padrao;
 
   // Grade do mês: começa no domingo da 1ª semana, termina no sábado da última.
   const primeiro = `${mes}-01`;
@@ -158,10 +173,10 @@ export function AgendaTributariaLista({
   const celulas: string[] = [];
   for (let d = inicioGrade; d <= fimGrade; d = somarDias(d, 1)) celulas.push(d);
 
-  const venceHoje = porChave.get(hoje)?.length ?? 0;
-  const venceSemana = filtradas.filter(
-    (l) => l.vencimento && l.vencimento >= hoje && l.vencimento <= fimSemana,
-  ).length;
+  const venceHoje = (porChave.get(hoje)?.length ?? 0) + (metasPorData.get(hoje)?.length ?? 0);
+  const naJanela = (d: string | null | undefined) => !!d && d >= hoje && d <= fimSemana;
+  const venceSemana =
+    filtradas.filter((l) => naJanela(l.vencimento)).length + filtradas.filter((l) => naJanela(l.meta?.data)).length;
   const totalRelevantes = linhas.filter((l) => l.relevante).length;
   const buscando = busca.trim() !== "";
   const mesCorrente = mes === hoje.slice(0, 7);
@@ -248,7 +263,9 @@ export function AgendaTributariaLista({
             {celulas.map((d) => {
               const doMes = d.slice(0, 7) === mes;
               const itens = doMes ? porChave.get(d) ?? [] : [];
-              const tem = itens.length > 0;
+              const metas = doMes ? metasPorData.get(d) ?? [] : [];
+              const tem = itens.length + metas.length > 0;
+              const tagsMeta = [...new Set(metas.map((l) => rotuloCurto(l)))];
               const ehHoje = d === hoje;
               const proximo = d > hoje && d <= fimSemana;
               const passou = d < hoje;
@@ -301,13 +318,24 @@ export function AgendaTributariaLista({
                           ehHoje ? "bg-white/20 text-white" : proximo ? "bg-white/60 text-amber-950" : "bg-surface-muted text-foreground/60",
                         )}
                       >
-                        {itens.length}
+                        {itens.length + metas.length}
                       </span>
                     )}
                   </span>
                   {tem && (
                     <span className="mt-1 hidden flex-wrap gap-0.5 sm:flex">
-                      {tags.slice(0, 3).map((t) => (
+                      {tagsMeta.slice(0, 3).map((r) => (
+                        <span
+                          key={"meta" + r}
+                          className={cn(
+                            "max-w-full truncate rounded px-1 text-[10px] font-semibold leading-4 text-violet-800",
+                            ehHoje || proximo ? "bg-white/90" : "bg-violet-100",
+                          )}
+                        >
+                          Meta {r}
+                        </span>
+                      ))}
+                      {tags.slice(0, Math.max(0, 3 - tagsMeta.length)).map((t) => (
                         <span
                           key={t.tipo + t.rotulo}
                           className={cn(
@@ -319,22 +347,25 @@ export function AgendaTributariaLista({
                           {t.rotulo}
                         </span>
                       ))}
-                      {tags.length > 3 && (
+                      {tags.length + tagsMeta.length > 3 && (
                         <span className={cn("px-0.5 text-[10px] leading-4", ehHoje ? "text-white/80" : "text-foreground/50")}>
-                          +{tags.length - 3}
+                          +{tags.length + tagsMeta.length - 3}
                         </span>
                       )}
                     </span>
                   )}
                   {tem && (ehHoje || proximo) && (
                     <span className="mt-auto hidden pt-1 text-[10px] font-bold uppercase tracking-wide sm:block">
-                      {ehHoje ? "Vence hoje" : `Em ${diasAte(hoje, d)} ${diasAte(hoje, d) === 1 ? "dia" : "dias"}`}
+                      {ehHoje
+                        ? itens.length ? "Vence hoje" : "Meta hoje"
+                        : `Em ${diasAte(hoje, d)} ${diasAte(hoje, d) === 1 ? "dia" : "dias"}`}
                     </span>
                   )}
                   {tem && (
                     <span className="mt-auto flex justify-center gap-0.5 pt-1 sm:hidden">
                       {itens.some((i) => i.tipo === "TRIBUTO") && <span className={cn("h-1.5 w-1.5 rounded-full", ehHoje ? "bg-white" : "bg-brand")} />}
                       {itens.some((i) => i.tipo === "DECLARACAO") && <span className="h-1.5 w-1.5 rounded-full bg-success" />}
+                      {metas.length > 0 && <span className={cn("h-1.5 w-1.5 rounded-full", ehHoje ? "bg-violet-200" : "bg-violet-600")} />}
                     </span>
                   )}
                 </button>
@@ -345,6 +376,7 @@ export function AgendaTributariaLista({
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-foreground/60">
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-brand-soft ring-1 ring-brand/40" />Pagamento</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-success-soft ring-1 ring-success/40" />Declaração</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-violet-100 ring-1 ring-violet-500" />Meta SOMA</span>
             {mesCorrente && (
               <>
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-900" />Hoje ({venceHoje})</span>
@@ -391,10 +423,20 @@ export function AgendaTributariaLista({
               subtitulo={
                 selecao === "diario"
                   ? "Vencem no próprio dia do fato gerador"
-                  : `${porChave.get(selecao)!.length} ${porChave.get(selecao)!.length === 1 ? "obrigação" : "obrigações"}` +
-                    (selecao === hoje ? " · vence hoje" : selecao > hoje && selecao <= fimSemana ? " · próximos 7 dias" : "")
+                  : [
+                      metasPorData.get(selecao)?.length
+                        ? `${metasPorData.get(selecao)!.length} ${metasPorData.get(selecao)!.length === 1 ? "meta SOMA" : "metas SOMA"}`
+                        : null,
+                      porChave.get(selecao)?.length
+                        ? `${porChave.get(selecao)!.length} ${porChave.get(selecao)!.length === 1 ? "prazo da Receita" : "prazos da Receita"}`
+                        : null,
+                      selecao === hoje ? "hoje" : selecao > hoje && selecao <= fimSemana ? "próximos 7 dias" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
               }
-              itens={porChave.get(selecao)!}
+              metas={metasPorData.get(selecao) ?? []}
+              itens={porChave.get(selecao) ?? []}
               destaque={selecao === hoje ? "hoje" : selecao > hoje && selecao <= fimSemana ? "semana" : undefined}
             />
           ) : (
@@ -408,15 +450,21 @@ export function AgendaTributariaLista({
   );
 }
 
+function ddmm(iso: string) {
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+}
+
 function PainelItens({
   titulo,
   subtitulo,
+  metas = [],
   itens,
   mostrarData,
   destaque,
 }: {
   titulo: string;
   subtitulo: string;
+  metas?: AgendaLinha[];
   itens: AgendaLinha[];
   mostrarData?: boolean;
   destaque?: "hoje" | "semana";
@@ -434,6 +482,34 @@ function PainelItens({
         <div className={cn("text-xs", destaque ? "opacity-80" : "text-foreground/60")}>{subtitulo}</div>
       </div>
       <ul className="max-h-[440px] divide-y divide-border overflow-y-auto">
+        {metas.length > 0 && (
+          <li className="bg-violet-50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-800">
+            Metas SOMA
+          </li>
+        )}
+        {metas.map((i) => (
+          <li key={"meta" + i.id} className="border-l-4 border-violet-500 bg-violet-50/40 px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-violet-100 px-1.5 text-[11px] font-semibold leading-5 text-violet-800">
+                Meta {rotuloCurto(i)}
+              </span>
+              {i.codigo && <span className="font-mono text-xs text-foreground">{i.codigo}</span>}
+              {i.vencimento && (
+                <span className="ml-auto text-xs font-medium text-foreground/60">Prazo Receita: {ddmm(i.vencimento)}</span>
+              )}
+            </div>
+            <div className="mt-1 text-sm text-foreground/85">{i.descricao}</div>
+            <div className="mt-0.5 text-xs text-foreground/55">
+              {i.meta?.observacao ? `${i.meta.observacao} · ` : ""}
+              {i.tipo === "DECLARACAO" ? "Referência" : "Apuração"}: {i.periodo ?? "—"}
+            </div>
+          </li>
+        ))}
+        {metas.length > 0 && itens.length > 0 && (
+          <li className="bg-surface-muted px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/60">
+            Prazos da Receita
+          </li>
+        )}
         {itens.map((i) => (
           <li key={i.id} className="px-4 py-2.5">
             <div className="flex items-center gap-2">
@@ -460,6 +536,9 @@ function PainelItens({
               {i.tipo === "DECLARACAO" ? "Referência" : "Apuração"}: {i.periodo ?? "—"}
               {i.tipo === "DECLARACAO" && i.grupo ? ` · ${i.grupo}` : ""}
               {i.dia_texto && i.dia !== 0 ? ` · Prazo: ${i.dia_texto}` : ""}
+              {i.meta && i.meta.data !== i.vencimento ? (
+                <span className="font-medium text-violet-700"> · Meta SOMA: {ddmm(i.meta.data)}</span>
+              ) : null}
             </div>
           </li>
         ))}
