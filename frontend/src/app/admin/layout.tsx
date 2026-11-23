@@ -26,6 +26,7 @@ export default async function AdminLayout({
     podeGerenciarClientes,
     podeEmitirNotas,
     podeVerComercial,
+    podeVerIrpf,
     // Selo da aba Pedidos de Nota (o AdminNav atualiza sozinho a cada
     // minuto); contarPedidosPendentes já devolve 0 sem notas.emitir.
     pedidosPendentes,
@@ -40,6 +41,7 @@ export default async function AdminLayout({
     temPermissao("usuarios.gerenciar_clientes"),
     temPermissao("notas.emitir"),
     temPermissao("comercial.ver"),
+    temPermissao("irpf.ver"),
     contarPedidosPendentes().catch(() => 0),
     contarIntimacoesNovas(supabase).catch(() => 0),
     contarTarefasUrgentes(supabase, user.id).catch(() => 0),
@@ -78,12 +80,14 @@ export default async function AdminLayout({
             >
               Extratos
             </Link>
-            <Link
-              href="/irpf"
-              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
-            >
-              IRPF
-            </Link>
+            {podeVerIrpf && (
+              <Link
+                href="/irpf"
+                className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
+              >
+                IRPF
+              </Link>
+            )}
             {/* Financeiro e Atendimento saíram da barra (17/11/2026, sem uso por
                 enquanto) — as páginas /financeiro e /atendimento continuam. */}
             <div className="hidden h-8 w-px bg-border sm:block" />

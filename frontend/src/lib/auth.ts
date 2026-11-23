@@ -152,6 +152,12 @@ export async function requireExtratosAccess() {
   await requirePermissao("extratos.ver");
 }
 
+// IRPF: dados pessoais sensíveis (CPF, bens, conta) — só quem tem irpf.ver
+// (Wellington, Douglas e Arthur, pedido de 23/11/2026), não toda a equipe.
+export async function requireIrpfAccess() {
+  await requirePermissao("irpf.ver");
+}
+
 // Atendimento é o inbox de WhatsApp da própria SOMA — cliente nunca vê,
 // mesmo padrão de requireLegalizacaoAccess/requireExtratosAccess.
 export async function requireAtendimentoAccess() {

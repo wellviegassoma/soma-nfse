@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { get } from "@vercel/blob";
 import { createClient } from "@/lib/supabase/server";
-import { requireSomaStaff } from "@/lib/auth";
+import { requireIrpfAccess } from "@/lib/auth";
 
 export async function GET(_request: Request, props: { params: Promise<{ arquivoId: string }> }) {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const { arquivoId } = await props.params;
   const supabase = await createClient();
   const { data: arquivo } = await supabase

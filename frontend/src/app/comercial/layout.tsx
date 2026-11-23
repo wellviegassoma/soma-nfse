@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireComercialAccess, getCurrentProfileName, isSomaStaff } from "@/lib/auth";
+import { requireComercialAccess, getCurrentProfileName, isSomaStaff, temPermissao } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
 import { LogoutButton } from "@/components/LogoutButton";
 
@@ -10,6 +10,7 @@ export default async function ComercialLayout({ children }: LayoutProps<"/comerc
   await requireComercialAccess();
   const userName = await getCurrentProfileName();
   const staff = await isSomaStaff();
+  const irpf = await temPermissao("irpf.ver");
 
   return (
     <div className="min-h-dvh bg-background">
@@ -29,6 +30,11 @@ export default async function ComercialLayout({ children }: LayoutProps<"/comerc
                 className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
               >
                 Painel de Administração
+              </Link>
+            )}
+            {irpf && (
+              <Link href="/irpf" className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block">
+                IRPF
               </Link>
             )}
             {userName && <span className="hidden text-sm text-foreground/60 md:inline">{userName}</span>}

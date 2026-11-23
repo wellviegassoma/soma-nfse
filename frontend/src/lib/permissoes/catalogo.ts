@@ -40,7 +40,8 @@ export type Permissao =
   | "notas.cancelar"
   | "tomadores.editar"
   | "comercial.ver"
-  | "comercial.editar";
+  | "comercial.editar"
+  | "irpf.ver";
 
 export type EscopoPermissao = "GLOBAL" | "EMPRESA" | "AMBOS";
 
@@ -74,6 +75,7 @@ export const MODULOS_EQUIPE = [
   "financeiro",
   "portal",
   "comercial",
+  "irpf",
 ] as const;
 
 export const MODULO_LABELS: Record<string, string> = {
@@ -94,6 +96,7 @@ export const MODULO_LABELS: Record<string, string> = {
   financeiro: "Financeiro",
   portal: "Portal do cliente",
   comercial: "Comercial",
+  irpf: "IRPF",
 };
 
 export const PERMISSOES: Record<Permissao, PermissaoInfo> = {
@@ -448,6 +451,15 @@ export const PERMISSOES: Record<Permissao, PermissaoInfo> = {
     escopo: "GLOBAL",
     irreversivel: false,
     implica: ["comercial.ver"],
+  },
+  "irpf.ver": {
+    chave: "irpf.ver",
+    modulo: "irpf",
+    moduloLabel: "IRPF",
+    label: "Acessar o módulo IRPF",
+    descricao: "Ver e editar contribuintes, declarações e documentos do Imposto de Renda PF (dados pessoais sensíveis).",
+    escopo: "GLOBAL",
+    irreversivel: false,
   },
 };
 

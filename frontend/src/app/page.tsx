@@ -16,6 +16,7 @@ export default async function HomePage() {
   if (await temPermissao("financeiro.ver")) redirect("/financeiro");
   if (await temPermissao("atendimento.atender")) redirect("/atendimento");
   if (await temPermissao("comercial.ver")) redirect("/comercial");
+  if (await temPermissao("irpf.ver")) redirect("/irpf");
 
   const companies = await getUserCompanies();
   if (companies.length === 1) {

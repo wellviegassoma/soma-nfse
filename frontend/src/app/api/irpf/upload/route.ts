@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { requireSomaStaff } from "@/lib/auth";
+import { requireIrpfAccess } from "@/lib/auth";
 
 // Upload direto do navegador para o Blob privado (mesmo padrão de
 // /api/extratos/upload). .DEC/.REC vão como text/plain; documentos do
 // cliente como PDF/imagem. O pathname nunca leva CPF (o cliente gera um id).
 export async function POST(request: Request) {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const body = (await request.json()) as HandleUploadBody;
   try {
     const jsonResponse = await handleUpload({

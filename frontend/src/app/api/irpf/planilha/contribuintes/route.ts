@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireSomaStaff } from "@/lib/auth";
+import { requireIrpfAccess } from "@/lib/auth";
 import { planilhaContribuintes } from "@/lib/irpf/exportar";
 
 export async function GET() {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const buffer = await planilhaContribuintes(await createClient());
   return new NextResponse(new Uint8Array(buffer), {
     headers: {

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { del, get } from "@vercel/blob";
 import { createClient } from "@/lib/supabase/server";
-import { requireSomaStaff, requireUser } from "@/lib/auth";
+import { requireIrpfAccess, requireUser } from "@/lib/auth";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { lerDec, decodificarArquivo, DecInvalidoError, type ResumoDeclaracao } from "@/lib/irpf/dec-parser";
 import {
@@ -79,7 +79,7 @@ export async function importarDeclaracaoAction(input: {
   recPathname?: string | null;
   recNome?: string | null;
 }): Promise<ResultadoImportacao> {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const user = await requireUser();
   if (!pathnameValido(input.decPathname)) return { error: "Arquivo inválido." };
   if (input.recPathname && !pathnameValido(input.recPathname)) return { error: "Recibo inválido." };
@@ -273,7 +273,7 @@ export async function atualizarDeclaracaoAction(input: {
   observacoes?: string | null;
   comentario?: string | null;
 }): Promise<{ ok: true } | Erro> {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const user = await requireUser();
   const supabase = await createClient();
   const { data: antes, error: e1 } = await supabase
@@ -345,7 +345,7 @@ export async function adicionarItemChecklistAction(input: {
   categoria: string;
   descricao: string;
 }): Promise<{ ok: true } | Erro> {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const descricao = input.descricao.trim();
   if (!descricao) return { error: "Descreva o documento." };
   const supabase = await createClient();
@@ -371,7 +371,7 @@ export async function mudarItemChecklistAction(input: {
   status?: ChecklistStatus;
   remover?: boolean;
 }): Promise<{ ok: true } | Erro> {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const supabase = await createClient();
   if (input.remover) {
     const { error } = await supabase
@@ -395,7 +395,7 @@ export async function mudarItemChecklistAction(input: {
 
 /** Recria os itens sugeridos (padrão + ano anterior) que ainda não existem. */
 export async function sugerirChecklistAction(declaracaoId: string): Promise<{ ok: true; criados: number } | Erro> {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const supabase = await createClient();
   const { data: d } = await supabase
     .from("irpf_declaracoes")
@@ -437,7 +437,7 @@ export async function registrarDocumentoAction(input: {
   tamanho: number;
   descricao?: string | null;
 }): Promise<{ ok: true } | Erro> {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const user = await requireUser();
   if (!pathnameValido(input.pathname)) return { error: "Arquivo inválido." };
   const supabase = await createClient();
@@ -456,7 +456,7 @@ export async function registrarDocumentoAction(input: {
 }
 
 export async function excluirArquivoAction(input: { declaracaoId: string; arquivoId: string }): Promise<{ ok: true } | Erro> {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const supabase = await createClient();
   const { data: arq } = await supabase
     .from("irpf_arquivos")
@@ -481,7 +481,7 @@ export async function excluirArquivoAction(input: { declaracaoId: string; arquiv
  * sugerido a partir da última declaração dele.
  */
 export async function abrirExercicioAction(exercicio: number): Promise<{ ok: true; criadas: number } | Erro> {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   if (!Number.isInteger(exercicio) || exercicio < 2020 || exercicio > 2100) return { error: "Exercício inválido." };
   const supabase = await createClient();
 
@@ -560,7 +560,7 @@ export async function salvarContribuinteAction(input: {
   observacoes?: string | null;
   ativo?: boolean;
 }): Promise<{ ok: true; id: string } | Erro> {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const nome = input.nome.trim();
   if (!nome) return { error: "Informe o nome." };
   const dados = {
@@ -598,7 +598,7 @@ export async function criarDeclaracaoAction(input: {
   contribuinteId: string;
   exercicio: number;
 }): Promise<{ ok: true; id: string } | Erro> {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   const supabase = await createClient();
   const { data: existe } = await supabase
     .from("irpf_declaracoes")
@@ -641,7 +641,7 @@ export async function enviarDocumentoContribuinteAction(input: {
   tamanho: number;
   descricao?: string | null;
 }): Promise<{ ok: true; declaracaoId: string } | Erro> {
-  await requireSomaStaff();
+  await requireIrpfAccess();
   if (!Number.isInteger(input.exercicio) || input.exercicio < 2020 || input.exercicio > 2100) {
     return { error: "Exercício inválido." };
   }
