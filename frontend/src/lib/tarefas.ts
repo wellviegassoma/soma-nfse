@@ -10,6 +10,7 @@ import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { chaveObrigacao, dataMeta } from "@/lib/agenda-tributaria";
 import { somarMeses, type StatusTarefa } from "@/lib/tarefas-comum";
+import { garantirEtapas } from "@/lib/tarefas-automacao";
 
 type Db = SupabaseClient;
 
@@ -29,12 +30,13 @@ export type Modelo = {
   aplica_pessoa: "PF" | "PJ" | null;
   aplica_municipios: string[] | null;
   aplica_folha: boolean | null;
+  fonte_automatica: string | null;
   ativo: boolean;
   ordem: number;
 };
 
 export const MODELO_COLUNAS =
-  "id, nome, descricao, departamento_id, periodicidade, meses, prazo_tipo, agenda_chave, dia_prazo, dia_meta, mes_prazo_offset, aplica_regimes, aplica_pessoa, aplica_municipios, aplica_folha, ativo, ordem";
+  "id, nome, descricao, departamento_id, periodicidade, meses, prazo_tipo, agenda_chave, dia_prazo, dia_meta, mes_prazo_offset, aplica_regimes, aplica_pessoa, aplica_municipios, aplica_folha, fonte_automatica, ativo, ordem";
 
 export type EmpresaTarefa = {
   id: string;
@@ -286,6 +288,8 @@ export async function gerarTarefas(
       .upsert(novas.slice(i, i + 500), { onConflict: "modelo_id,company_id,competencia", ignoreDuplicates: true });
     if (eIns) throw new Error(eIns.message);
   }
+  // Etapas (Fase 2) das tarefas novas e de modelos que ganharam etapa.
+  if (criar) await garantirEtapas(db, competencia);
   return { competencia, modelos: modelos.length, criadas: novas.length, prazosAtualizados };
 }
 

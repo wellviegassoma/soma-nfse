@@ -1,5 +1,6 @@
 import { requireSomaStaff } from "@/lib/auth";
 import { TarefasNav } from "./TarefasNav";
+import { Sincronizar } from "./Sincronizar";
 
 export default async function TarefasLayout({ children }: { children: React.ReactNode }) {
   await requireSomaStaff();
@@ -9,10 +10,13 @@ export default async function TarefasLayout({ children }: { children: React.Reac
         <div>
           <h1 className="text-xl font-semibold text-foreground">Tarefas</h1>
           <p className="text-sm text-foreground/60">
-            Rotina do mês da equipe. Atrasada = passou da meta SOMA · Risco de multa = passou do prazo legal.
+            Rotina do mês da equipe. Atrasada = passou da meta SOMA · Risco de multa = passou do prazo legal · Aguardando cliente = só falta o cliente.
           </p>
         </div>
-        <TarefasNav />
+        <div className="flex flex-wrap items-center gap-3">
+          <Sincronizar />
+          <TarefasNav />
+        </div>
       </div>
       {children}
     </div>

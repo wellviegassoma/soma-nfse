@@ -16,13 +16,13 @@ export async function MinhasTarefasResumo({ supabase }: { supabase: SupabaseServ
   const user = await requireUser();
   const { data } = await supabase
     .from("tarefas")
-    .select("status, prazo_meta, prazo_legal")
+    .select("status, prazo_meta, prazo_legal, aguardando_cliente")
     .eq("responsavel_id", user.id)
     .in("status", ["A_FAZER", "EM_ANDAMENTO"])
     .limit(1000);
   const hoje = hojeBrasilia();
   const cont = new Map<Situacao, number>();
-  for (const t of (data ?? []) as { status: StatusTarefa; prazo_meta: string | null; prazo_legal: string | null }[]) {
+  for (const t of (data ?? []) as { status: StatusTarefa; prazo_meta: string | null; prazo_legal: string | null; aguardando_cliente: boolean }[]) {
     const s = situacaoTarefa(t, hoje);
     cont.set(s, (cont.get(s) ?? 0) + 1);
   }

@@ -8,6 +8,7 @@ const ITENS = [
   { href: "/admin/tarefas", label: "Minhas tarefas", exato: true },
   { href: "/admin/tarefas/painel", label: "Painel geral" },
   { href: "/admin/tarefas/empresas", label: "Por empresa" },
+  { href: "/admin/tarefas/quadro", label: "Quadro" },
 ];
 
 export function TarefasNav() {

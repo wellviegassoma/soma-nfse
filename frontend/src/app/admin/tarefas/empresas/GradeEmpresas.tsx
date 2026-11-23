@@ -14,11 +14,13 @@ import {
   type StatusTarefa,
 } from "@/lib/tarefas-comum";
 import type { TarefaLinha } from "../TarefasLista";
+import { ChecklistTarefa } from "../ChecklistTarefa";
 
 // Símbolo curto na célula para a grade inteira caber na tela.
 const SIGLA: Record<Situacao, string> = {
   CONCLUIDA: "✓",
   NAO_SE_APLICA: "–",
+  AGUARDANDO_CLIENTE: "C",
   RISCO: "!",
   ATRASADA: "A",
   HOJE: "H",
@@ -139,6 +141,11 @@ export function GradeEmpresas({ linhas, hoje }: { linhas: TarefaLinha[]; hoje: s
             fechar
           </button>
           {msg && <div className="w-full text-xs text-danger">{msg}</div>}
+          {tarefaAberta.etapas_total > 0 && (
+            <div className="w-full">
+              <ChecklistTarefa key={tarefaAberta.id} tarefaId={tarefaAberta.id} />
+            </div>
+          )}
         </Card>
       )}
 

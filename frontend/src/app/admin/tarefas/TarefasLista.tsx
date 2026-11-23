@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
 import { mudarStatusTarefasAction, reatribuirTarefasAction } from "@/lib/actions/tarefas";
+import { ChecklistTarefa } from "./ChecklistTarefa";
 import {
   SITUACAO_CLASSE,
   SITUACAO_ROTULO,
@@ -32,9 +33,14 @@ export type TarefaLinha = {
   prazo_legal: string | null;
   status: StatusTarefa;
   comentario: string | null;
+  aguardando_cliente: boolean;
+  concluida_por_fonte: string | null;
+  etapas_total: number;
+  etapa_indice: number;
+  etapa_nome: string | null;
 };
 
-const ORDEM_SITUACAO: Situacao[] = ["RISCO", "ATRASADA", "HOJE", "SEMANA", "DEPOIS", "SEM_PRAZO", "CONCLUIDA", "NAO_SE_APLICA"];
+const ORDEM_SITUACAO: Situacao[] = ["RISCO", "ATRASADA", "HOJE", "SEMANA", "DEPOIS", "SEM_PRAZO", "AGUARDANDO_CLIENTE", "CONCLUIDA", "NAO_SE_APLICA"];
 const PAGINA = 300;
 
 function semAcento(s: string) {
@@ -60,6 +66,7 @@ export function TarefasLista({
   const [sit, setSit] = useState<"" | Situacao>("");
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [limite, setLimite] = useState(PAGINA);
+  const [expandida, setExpandida] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ erro?: string; ok?: string } | null>(null);
   const [pendente, iniciar] = useTransition();
 
@@ -264,11 +271,24 @@ export function TarefasLista({
                     </span>
                   </td>
                   <td className="px-2 py-2">
-                    <div className="font-medium text-foreground">{l.modelo}</div>
+                    {l.etapas_total > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpandida(expandida === l.id ? null : l.id)}
+                        className="text-left font-medium text-foreground hover:text-brand"
+                      >
+                        {expandida === l.id ? "▾" : "▸"} {l.modelo}
+                      </button>
+                    ) : (
+                      <div className="font-medium text-foreground">{l.modelo}</div>
+                    )}
                     <div className="text-xs text-foreground/50">
                       {l.departamento}
+                      {l.etapas_total > 0 && l.etapa_nome ? ` · etapa ${l.etapa_indice + 1}/${l.etapas_total}: ${l.etapa_nome}` : ""}
+                      {l.concluida_por_fonte ? ` · automático: ${l.concluida_por_fonte}` : ""}
                       {l.comentario ? ` · ${l.comentario}` : ""}
                     </div>
+                    {expandida === l.id && <ChecklistTarefa tarefaId={l.id} />}
                   </td>
                   <td className="px-2 py-2 text-foreground/85">{l.empresa}</td>
                   <td className="px-2 py-2 whitespace-nowrap text-xs text-foreground/60">{rotuloCompetencia(l.competencia)}</td>

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff, requireSuperAdmin, requireUser } from "@/lib/auth";
 import { gerarTarefas } from "@/lib/tarefas";
+import { garantirEtapas, recalcularTarefas, sincronizarAutomacoes } from "@/lib/tarefas-automacao";
+import { FONTES_ROTULO } from "@/lib/tarefas-comum";
 import type { StatusTarefa } from "@/lib/tarefas-comum";
 
 type Resultado = { ok: true; mensagem?: string } | { error: string };
@@ -118,6 +120,7 @@ export type ModeloInput = {
   aplica_pessoa: "PF" | "PJ" | null;
   aplica_municipios: string[] | null;
   aplica_folha: boolean | null;
+  fonte_automatica: string | null;
   ativo: boolean;
   ordem: number;
 };
@@ -154,6 +157,7 @@ export async function salvarModeloAction(m: ModeloInput): Promise<Resultado & { 
     aplica_pessoa: m.aplica_pessoa,
     aplica_municipios: m.aplica_municipios?.length ? m.aplica_municipios : null,
     aplica_folha: m.aplica_folha,
+    fonte_automatica: m.fonte_automatica || null,
     ativo: m.ativo,
     ordem: m.ordem,
   };
@@ -269,4 +273,214 @@ export async function salvarResponsaveisEmLoteAction(input: {
   revalidatePath("/admin/configuracoes/carteira");
   revalidar();
   return { ok: true, mensagem: `${input.companyIds.length} empresa(s) atualizada(s).` };
+}
+
+// ----------------------------------------------------------- etapas (Fase 2)
+
+export type EtapaTarefa = {
+  etapa_id: string;
+  ordem: number;
+  nome: string;
+  departamento: string | null;
+  depende_do_cliente: boolean;
+  fonte: string | null;
+  concluida_em: string | null;
+  automatica: boolean;
+};
+
+/** Checklist de uma tarefa (aberto sob demanda nas telas). */
+export async function etapasDaTarefaAction(tarefaId: string): Promise<{ etapas: EtapaTarefa[] } | { error: string }> {
+  await requireSomaStaff();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("tarefa_etapas")
+    .select(
+      "etapa_id, concluida_em, automatica, tarefa_modelo_etapas(ordem, nome, depende_do_cliente, fonte_automatica, atendimento_departamentos(nome))",
+    )
+    .eq("tarefa_id", tarefaId);
+  if (error) return { error: error.message };
+  type Linha = {
+    etapa_id: string;
+    concluida_em: string | null;
+    automatica: boolean;
+    tarefa_modelo_etapas: {
+      ordem: number;
+      nome: string;
+      depende_do_cliente: boolean;
+      fonte_automatica: string | null;
+      atendimento_departamentos: { nome: string } | null;
+    } | null;
+  };
+  const etapas = ((data ?? []) as unknown as Linha[])
+    .filter((l) => l.tarefa_modelo_etapas)
+    .map((l) => {
+      const d = l.tarefa_modelo_etapas!;
+      return {
+        etapa_id: l.etapa_id,
+        ordem: d.ordem,
+        nome: d.nome,
+        departamento: d.atendimento_departamentos?.nome ?? null,
+        depende_do_cliente: d.depende_do_cliente,
+        fonte: d.fonte_automatica ? (FONTES_ROTULO[d.fonte_automatica as keyof typeof FONTES_ROTULO] ?? null) : null,
+        concluida_em: l.concluida_em,
+        automatica: l.automatica,
+      };
+    })
+    .sort((a, b) => a.ordem - b.ordem);
+  return { etapas };
+}
+
+/** Marca/desmarca uma etapa; a tarefa avança (ou volta) e a cascata troca o dono. */
+export async function marcarEtapaAction(input: { tarefaId: string; etapaId: string; feita: boolean }): Promise<Resultado> {
+  await requireSomaStaff();
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("tarefa_etapas")
+    .update(
+      input.feita
+        ? { concluida_em: new Date().toISOString(), concluida_por: user.id, automatica: false }
+        : { concluida_em: null, concluida_por: null, automatica: false },
+    )
+    .eq("tarefa_id", input.tarefaId)
+    .eq("etapa_id", input.etapaId);
+  if (error) return { error: error.message };
+  await supabase.from("tarefa_eventos").insert({
+    tarefa_id: input.tarefaId,
+    user_id: user.id,
+    tipo: "ETAPA",
+    para: input.feita ? "FEITA" : "DESFEITA",
+    comentario: input.etapaId,
+  });
+  try {
+    await recalcularTarefas(supabase, [input.tarefaId], { reabrir: !input.feita });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  revalidar();
+  return { ok: true };
+}
+
+/**
+ * Kanban: coloca a tarefa na coluna da etapa `ordem` (todas as anteriores
+ * feitas, ela e as seguintes pendentes); `ordem` null = todas feitas.
+ */
+export async function moverTarefaParaEtapaAction(input: { tarefaId: string; ordem: number | null }): Promise<Resultado> {
+  await requireSomaStaff();
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("tarefa_etapas")
+    .select("etapa_id, concluida_em, tarefa_modelo_etapas(ordem)")
+    .eq("tarefa_id", input.tarefaId);
+  if (error) return { error: error.message };
+  const agora = new Date().toISOString();
+  let voltou = false;
+  type Linha = { etapa_id: string; concluida_em: string | null; tarefa_modelo_etapas: { ordem: number } | null };
+  for (const l of (data ?? []) as unknown as Linha[]) {
+    const ordem = l.tarefa_modelo_etapas?.ordem ?? 0;
+    const deveEstarFeita = input.ordem == null || ordem < input.ordem;
+    if (deveEstarFeita === !!l.concluida_em) continue;
+    if (!deveEstarFeita) voltou = true;
+    const { error: e2 } = await supabase
+      .from("tarefa_etapas")
+      .update(
+        deveEstarFeita
+          ? { concluida_em: agora, concluida_por: user.id, automatica: false }
+          : { concluida_em: null, concluida_por: null, automatica: false },
+      )
+      .eq("tarefa_id", input.tarefaId)
+      .eq("etapa_id", l.etapa_id);
+    if (e2) return { error: e2.message };
+  }
+  await supabase.from("tarefa_eventos").insert({
+    tarefa_id: input.tarefaId,
+    user_id: user.id,
+    tipo: "ETAPA",
+    para: input.ordem == null ? "FIM" : `ETAPA ${input.ordem}`,
+  });
+  try {
+    await recalcularTarefas(supabase, [input.tarefaId], { reabrir: voltou });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  revalidar();
+  return { ok: true };
+}
+
+/** Botão "Sincronizar" e a sincronização ao abrir a tela de Tarefas. */
+export async function sincronizarTarefasAction(): Promise<Resultado> {
+  await requireSomaStaff();
+  try {
+    const r = await sincronizarAutomacoes(await createClient());
+    if (r.tarefas || r.etapas) revalidar();
+    return { ok: true, mensagem: `${r.tarefas} tarefa(s) e ${r.etapas} etapa(s) concluídas pelas centrais.` };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export type EtapaModeloInput = {
+  id: string | null;
+  nome: string;
+  departamento_id: string | null;
+  fonte_automatica: string | null;
+  depende_do_cliente: boolean;
+};
+
+/** Substitui as etapas do modelo (na ordem da lista) e ajusta as tarefas abertas. */
+export async function salvarEtapasModeloAction(input: { modeloId: string; etapas: EtapaModeloInput[] }): Promise<Resultado> {
+  await requireSuperAdmin();
+  if (input.etapas.some((e) => !e.nome.trim())) return { error: "Toda etapa precisa de nome." };
+  if (input.etapas.some((e) => e.fonte_automatica && !(e.fonte_automatica in FONTES_ROTULO)))
+    return { error: "Fonte automática inválida." };
+  const supabase = await createClient();
+  const { data: atuais, error: e1 } = await supabase.from("tarefa_modelo_etapas").select("id").eq("modelo_id", input.modeloId);
+  if (e1) return { error: e1.message };
+  const manter = new Set(input.etapas.map((e) => e.id).filter(Boolean) as string[]);
+  const remover = (atuais ?? []).map((a) => a.id as string).filter((id) => !manter.has(id));
+  if (remover.length) {
+    const { error } = await supabase.from("tarefa_modelo_etapas").delete().in("id", remover);
+    if (error) return { error: error.message };
+  }
+  for (const [i, e] of input.etapas.entries()) {
+    const linha = {
+      modelo_id: input.modeloId,
+      ordem: i + 1,
+      nome: e.nome.trim(),
+      departamento_id: e.departamento_id || null,
+      fonte_automatica: e.fonte_automatica || null,
+      depende_do_cliente: e.depende_do_cliente,
+    };
+    const { error } = e.id
+      ? await supabase.from("tarefa_modelo_etapas").update(linha).eq("id", e.id)
+      : await supabase.from("tarefa_modelo_etapas").insert(linha);
+    if (error) return { error: error.message };
+  }
+  // Tarefas abertas desse modelo: criar as etapas novas e recalcular.
+  const { data: abertas } = await supabase
+    .from("tarefas")
+    .select("id, competencia")
+    .eq("modelo_id", input.modeloId)
+    .in("status", ["A_FAZER", "EM_ANDAMENTO"])
+    .limit(5000);
+  try {
+    for (const c of new Set((abertas ?? []).map((t) => t.competencia as string))) await garantirEtapas(supabase, c);
+    if (abertas?.length) {
+      if (!input.etapas.length) {
+        await supabase
+          .from("tarefas")
+          .update({ etapa_atual: null, aguardando_cliente: false })
+          .eq("modelo_id", input.modeloId)
+          .in("status", ["A_FAZER", "EM_ANDAMENTO"]);
+      } else {
+        await recalcularTarefas(supabase, abertas.map((t) => t.id as string));
+      }
+    }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  revalidatePath("/admin/configuracoes/tarefa-modelos", "layout");
+  revalidar();
+  return { ok: true, mensagem: `${input.etapas.length} etapa(s) salva(s).` };
 }

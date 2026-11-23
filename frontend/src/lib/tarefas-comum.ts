@@ -17,6 +17,30 @@ export const REGIMES: { valor: string; rotulo: string }[] = [
   { valor: "IMUNE_ISENTO", rotulo: "Imune/Isento" },
 ];
 
+// Centrais que concluem tarefa/etapa sozinhas (lib/tarefas-automacao.ts).
+export type FonteAutomatica =
+  | "SIMPLES_APROVADO"
+  | "PGDAS_TRANSMITIDO"
+  | "DAS_PAGO"
+  | "MIT_ENCERRADA"
+  | "ISS_MARCADO"
+  | "ISS_PAGO"
+  | "REINF_ENVIADA"
+  | "EXTRATOS_ENTREGUES"
+  | "MES_FECHADO";
+
+export const FONTES_ROTULO: Record<FonteAutomatica, string> = {
+  SIMPLES_APROVADO: "Conferência do Simples aprovada",
+  PGDAS_TRANSMITIDO: "PGDAS-D transmitido",
+  DAS_PAGO: "DAS pago",
+  MIT_ENCERRADA: "MIT/DCTFWeb encerrada",
+  ISS_MARCADO: "ISS marcado na Central ISS",
+  ISS_PAGO: "ISS pago",
+  REINF_ENVIADA: "Reinf enviada (dispensada ⇒ não se aplica)",
+  EXTRATOS_ENTREGUES: "Extratos do mês entregues",
+  MES_FECHADO: "Mês fechado",
+};
+
 export function aberta(status: StatusTarefa): boolean {
   return status === "A_FAZER" || status === "EM_ANDAMENTO";
 }
@@ -25,14 +49,16 @@ export function aberta(status: StatusTarefa): boolean {
  * Situação calculada (não gravada) de uma tarefa em relação a hoje.
  * RISCO = passou do prazo legal; ATRASADA = passou da meta SOMA.
  */
-export type Situacao = "CONCLUIDA" | "NAO_SE_APLICA" | "RISCO" | "ATRASADA" | "HOJE" | "SEMANA" | "DEPOIS" | "SEM_PRAZO";
+export type Situacao = "CONCLUIDA" | "NAO_SE_APLICA" | "AGUARDANDO_CLIENTE" | "RISCO" | "ATRASADA" | "HOJE" | "SEMANA" | "DEPOIS" | "SEM_PRAZO";
 
 export function situacaoTarefa(
-  t: { status: StatusTarefa; prazo_meta: string | null; prazo_legal: string | null },
+  t: { status: StatusTarefa; prazo_meta: string | null; prazo_legal: string | null; aguardando_cliente?: boolean },
   hoje: string,
 ): Situacao {
   if (t.status === "CONCLUIDA") return "CONCLUIDA";
   if (t.status === "NAO_SE_APLICA") return "NAO_SE_APLICA";
+  // A SOMA já fez a parte dela; só falta o cliente (ex.: pagar a guia).
+  if (t.aguardando_cliente) return "AGUARDANDO_CLIENTE";
   if (t.prazo_legal && t.prazo_legal < hoje) return "RISCO";
   const alvo = t.prazo_meta ?? t.prazo_legal;
   if (!alvo) return "SEM_PRAZO";
@@ -45,6 +71,7 @@ export function situacaoTarefa(
 export const SITUACAO_ROTULO: Record<Situacao, string> = {
   CONCLUIDA: "Concluída",
   NAO_SE_APLICA: "Não se aplica",
+  AGUARDANDO_CLIENTE: "Aguardando cliente",
   RISCO: "Risco de multa",
   ATRASADA: "Atrasada",
   HOJE: "Hoje",
@@ -57,6 +84,7 @@ export const SITUACAO_ROTULO: Record<Situacao, string> = {
 export const SITUACAO_CLASSE: Record<Situacao, string> = {
   CONCLUIDA: "bg-success-soft text-success",
   NAO_SE_APLICA: "bg-surface-muted text-foreground/50",
+  AGUARDANDO_CLIENTE: "bg-sky-100 text-sky-900",
   RISCO: "bg-rose-900 text-white",
   ATRASADA: "bg-rose-100 text-rose-800",
   HOJE: "bg-amber-300 text-amber-950",

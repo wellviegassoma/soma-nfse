@@ -14,6 +14,7 @@ import {
 } from "@/lib/tarefas";
 import { somarMeses } from "@/lib/tarefas-comum";
 import { ModelosEditor, type Obrigacao } from "./ModelosEditor";
+import type { EtapaModeloInput } from "@/lib/actions/tarefas";
 
 export const metadata = { title: "Modelos de tarefa — Painel SOMA" };
 
@@ -24,7 +25,7 @@ export default async function TarefaModelosPage() {
   const supabase = await createClient();
   const competencia = mesAnteriorBrasilia();
 
-  const [{ data: modelosRaw }, { data: deptos }, itens, empresas, excecoes, folha] = await Promise.all([
+  const [{ data: modelosRaw }, { data: deptos }, itens, empresas, excecoes, folha, { data: etapasRaw }] = await Promise.all([
     supabase.from("tarefa_modelos").select(MODELO_COLUNAS).order("ordem").order("nome"),
     supabase.from("atendimento_departamentos").select("id, nome").eq("ativo", true).order("nome"),
     buscarTudoPaginado<ItemRow>((from, to) =>
@@ -47,7 +48,21 @@ export default async function TarefaModelosPage() {
         .gt("valor", 0)
         .range(from, to),
     ),
+    supabase
+      .from("tarefa_modelo_etapas")
+      .select("id, modelo_id, ordem, nome, departamento_id, fonte_automatica, depende_do_cliente")
+      .order("ordem"),
   ]);
+  const etapas: Record<string, EtapaModeloInput[]> = {};
+  for (const e of (etapasRaw ?? []) as (EtapaModeloInput & { modelo_id: string })[]) {
+    (etapas[e.modelo_id] ??= []).push({
+      id: e.id,
+      nome: e.nome,
+      departamento_id: e.departamento_id,
+      fonte_automatica: e.fonte_automatica,
+      depende_do_cliente: e.depende_do_cliente,
+    });
+  }
   const modelos = (modelosRaw ?? []) as Modelo[];
 
   // Obrigações da agenda (a mais recente de cada), relevantes primeiro.
@@ -110,6 +125,7 @@ export default async function TarefaModelosPage() {
         alcance={alcance}
         obrigacaoDoModelo={obrigacaoDoModelo}
         competenciaPadrao={competencia}
+        etapas={etapas}
       />
     </div>
   );

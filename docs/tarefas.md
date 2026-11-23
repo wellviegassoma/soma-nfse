@@ -189,3 +189,56 @@ Fase 1 implementada (migration `20261123120000_fase_cc_tarefas.sql`, aplicada em
 - Cron `/api/cron/tarefas` (10h40 UTC, depois da agenda): gera a competência anterior e completa prazos.
 - Os 18 modelos sugeridos estão **desativados** — revisar, ativar e montar a carteira antes de gerar.
 - Teste em produção (163 tarefas do Simples de out/2026: gerar, concluir, reabrir, reatribuir) apagado depois.
+
+## 9. Fase 2 — proposta (23/11/2026, para aprovação)
+
+### 9.1 Etapas (checklist e cascata numa coisa só)
+Cada modelo pode ter **etapas** em ordem. Etapa com o mesmo departamento é um item de
+checklist; etapa de **outro departamento** é a cascata: quando a anterior termina, a tarefa
+passa sozinha para o responsável daquele departamento na carteira da empresa.
+- `tarefa_modelo_etapas` (modelo, ordem, nome, departamento opcional, fonte automática,
+  `depende_do_cliente`).
+- `tarefa_etapas` (tarefa, etapa, concluída em/por, `automatica`).
+- A tarefa se conclui quando todas as etapas terminam (concluir na mão continua possível).
+- Etapa `depende_do_cliente` (ex.: "Cliente pagou o DAS"): se só faltam etapas dessas, a
+  tarefa aparece como **Aguardando cliente**, não como Atrasada — a SOMA já fez a parte dela.
+
+### 9.2 Conclusão automática pelas centrais
+Sinais que o sistema já grava por empresa × competência:
+
+| Fonte | Tabela | Conclui |
+|---|---|---|
+| Conferência do Simples aprovada | `simples_conferencia_aprovacoes` | etapa "Conferir faturamento" |
+| PGDAS-D transmitido | `integra_contador_pgdas_declaracoes` | etapa "Transmitir PGDAS-D" |
+| DAS pago | `das_pagamentos` (status pago) | etapa "Cliente pagou" |
+| MIT/DCTFWeb encerrada | `integra_contador_mit_encerramentos` | tarefa DCTFWeb |
+| ISS marcado na Central ISS | `iss_fechamentos` | tarefa ISS Rio / Petrópolis |
+| ISS pago | `iss_pagamentos` (paga) | etapa "Cliente pagou o ISS" |
+| Reinf enviada / dispensada | `reinf_fechamentos` | tarefa EFD-Reinf (dispensada ⇒ Não se aplica) |
+| Extratos do mês entregues | `extratos_mensais` (todas as contas) | etapa "Receber extratos" |
+| Mês fechado | `fechamentos_mensais` | tarefa/etapa de fechamento |
+
+O modelo (ou a etapa) escolhe a fonte numa lista. A sincronização roda no cron diário, ao
+abrir a tela de Tarefas e num botão "Sincronizar". Só conclui — nunca reabre sozinha; a tarefa
+mostra "concluída automaticamente por …".
+
+### 9.3 Kanban
+Aba nova **Quadro**: escolhe um modelo e a competência; as colunas são as etapas do modelo
+(+ "Concluída"), cada cartão uma empresa. Arrastar para a próxima coluna conclui a etapa.
+Para modelo sem etapas, colunas por status (A fazer · Em andamento · Concluída).
+
+### 9.4 Fica de fora por ora
+Gatilho "concluir tarefa X cria tarefa Y" — a cascata por etapas cobre o caso da rotina
+mensal; volta à mesa junto com processos eventuais (abertura, alteração).
+
+### 9.5 Exemplo — Apurar Simples
+1. Conferir faturamento (Fiscal · auto: conferência aprovada)
+2. Transmitir PGDAS-D (Fiscal · auto: PGDAS transmitido)
+3. Enviar DAS ao cliente (Atendimento ao Cliente · manual)
+4. Cliente pagou (depende do cliente · auto: DAS pago)
+
+### 9.6 Status (23/11/2026)
+Fase 2 implementada (migration `20261123180000_fase_cd_tarefas_etapas.sql`, aplicada em produção):
+etapas com cascata, conclusão automática (`lib/tarefas-automacao.ts`), "Aguardando cliente", editor de
+etapas em Modelos de tarefa e aba Quadro. Teste com 163 tarefas do Simples de out/2026 (78 etapas
+concluídas pelas centrais, 26 em cascata para o Atendimento) apagado depois.

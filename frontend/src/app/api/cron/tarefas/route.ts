@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { autorizarChamadaInterna } from "@/lib/internal-auth";
 import { mesAnteriorBrasilia } from "@/lib/competencia";
 import { competenciasSemPrazo, gerarTarefas } from "@/lib/tarefas";
+import { sincronizarAutomacoes } from "@/lib/tarefas-automacao";
 
 export const maxDuration = 120;
 
@@ -12,7 +13,8 @@ export const maxDuration = 120;
  * competência que acabou de fechar (mês anterior) que ainda não existem —
  * rodar todo dia faz empresa nova e modelo novo entrarem sozinhos — e
  * preenche/atualiza prazo das tarefas abertas cuja agenda saiu depois.
- * Só modelos ATIVOS geram (Configurações › Modelos de tarefa).
+ * Só modelos ATIVOS geram (Configurações › Modelos de tarefa). Depois,
+ * conclui tarefas/etapas pelo que já foi feito nas centrais (Fase 2).
  */
 export async function GET(request: Request) {
   if (!autorizarChamadaInterna(request)) {
@@ -26,10 +28,12 @@ export async function GET(request: Request) {
     for (const c of await competenciasSemPrazo(admin)) {
       if (c !== competencia) prazos.push(await gerarTarefas(admin, c, { criar: false }));
     }
-    if (principal.criadas || principal.prazosAtualizados || prazos.some((p) => p.prazosAtualizados)) {
+    // Fase 2: conclui pelo que já foi feito nas centrais.
+    const automacao = await sincronizarAutomacoes(admin);
+    if (principal.criadas || principal.prazosAtualizados || prazos.some((p) => p.prazosAtualizados) || automacao.tarefas || automacao.etapas) {
       revalidatePath("/admin/tarefas", "layout");
     }
-    return NextResponse.json({ principal, prazos });
+    return NextResponse.json({ principal, prazos, automacao });
   } catch (e) {
     console.error("[tarefas]", e);
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });

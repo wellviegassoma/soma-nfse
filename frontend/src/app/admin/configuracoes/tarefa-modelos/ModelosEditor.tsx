@@ -8,9 +8,11 @@ import {
   gerarTarefasAction,
   salvarExcecaoAction,
   salvarModeloAction,
+  type EtapaModeloInput,
   type ModeloInput,
 } from "@/lib/actions/tarefas";
-import { REGIMES, rotuloCompetencia } from "@/lib/tarefas-comum";
+import { EtapasEditor } from "./EtapasEditor";
+import { FONTES_ROTULO, REGIMES, rotuloCompetencia } from "@/lib/tarefas-comum";
 import type { Modelo } from "@/lib/tarefas";
 
 export type Obrigacao = { chave: string; rotulo: string; relevante: boolean };
@@ -35,6 +37,7 @@ const NOVO: ModeloInput = {
   aplica_pessoa: "PJ",
   aplica_municipios: null,
   aplica_folha: null,
+  fonte_automatica: null,
   ativo: false,
   ordem: 0,
 };
@@ -71,6 +74,7 @@ export function ModelosEditor({
   alcance,
   obrigacaoDoModelo,
   competenciaPadrao,
+  etapas,
 }: {
   modelos: Modelo[];
   departamentos: Opcao[];
@@ -81,6 +85,7 @@ export function ModelosEditor({
   alcance: Record<string, number>;
   obrigacaoDoModelo: Record<string, string | null>;
   competenciaPadrao: string;
+  etapas: Record<string, EtapaModeloInput[]>;
 }) {
   const [editando, setEditando] = useState<ModeloInput | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; erro?: string } | null>(null);
@@ -143,6 +148,7 @@ export function ModelosEditor({
           empresas={empresas}
           excecoes={excecoes.filter((x) => x.modelo_id === editando.id)}
           obrigacaoAtual={editando.id ? obrigacaoDoModelo[editando.id] ?? null : null}
+          etapas={editando.id ? etapas[editando.id] ?? [] : []}
           aoFechar={(texto) => {
             setEditando(null);
             if (texto) setMsg({ ok: texto });
@@ -178,6 +184,8 @@ export function ModelosEditor({
                 <td className="px-2 py-2">
                   <div className="font-medium text-foreground">{m.nome}</div>
                   <div className="text-xs text-foreground/50">
+                    {etapas[m.id]?.length ? `${etapas[m.id].length} etapas · ` : ""}
+                    {m.fonte_automatica ? "automática · " : ""}
                     {PERIODICIDADE[m.periodicidade]}
                     {m.periodicidade !== "MENSAL" && m.meses?.length ? ` (${m.meses.map((x) => MESES[x - 1]).join(", ")})` : ""}
                   </div>
@@ -215,6 +223,7 @@ function FormModelo({
   empresas,
   excecoes,
   obrigacaoAtual,
+  etapas,
   aoFechar,
 }: {
   inicial: ModeloInput;
@@ -224,6 +233,7 @@ function FormModelo({
   empresas: Opcao[];
   excecoes: { company_id: string; tipo: "INCLUIR" | "EXCLUIR" }[];
   obrigacaoAtual: string | null;
+  etapas: EtapaModeloInput[];
   aoFechar: (msg?: string) => void;
 }) {
   const [m, setM] = useState<ModeloInput>(inicial);
@@ -457,6 +467,31 @@ function FormModelo({
           use as exceções por empresa abaixo.
         </p>
       </fieldset>
+
+      <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
+        <legend className="px-1 text-xs font-semibold text-foreground/70">Conclusão automática da tarefa inteira</legend>
+        <select
+          value={m.fonte_automatica ?? ""}
+          onChange={(e) => set("fonte_automatica", e.target.value || null)}
+          className={cn(campo, "max-w-md")}
+        >
+          <option value="">Manual (ou pelas etapas)</option>
+          {Object.entries(FONTES_ROTULO).map(([k, r]) => (
+            <option key={k} value={k}>
+              {r}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-foreground/50">
+          Use para tarefa sem etapas (ex.: EFD-Reinf ⇒ Reinf enviada). Com etapas, escolha a fonte em cada etapa.
+        </p>
+      </fieldset>
+
+      {m.id ? (
+        <EtapasEditor modeloId={m.id} iniciais={etapas} departamentos={departamentos} />
+      ) : (
+        <p className="text-xs text-foreground/50">Salve o modelo para cadastrar etapas e exceções.</p>
+      )}
 
       {m.id && <Excecoes modeloId={m.id} empresas={empresas} excecoes={excecoes} />}
 
