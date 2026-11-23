@@ -7,6 +7,8 @@ import { cn } from "@/lib/cn";
 const ITENS = [
   { href: "/admin/configuracoes/contador-responsavel", label: "Contador responsável" },
   { href: "/admin/configuracoes/agenda-metas", label: "Metas da agenda tributária" },
+  { href: "/admin/configuracoes/tarefa-modelos", label: "Modelos de tarefa" },
+  { href: "/admin/configuracoes/carteira", label: "Carteira" },
 ];
 
 export function ConfiguracoesNav() {

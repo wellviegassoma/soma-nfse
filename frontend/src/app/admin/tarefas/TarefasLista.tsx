@@ -1,0 +1,339 @@
+"use client";
+
+import { useMemo, useState, useTransition } from "react";
+import { Card } from "@/components/ui/Card";
+import { cn } from "@/lib/cn";
+import { mudarStatusTarefasAction, reatribuirTarefasAction } from "@/lib/actions/tarefas";
+import {
+  SITUACAO_CLASSE,
+  SITUACAO_ROTULO,
+  STATUS_ROTULO,
+  aberta,
+  ddmm,
+  rotuloCompetencia,
+  situacaoTarefa,
+  type Situacao,
+  type StatusTarefa,
+} from "@/lib/tarefas-comum";
+
+export type TarefaLinha = {
+  id: string;
+  modelo_id: string;
+  modelo: string;
+  ordem: number;
+  company_id: string;
+  empresa: string;
+  competencia: string;
+  departamento_id: string;
+  departamento: string;
+  responsavel_id: string | null;
+  responsavel: string | null;
+  prazo_meta: string | null;
+  prazo_legal: string | null;
+  status: StatusTarefa;
+  comentario: string | null;
+};
+
+const ORDEM_SITUACAO: Situacao[] = ["RISCO", "ATRASADA", "HOJE", "SEMANA", "DEPOIS", "SEM_PRAZO", "CONCLUIDA", "NAO_SE_APLICA"];
+const PAGINA = 300;
+
+function semAcento(s: string) {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+export function TarefasLista({
+  linhas,
+  equipe,
+  hoje,
+  modo,
+  vazio,
+}: {
+  linhas: TarefaLinha[];
+  equipe: { id: string; nome: string }[];
+  hoje: string;
+  modo: "minhas" | "painel";
+  vazio: string;
+}) {
+  const [busca, setBusca] = useState("");
+  const [depto, setDepto] = useState("");
+  const [resp, setResp] = useState("");
+  const [sit, setSit] = useState<"" | Situacao>("");
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [limite, setLimite] = useState(PAGINA);
+  const [msg, setMsg] = useState<{ erro?: string; ok?: string } | null>(null);
+  const [pendente, iniciar] = useTransition();
+
+  const comSituacao = useMemo(() => linhas.map((l) => ({ ...l, sit: situacaoTarefa(l, hoje) })), [linhas, hoje]);
+  const departamentos = useMemo(
+    () => [...new Map(linhas.map((l) => [l.departamento_id, l.departamento])).entries()].sort((a, b) => a[1].localeCompare(b[1])),
+    [linhas],
+  );
+  const contagem = useMemo(() => {
+    const c = new Map<Situacao, number>();
+    for (const l of comSituacao) c.set(l.sit, (c.get(l.sit) ?? 0) + 1);
+    return c;
+  }, [comSituacao]);
+
+  const visiveis = useMemo(() => {
+    const q = semAcento(busca.trim());
+    return comSituacao
+      .filter((l) => {
+        if (depto && l.departamento_id !== depto) return false;
+        if (resp === "_sem" ? l.responsavel_id : resp && l.responsavel_id !== resp) return false;
+        if (sit && l.sit !== sit) return false;
+        if (q && !semAcento(`${l.empresa} ${l.modelo}`).includes(q)) return false;
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          ORDEM_SITUACAO.indexOf(a.sit) - ORDEM_SITUACAO.indexOf(b.sit) ||
+          (a.prazo_meta ?? "9").localeCompare(b.prazo_meta ?? "9") ||
+          a.ordem - b.ordem ||
+          a.empresa.localeCompare(b.empresa),
+      );
+  }, [comSituacao, busca, depto, resp, sit]);
+
+  const mostradas = visiveis.slice(0, limite);
+  const selecionadas = [...sel].filter((id) => visiveis.some((v) => v.id === id));
+
+  const executar = (fn: () => Promise<{ ok: true; mensagem?: string } | { error: string }>, ok: string) =>
+    iniciar(async () => {
+      const r = await fn();
+      if ("error" in r) setMsg({ erro: r.error });
+      else {
+        setMsg({ ok });
+        setSel(new Set());
+      }
+    });
+
+  const mudarStatus = (ids: string[], status: StatusTarefa) => {
+    let comentario: string | null = null;
+    if (status === "NAO_SE_APLICA") {
+      comentario = window.prompt("Por que não se aplica?");
+      if (!comentario?.trim()) return;
+    }
+    executar(
+      () => mudarStatusTarefasAction({ ids, status, comentario }),
+      `${ids.length} tarefa(s): ${STATUS_ROTULO[status].toLowerCase()}.`,
+    );
+  };
+
+  const alternar = (id: string) =>
+    setSel((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Contadores por situação (clicáveis = filtro) */}
+      <div className="flex flex-wrap gap-2">
+        {ORDEM_SITUACAO.filter((s) => contagem.get(s)).map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setSit(sit === s ? "" : s)}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-sm font-medium",
+              SITUACAO_CLASSE[s],
+              sit === s ? "ring-2 ring-foreground/60" : "",
+            )}
+          >
+            {SITUACAO_ROTULO[s]} <span className="font-bold">{contagem.get(s)}</span>
+          </button>
+        ))}
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+          <input
+            type="search"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar empresa ou tarefa"
+            className="h-8 w-60 rounded-lg border border-border bg-surface px-3 text-sm text-foreground"
+          />
+          <select
+            value={depto}
+            onChange={(e) => setDepto(e.target.value)}
+            className="h-8 rounded-lg border border-border bg-surface px-2 text-sm text-foreground"
+          >
+            <option value="">Todos os departamentos</option>
+            {departamentos.map(([id, nome]) => (
+              <option key={id} value={id}>
+                {nome}
+              </option>
+            ))}
+          </select>
+          {modo === "painel" && (
+            <select
+              value={resp}
+              onChange={(e) => setResp(e.target.value)}
+              className="h-8 rounded-lg border border-border bg-surface px-2 text-sm text-foreground"
+            >
+              <option value="">Todos os responsáveis</option>
+              <option value="_sem">Sem responsável</option>
+              {equipe.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nome}
+                </option>
+              ))}
+            </select>
+          )}
+          <span className="ml-auto text-xs text-foreground/60">{visiveis.length} tarefa(s)</span>
+        </div>
+
+        {selecionadas.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-brand-soft/40 px-4 py-2 text-sm">
+            <span className="font-medium">{selecionadas.length} selecionada(s):</span>
+            <BotaoAcao onClick={() => mudarStatus(selecionadas, "CONCLUIDA")} disabled={pendente}>
+              Concluir
+            </BotaoAcao>
+            <BotaoAcao onClick={() => mudarStatus(selecionadas, "EM_ANDAMENTO")} disabled={pendente}>
+              Em andamento
+            </BotaoAcao>
+            <BotaoAcao onClick={() => mudarStatus(selecionadas, "NAO_SE_APLICA")} disabled={pendente}>
+              Não se aplica
+            </BotaoAcao>
+            <BotaoAcao onClick={() => mudarStatus(selecionadas, "A_FAZER")} disabled={pendente}>
+              Reabrir
+            </BotaoAcao>
+            <select
+              defaultValue=""
+              disabled={pendente}
+              onChange={(e) => {
+                const v = e.target.value;
+                e.target.value = "";
+                if (!v) return;
+                const id = v === "_sem" ? null : v;
+                executar(() => reatribuirTarefasAction({ ids: selecionadas, responsavelId: id }), "Responsável alterado.");
+              }}
+              className="h-7 rounded-lg border border-border bg-surface px-2 text-xs text-foreground"
+            >
+              <option value="">Passar para…</option>
+              <option value="_sem">(ninguém)</option>
+              {equipe.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nome}
+                </option>
+              ))}
+            </select>
+            <button type="button" onClick={() => setSel(new Set())} className="ml-auto text-xs text-foreground/60 underline">
+              limpar seleção
+            </button>
+          </div>
+        )}
+        {msg && (
+          <div className={cn("px-4 py-2 text-sm", msg.erro ? "text-danger" : "text-success")}>{msg.erro ?? msg.ok}</div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-foreground/50">
+                <th className="w-8 px-4 py-2">
+                  <input
+                    type="checkbox"
+                    aria-label="Selecionar todas"
+                    checked={mostradas.length > 0 && mostradas.every((l) => sel.has(l.id))}
+                    onChange={(e) => setSel(e.target.checked ? new Set(mostradas.map((l) => l.id)) : new Set())}
+                  />
+                </th>
+                <th className="px-2 py-2 font-medium">Situação</th>
+                <th className="px-2 py-2 font-medium">Tarefa</th>
+                <th className="px-2 py-2 font-medium">Empresa</th>
+                <th className="px-2 py-2 font-medium whitespace-nowrap">Comp.</th>
+                <th className="px-2 py-2 font-medium whitespace-nowrap">Meta</th>
+                <th className="px-2 py-2 font-medium whitespace-nowrap">Prazo legal</th>
+                {modo === "painel" && <th className="px-2 py-2 font-medium">Responsável</th>}
+                <th className="px-4 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {mostradas.map((l) => (
+                <tr key={l.id} className={cn("border-b border-border/60", sel.has(l.id) ? "bg-brand-soft/30" : "")}>
+                  <td className="px-4 py-2">
+                    <input type="checkbox" checked={sel.has(l.id)} onChange={() => alternar(l.id)} aria-label="Selecionar" />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", SITUACAO_CLASSE[l.sit])}>
+                      {l.status === "EM_ANDAMENTO" ? "Em andamento · " : ""}
+                      {SITUACAO_ROTULO[l.sit]}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="font-medium text-foreground">{l.modelo}</div>
+                    <div className="text-xs text-foreground/50">
+                      {l.departamento}
+                      {l.comentario ? ` · ${l.comentario}` : ""}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 text-foreground/85">{l.empresa}</td>
+                  <td className="px-2 py-2 whitespace-nowrap text-xs text-foreground/60">{rotuloCompetencia(l.competencia)}</td>
+                  <td className="px-2 py-2 whitespace-nowrap text-xs">{ddmm(l.prazo_meta)}</td>
+                  <td className="px-2 py-2 whitespace-nowrap text-xs text-foreground/60">{ddmm(l.prazo_legal)}</td>
+                  {modo === "painel" && (
+                    <td className="px-2 py-2 text-xs text-foreground/70">{l.responsavel ?? <em className="text-foreground/40">sem</em>}</td>
+                  )}
+                  <td className="px-4 py-2 text-right whitespace-nowrap">
+                    {aberta(l.status) ? (
+                      <BotaoAcao onClick={() => mudarStatus([l.id], "CONCLUIDA")} disabled={pendente} primario>
+                        Concluir
+                      </BotaoAcao>
+                    ) : (
+                      <BotaoAcao onClick={() => mudarStatus([l.id], "A_FAZER")} disabled={pendente}>
+                        Reabrir
+                      </BotaoAcao>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {visiveis.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-4 py-8 text-center text-foreground/60">
+                    {linhas.length ? "Nenhuma tarefa com esse filtro." : vazio}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {visiveis.length > limite && (
+          <div className="border-t border-border px-4 py-2 text-center">
+            <button type="button" onClick={() => setLimite(limite + PAGINA)} className="text-sm text-brand underline">
+              Mostrar mais ({visiveis.length - limite} restantes)
+            </button>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function BotaoAcao({
+  children,
+  onClick,
+  disabled,
+  primario,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  primario?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "rounded-lg px-2.5 py-1 text-xs font-medium disabled:opacity-50",
+        primario ? "bg-brand text-brand-foreground" : "border border-border bg-surface text-foreground hover:bg-surface-muted",
+      )}
+    >
+      {children}
+    </button>
+  );
+}

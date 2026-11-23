@@ -11,6 +11,7 @@ import { mesAnteriorBrasilia } from "@/lib/competencia";
 import { competenciasTrimestre, resolverRbt12 } from "@/lib/faturamento";
 import { resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { calcularImpostoResumo, resolverIssMensal } from "@/lib/calculo-impostos";
+import { MinhasTarefasResumo } from "./MinhasTarefasResumo";
 import { AgendaTributariaBloco, AgendaTributariaCarregando, carregarAgenda, mesAgendaDoParam } from "./AgendaTributaria";
 import { buscarAgregadoNotasDistribuidas, buscarEquiparacaoPorChaves } from "@/lib/notas-distribuidas-agregado";
 
@@ -512,6 +513,10 @@ export default async function AdminDashboardPage(props: PageProps<"/admin">) {
           </div>
         )}
       </Card>
+
+      <Suspense fallback={null}>
+        <MinhasTarefasResumo supabase={supabase} />
+      </Suspense>
 
       <Suspense fallback={<AgendaTributariaCarregando />}>
         <AgendaTributariaBloco dados={agendaPromise} searchParams={searchParams} />

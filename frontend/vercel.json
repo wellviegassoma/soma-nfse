@@ -48,6 +48,10 @@
     {
       "path": "/api/cron/agenda-tributaria",
       "schedule": "20 10 * * *"
+    },
+    {
+      "path": "/api/cron/tarefas",
+      "schedule": "40 10 * * *"
     }
   ]
 }
