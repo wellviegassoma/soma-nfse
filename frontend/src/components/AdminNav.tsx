@@ -78,6 +78,7 @@ export function AdminNav({
   podeEmitirNotas,
   pedidosPendentes = 0,
   intimacoesNovas = 0,
+  tarefasUrgentes = 0,
   aviso,
 }: {
   isSuperAdmin: boolean;
@@ -85,6 +86,8 @@ export function AdminNav({
   podeEmitirNotas: boolean;
   pedidosPendentes?: number;
   intimacoesNovas?: number;
+  /** Minhas tarefas atrasadas + risco de multa (selo da aba Tarefas). */
+  tarefasUrgentes?: number;
   /** Faixa fixa acima das abas (ex.: alerta de CNPJ fora de ATIVA). */
   aviso?: ReactNode;
 }) {
@@ -135,6 +138,15 @@ export function AdminNav({
                 aria-label={`${pendentes} pendente(s)`}
               >
                 {pendentes > 99 ? "99+" : pendentes}
+              </span>
+            ) : null}
+            {tab.href === TAB_TAREFAS.href && tarefasUrgentes > 0 ? (
+              <span
+                className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-900 px-1.5 align-middle text-xs font-bold leading-none text-white"
+                title={`${tarefasUrgentes} tarefa(s) sua(s) atrasada(s) ou em risco de multa`}
+                aria-label={`${tarefasUrgentes} urgente(s)`}
+              >
+                {tarefasUrgentes > 99 ? "99+" : tarefasUrgentes}
               </span>
             ) : null}
             {tab.href === TAB_INTIMACOES.href && intimacoesNovas > 0 ? (

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { requireSomaStaff, getCurrentProfileName, isSuperAdmin, temPermissao } from "@/lib/auth";
+import { requireSomaStaff, requireUser, getCurrentProfileName, isSuperAdmin, temPermissao } from "@/lib/auth";
+import { contarTarefasUrgentes } from "./MinhasTarefasResumo";
 import { Logo } from "@/components/Logo";
 import { LogoutButton } from "@/components/LogoutButton";
 import { AdminNav } from "@/components/AdminNav";
@@ -13,6 +14,7 @@ export default async function AdminLayout({
   children,
 }: LayoutProps<"/admin">) {
   await requireSomaStaff();
+  const user = await requireUser();
   // Depois do requireSomaStaff, usuário e permissões já estão em cache na
   // requisição — o resto sai junto, numa ida só ao banco (antes eram ~7
   // consultas em fila, ~1 s de piso em toda tela do painel).
@@ -29,6 +31,8 @@ export default async function AdminLayout({
     pedidosPendentes,
     // Selo da aba Intimações: Caixa Postal do e-CAC sem ninguém tratando.
     intimacoesNovas,
+    // Selo da aba Tarefas: minhas atrasadas + risco de multa.
+    tarefasUrgentes,
   ] = await Promise.all([
     getCurrentProfileName(),
     isSuperAdmin(),
@@ -38,6 +42,7 @@ export default async function AdminLayout({
     temPermissao("comercial.ver"),
     contarPedidosPendentes().catch(() => 0),
     contarIntimacoesNovas(supabase).catch(() => 0),
+    contarTarefasUrgentes(supabase, user.id).catch(() => 0),
   ]);
   const podeGerenciarUsuarios = podeGerenciarEquipe || podeGerenciarClientes;
 
@@ -104,6 +109,7 @@ export default async function AdminLayout({
           podeEmitirNotas={podeEmitirNotas}
           pedidosPendentes={pedidosPendentes}
           intimacoesNovas={intimacoesNovas}
+          tarefasUrgentes={tarefasUrgentes}
           aviso={
             // Em Suspense pra não segurar o cabeçalho nem o loading.tsx
             // enquanto a consulta da faixa vermelha roda.

@@ -9,6 +9,7 @@ const ITENS = [
   { href: "/admin/tarefas/painel", label: "Painel geral" },
   { href: "/admin/tarefas/empresas", label: "Por empresa" },
   { href: "/admin/tarefas/quadro", label: "Quadro" },
+  { href: "/admin/tarefas/produtividade", label: "Produtividade" },
 ];
 
 export function TarefasNav() {

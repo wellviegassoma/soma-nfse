@@ -242,3 +242,50 @@ Fase 2 implementada (migration `20261123180000_fase_cd_tarefas_etapas.sql`, apli
 etapas com cascata, conclusão automática (`lib/tarefas-automacao.ts`), "Aguardando cliente", editor de
 etapas em Modelos de tarefa e aba Quadro. Teste com 163 tarefas do Simples de out/2026 (78 etapas
 concluídas pelas centrais, 26 em cascata para o Atendimento) apagado depois.
+
+## 10. Fase 3 — proposta revisada (23/11/2026)
+
+Decisão do Wellington: a entrega ao cliente continua **no eContador**; o SOMA Gestão só
+**confere pela API** que o documento está lá, disponível, e se o cliente visualizou.
+
+### 10.1 O que a API do eContador (ePlugin) mostra hoje
+- Documentação oficial (eplugin.pack.alterdata.com.br): `GET /api/v1/integracao/documentos`
+  (filtro obrigatório `filter[empresaId]`, mais `pago`, `criacao`, `vencimento`, `expiracao`,
+  `pagamento`). Campos: `titulo`, `categoria` (ex.: "Guias"), `departamento`, `vencimento`,
+  `criacao`, `valor`, `pago`, `pagamento`, `status` (só aparece "Recebido"), `arquivos`.
+- **Não há campo de visualização/leitura/download documentado.** O único "lido/leituras" da API
+  é do Atendimento, não de documentos. Também não há webhook.
+- Teste só leitura com o token da SOMA (23/11): a lista de empresas responde, mas documentos
+  devolve 403 "Empresa não foi encontrada" para o id da empresa (dp), o `externoid` e números
+  pequenos — o id que a API de documentos espera não está documentado.
+
+⇒ Duas perguntas para o suporte da Alterdata antes de construir a conferência:
+1. Qual `empresaId` usar em `/integracao/documentos` (e `filter[login]` em categorias)?
+2. A API expõe se/quando o cliente visualizou ou baixou o documento? (o eContador mostra isso na
+   tela?) Se não, há previsão?
+
+### 10.2 Conferência no eContador (depende das respostas)
+- Etapa com fonte nova **"Documento no eContador"**: conclui quando aparece documento da empresa
+  na categoria/título esperados com vencimento da competência (ex.: DAS de out/2026).
+- **"Cliente visualizou"** como etapa `cliente`, se a API expuser; senão fica de fora.
+- Bônus: `pago`/`pagamento` do eContador como segunda fonte de "Cliente pagou".
+
+### 10.3 Alertas internos (não depende da Alterdata)
+- Selo na aba **Tarefas** com o número das minhas atrasadas + risco de multa.
+- **E-mail diário às 8h** para cada responsável (SMTP que já existe): vencem hoje, próximos
+  3 dias, atrasadas, risco de multa — um e-mail por pessoa, só se houver algo.
+- Resumo para o gestor: risco de multa da carteira inteira.
+
+### 10.4 Painel de produtividade (não depende da Alterdata)
+Aba **Produtividade**, por competência:
+- Por pessoa e por departamento: tarefas, concluídas, % **no prazo da meta**, atrasadas, risco
+  de multa, tempo médio entre a geração e a conclusão.
+- Por modelo: onde a rotina trava (etapa com mais tarefas paradas).
+- Clientes que mais seguram (Aguardando cliente há mais tempo).
+- Evolução mês a mês.
+
+### 10.5 Status (23/11/2026)
+Feitos: selo na aba Tarefas, aba Produtividade e e-mail diário (cron `/api/cron/tarefas-alertas`,
+dias úteis 8h; `?previa=1` só monta). Envio depende de `SMTP_USER`/`SMTP_PASS` (senha de app do
+Gmail) e `NEXT_PUBLIC_SITE_URL` na Vercel. Resumo da carteira vai para quem tem
+`configuracoes.editar`. Conferência no eContador aguarda as respostas da Alterdata (§10.1).

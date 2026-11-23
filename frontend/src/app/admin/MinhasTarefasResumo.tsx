@@ -43,3 +43,21 @@ export async function MinhasTarefasResumo({ supabase }: { supabase: SupabaseServ
     </Link>
   );
 }
+
+/** Selo da aba Tarefas: minhas atrasadas + risco de multa (consulta enxuta, no layout). */
+export async function contarTarefasUrgentes(supabase: SupabaseServer, userId: string): Promise<number> {
+  const { data } = await supabase
+    .from("tarefas")
+    .select("status, prazo_meta, prazo_legal, aguardando_cliente")
+    .eq("responsavel_id", userId)
+    .in("status", ["A_FAZER", "EM_ANDAMENTO"])
+    .lte("prazo_meta", hojeBrasilia())
+    .limit(1000);
+  const hoje = hojeBrasilia();
+  return ((data ?? []) as { status: StatusTarefa; prazo_meta: string | null; prazo_legal: string | null; aguardando_cliente: boolean }[]).filter(
+    (t) => {
+      const s = situacaoTarefa(t, hoje);
+      return s === "ATRASADA" || s === "RISCO";
+    },
+  ).length;
+}
