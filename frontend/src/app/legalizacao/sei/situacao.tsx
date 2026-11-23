@@ -1,5 +1,5 @@
 import { cn } from "@/lib/cn";
-import { SITUACAO_LABELS, type SeiSituacao } from "@/lib/sei-labels";
+import { BOLA_LABELS, SITUACAO_LABELS, diasDesde, type SeiBola, type SeiSituacao } from "@/lib/sei-labels";
 
 const CORES: Record<SeiSituacao, string> = {
   EM_ANDAMENTO: "bg-surface-muted text-foreground/70",
@@ -41,6 +41,31 @@ export function OrigemBadge({
     );
   }
   return null;
+}
+
+export function AnalisarBadge({ nunca }: { nunca: boolean }) {
+  return (
+    <span className="inline-flex whitespace-nowrap rounded-full bg-danger/10 px-2 py-0.5 text-xs font-semibold text-danger">
+      {nunca ? "a analisar" : "andamento novo"}
+    </span>
+  );
+}
+
+const BOLA_CORES: Record<SeiBola, string> = {
+  SOMA: "bg-warning/15 text-warning",
+  CLIENTE: "bg-surface-muted text-foreground/70",
+  PREFEITURA: "bg-surface-muted text-foreground/60",
+};
+
+/** Com quem está a bola e há quantos dias. */
+export function BolaBadge({ bola, desde }: { bola: SeiBola; desde: string | null }) {
+  const dias = diasDesde(desde);
+  return (
+    <span className={cn("inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium", BOLA_CORES[bola])}>
+      {BOLA_LABELS[bola]}
+      {dias != null && ` · ${dias}d`}
+    </span>
+  );
 }
 
 export function NovidadeBadge() {

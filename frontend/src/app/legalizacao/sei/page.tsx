@@ -5,9 +5,9 @@ import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { SITUACAO_LABELS, type SeiSituacao } from "@/lib/sei-labels";
+import { BOLA_LABELS, SITUACAO_LABELS, precisaAnalise, type SeiBola, type SeiSituacao } from "@/lib/sei-labels";
 import { coberturaPetropolis } from "@/lib/sei-cobertura";
-import { NovidadeBadge, OrigemBadge, SituacaoBadge, dataHoraBr, temNovidade } from "./situacao";
+import { AnalisarBadge, BolaBadge, OrigemBadge, SituacaoBadge, dataHoraBr } from "./situacao";
 
 export const metadata = { title: "SEI — Legalização" };
 
@@ -31,6 +31,11 @@ type Linha = {
   origem: string | null;
   cadastrado_em: string | null;
   sincronizado_em: string | null;
+  ultima_analise_em: string | null;
+  ultima_analise_ate: string | null;
+  bola: SeiBola | null;
+  bola_desde: string | null;
+  analista: { full_name: string } | null;
   empresa: { legal_name: string; trade_name: string | null; codigo_cliente: string | null; ativa: boolean } | null;
 };
 
@@ -41,6 +46,7 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const situacao = typeof sp.situacao === "string" ? sp.situacao : "";
   const filtro = typeof sp.filtro === "string" ? sp.filtro : "";
+  const bolaFiltro = typeof sp.bola === "string" && sp.bola in BOLA_LABELS ? (sp.bola as SeiBola) : "";
 
   const supabase = await createClient();
   const [processos, { data: ultimaSync }, cobertura] = await Promise.all([
@@ -48,7 +54,7 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
       supabase
         .from("sei_processos")
         .select(
-          "id, numero, tipo, situacao, company_id, requerente_nome, interessados, ultimo_andamento_em, ultimo_andamento_texto, novidade_em, visto_em, acesso_expirado, arquivado_em, motivo_arquivamento, origem, cadastrado_em, sincronizado_em, empresa:companies(legal_name, trade_name, codigo_cliente, ativa)",
+          "id, numero, tipo, situacao, company_id, requerente_nome, interessados, ultimo_andamento_em, ultimo_andamento_texto, novidade_em, visto_em, acesso_expirado, arquivado_em, motivo_arquivamento, origem, cadastrado_em, sincronizado_em, ultima_analise_em, ultima_analise_ate, bola, bola_desde, analista:profiles!sei_processos_ultima_analise_por_fkey(full_name), empresa:companies(legal_name, trade_name, codigo_cliente, ativa)",
         )
         .order("ultimo_andamento_em", { ascending: false, nullsFirst: false })
         .order("id")
@@ -78,7 +84,8 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
   const linhas = (filtro === "arquivados" ? arquivados : todas).filter((l) => {
     if (situacao && l.situacao !== situacao) return false;
     if (filtro === "sem_cliente" && l.company_id) return false;
-    if (filtro === "novidade" && !temNovidade(l)) return false;
+    if (filtro === "analisar" && !precisaAnalise(l)) return false;
+    if (bolaFiltro && l.bola !== bolaFiltro) return false;
     if (filtro === "cliente_inativo" && !clienteInativo(l)) return false;
     if (alvo) {
       const texto = normalizar(
@@ -95,6 +102,7 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
     if (q) params.set("q", q);
     if (situacao) params.set("situacao", situacao);
     if (filtro) params.set("filtro", filtro);
+    if (bolaFiltro) params.set("bola", bolaFiltro);
     for (const [k, v] of Object.entries(extra)) {
       if (v) params.set(k, v);
       else params.delete(k);
@@ -104,7 +112,7 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
   };
 
   const cards: { chave: string; label: string; n: number; href: string; ativo: boolean; destaque?: boolean }[] = [
-    { chave: "novidade", label: "Com novidade", n: contar(temNovidade), href: url({ filtro: filtro === "novidade" ? "" : "novidade" }), ativo: filtro === "novidade", destaque: true },
+    { chave: "analisar", label: "A analisar", n: contar((l) => precisaAnalise(l)), href: url({ filtro: filtro === "analisar" ? "" : "analisar" }), ativo: filtro === "analisar", destaque: true },
     ...SITUACOES.map((s) => ({
       chave: s,
       label: SITUACAO_LABELS[s],
@@ -119,6 +127,14 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
     { chave: "cliente_inativo", label: "Cliente inativo (arquivar?)", n: contar(clienteInativo), href: url({ filtro: filtro === "cliente_inativo" ? "" : "cliente_inativo" }), ativo: filtro === "cliente_inativo", destaque: true },
     { chave: "arquivados", label: "Arquivados", n: arquivados.length, href: url({ filtro: filtro === "arquivados" ? "" : "arquivados" }), ativo: filtro === "arquivados" },
   ];
+  const cardsBola: typeof cards = (["SOMA", "CLIENTE", "PREFEITURA"] as SeiBola[]).map((b) => ({
+    chave: `bola-${b}`,
+    label: BOLA_LABELS[b],
+    n: contar((l) => l.bola === b),
+    href: url({ bola: bolaFiltro === b ? "" : b }),
+    ativo: bolaFiltro === b,
+    destaque: b === "SOMA",
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -157,6 +173,19 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {cardsBola.map((c) => (
+          <Link key={c.chave} href={c.href}>
+            <Card
+              className={`flex items-center justify-between gap-3 px-4 py-3 transition-colors ${c.ativo ? "border-brand ring-2 ring-brand/20" : "hover:bg-surface-muted"}`}
+            >
+              <div className="text-sm text-foreground/70">{c.label}</div>
+              <div className={`text-xl font-semibold ${c.destaque && c.n > 0 ? "text-warning" : "text-foreground"}`}>{c.n}</div>
+            </Card>
+          </Link>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {cardsExtras.map((c) => (
           <Link key={c.chave} href={c.href}>
             <Card
@@ -172,12 +201,13 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
       <form className="flex flex-wrap items-end gap-3">
         {situacao && <input type="hidden" name="situacao" value={situacao} />}
         {filtro && <input type="hidden" name="filtro" value={filtro} />}
+        {bolaFiltro && <input type="hidden" name="bola" value={bolaFiltro} />}
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-foreground/60">Buscar</label>
           <Input name="q" defaultValue={q} placeholder="Processo, cliente, tipo…" className="w-72" />
         </div>
         <Button type="submit" variant="secondary">Filtrar</Button>
-        {(q || situacao || filtro) && (
+        {(q || situacao || filtro || bolaFiltro) && (
           <Link href="/legalizacao/sei" className="py-2 text-sm text-foreground/60 hover:text-foreground">
             Limpar
           </Link>
@@ -191,6 +221,7 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
               <th className="px-4 py-3 font-medium">Processo</th>
               <th className="px-4 py-3 font-medium">Cliente</th>
               <th className="px-4 py-3 font-medium">Situação</th>
+              <th className="px-4 py-3 font-medium">Análise</th>
               <th className="px-4 py-3 font-medium">Último andamento</th>
             </tr>
           </thead>
@@ -219,7 +250,6 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
                   <div className="flex flex-wrap gap-1">
                     <SituacaoBadge situacao={l.situacao} />
                     <OrigemBadge origem={l.origem} cadastradoEm={l.cadastrado_em} sincronizadoEm={l.sincronizado_em} />
-                    {temNovidade(l) && <NovidadeBadge />}
                     {l.acesso_expirado && <span className="text-xs text-foreground/40">acesso expirado</span>}
                     {!l.arquivado_em && clienteInativo(l) && (
                       <span className="text-xs text-danger">cliente inativo — arquivar?</span>
@@ -232,6 +262,17 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
                     </div>
                   )}
                 </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-col items-start gap-1">
+                    {precisaAnalise(l) && <AnalisarBadge nunca={!l.ultima_analise_em} />}
+                    {l.bola && <BolaBadge bola={l.bola} desde={l.bola_desde} />}
+                    {l.ultima_analise_em && (
+                      <span className="text-xs text-foreground/50">
+                        {l.analista?.full_name ?? "alguém"}, {dataHoraBr(l.ultima_analise_em)}
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="max-w-md px-4 py-3">
                   <div className="text-xs text-foreground/50">{dataHoraBr(l.ultimo_andamento_em)}</div>
                   <div className="line-clamp-2 text-foreground/80">{l.ultimo_andamento_texto}</div>
@@ -240,7 +281,7 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
             ))}
             {linhas.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-foreground/50">
+                <td colSpan={5} className="px-4 py-10 text-center text-foreground/50">
                   Nenhum processo{todas.length ? " com esse filtro" : " ainda: rode a extensão SOMA · SEI"}.
                 </td>
               </tr>

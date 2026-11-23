@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import {
   vincularProcessoSei,
-  marcarSeiVisto,
+  registrarAnaliseSei,
+  comentarSei,
+  excluirComentarioSei,
   arquivarProcessoSei,
   desarquivarProcessoSei,
   atualizarSituacaoManualSei,
@@ -19,15 +21,22 @@ import {
 } from "@/lib/actions/sei";
 import { AnexarDocumentoManual } from "./AnexarDocumentoManual";
 import {
+  BOLA_LABELS,
   MOTIVOS_ARQUIVAMENTO,
   SITUACAO_LABELS,
   VINCULO_LABELS,
   andamentoRotineiro,
+  diasDesde,
   formatarDocumento,
+  precisaAnalise,
+  type SeiBola,
   type SeiSituacao,
   type VinculoOrigem,
 } from "@/lib/sei-labels";
-import { NovidadeBadge, OrigemBadge, SituacaoBadge, dataBr, dataHoraBr, diaBr, temNovidade } from "../situacao";
+import { AnalisarBadge, BolaBadge, OrigemBadge, SituacaoBadge, dataBr, dataHoraBr, diaBr } from "../situacao";
+
+type Autor = { full_name: string } | null;
+const nomeAutor = (a: unknown) => (a as Autor)?.full_name ?? "alguém";
 
 const hojeSp = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
 
@@ -48,7 +57,16 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
     .maybeSingle();
   if (!p) notFound();
 
-  const [{ data: andamentos }, { data: documentos }, { data: empresas }] = await Promise.all([
+  const [
+    { data: andamentos },
+    { data: documentos },
+    { data: empresas },
+    { data: analises },
+    { data: comentarios },
+    {
+      data: { user },
+    },
+  ] = await Promise.all([
     supabase
       .from("sei_andamentos")
       .select("id, data_hora, unidade, descricao, created_at, manual")
@@ -64,6 +82,19 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
     podeEditar
       ? supabase.from("companies").select("id, legal_name, trade_name, cnpj, codigo_cliente").order("legal_name").limit(5000)
       : Promise.resolve({ data: [] }),
+    supabase
+      .from("sei_analises")
+      .select("id, analisado_ate, bola, comentario, created_at, autor:profiles!sei_analises_criado_por_fkey(full_name)")
+      .eq("processo_id", processoId)
+      .order("created_at", { ascending: false })
+      .limit(500),
+    supabase
+      .from("sei_comentarios")
+      .select("id, texto, created_at, criado_por, autor:profiles!sei_comentarios_criado_por_fkey(full_name)")
+      .eq("processo_id", processoId)
+      .order("created_at", { ascending: false })
+      .limit(1000),
+    supabase.auth.getUser(),
   ]);
 
   const empresa = p.empresa as {
@@ -73,19 +104,42 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
     codigo_cliente: string | null;
     ativa: boolean;
   } | null;
-  const novidade = temNovidade(p);
+  const aAnalisar = precisaAnalise(p);
+  const ultimaAnalise = (analises ?? [])[0] ?? null;
   // Cadastrado à mão e ainda não assumido pela sincronização: situação é manual.
   const manual = !!p.cadastrado_em && !p.sincronizado_em;
   const lista = (andamentos ?? []).filter((a) => mostrarTramitacao || !andamentoRotineiro(a.descricao));
   const ocultos = (andamentos ?? []).length - lista.length;
+  const relevantes = (andamentos ?? []).filter((a) => !andamentoRotineiro(a.descricao));
+  // Andamento relevante depois da última análise = ninguém viu ainda.
+  const naoAnalisado = (a: { data_hora: string; descricao: string }) =>
+    !!ultimaAnalise &&
+    !andamentoRotineiro(a.descricao) &&
+    (!p.ultima_analise_ate || new Date(a.data_hora) > new Date(p.ultima_analise_ate));
 
-  // Agrupa por dia (já em ordem decrescente).
-  const dias: { dia: string; itens: typeof lista }[] = [];
-  for (const a of lista) {
-    const dia = diaBr(a.data_hora);
+  // Linha do tempo: andamentos + comentários + marcas "analisado até aqui".
+  // A marca fica no ponto do andamento analisado (acima dele, na ordem desc).
+  type Item =
+    | { tipo: "andamento"; t: number; ord: number; a: NonNullable<typeof andamentos>[number] }
+    | { tipo: "comentario"; t: number; ord: number; c: NonNullable<typeof comentarios>[number] }
+    | { tipo: "analise"; t: number; ord: number; an: NonNullable<typeof analises>[number] };
+  const itens: Item[] = [
+    ...lista.map((a) => ({ tipo: "andamento" as const, t: new Date(a.data_hora).getTime(), ord: 0, a })),
+    ...(comentarios ?? []).map((c) => ({ tipo: "comentario" as const, t: new Date(c.created_at).getTime(), ord: 1, c })),
+    ...(analises ?? []).map((an) => ({
+      tipo: "analise" as const,
+      t: new Date(an.analisado_ate ?? an.created_at).getTime(),
+      ord: 2,
+      an,
+    })),
+  ].sort((x, y) => y.t - x.t || y.ord - x.ord);
+
+  const dias: { dia: string; itens: Item[] }[] = [];
+  for (const it of itens) {
+    const dia = diaBr(new Date(it.t).toISOString());
     const ultimo = dias[dias.length - 1];
-    if (ultimo?.dia === dia) ultimo.itens.push(a);
-    else dias.push({ dia, itens: [a] });
+    if (ultimo?.dia === dia) ultimo.itens.push(it);
+    else dias.push({ dia, itens: [it] });
   }
   const horaBr = (iso: string) =>
     new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
@@ -107,15 +161,8 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
           <h1 className="text-xl font-semibold text-foreground">{p.numero}</h1>
           <SituacaoBadge situacao={p.situacao as SeiSituacao} />
           <OrigemBadge origem={p.origem} cadastradoEm={p.cadastrado_em} sincronizadoEm={p.sincronizado_em} />
-          {novidade && <NovidadeBadge />}
-          {novidade && (
-            <form action={marcarSeiVisto}>
-              <input type="hidden" name="processoId" value={p.id} />
-              <Button type="submit" variant="ghost" className="h-8 px-2 text-xs">
-                Marcar como visto
-              </Button>
-            </form>
-          )}
+          {aAnalisar && <AnalisarBadge nunca={!p.ultima_analise_em} />}
+          {p.bola && <BolaBadge bola={p.bola as SeiBola} desde={p.bola_desde} />}
         </div>
         <p className="text-sm text-foreground/60">
           {p.tipo}
@@ -125,6 +172,67 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
         </p>
         {p.observacao && <p className="mt-1 whitespace-pre-line text-sm text-foreground/70">{p.observacao}</p>}
       </div>
+
+      <Card className={`flex flex-col gap-3 p-4 ${aAnalisar ? "border-danger/40" : ""}`}>
+        <div className="text-sm">
+          {ultimaAnalise ? (
+            <>
+              <span className="font-medium">Última análise:</span> {nomeAutor(ultimaAnalise.autor)} em{" "}
+              {dataHoraBr(ultimaAnalise.created_at)}
+              {ultimaAnalise.analisado_ate && <> — analisado até o andamento de {dataHoraBr(ultimaAnalise.analisado_ate)}</>}
+              {" · "}
+              <strong>{BOLA_LABELS[ultimaAnalise.bola as SeiBola]}</strong>
+              {p.bola_desde && ` há ${diasDesde(p.bola_desde)} dia(s)`}
+              {ultimaAnalise.comentario && (
+                <div className="mt-1 whitespace-pre-line text-foreground/70">“{ultimaAnalise.comentario}”</div>
+              )}
+              {aAnalisar && <div className="mt-1 text-danger">Chegou andamento depois dessa análise.</div>}
+            </>
+          ) : (
+            <span className="text-danger">Ninguém registrou análise deste processo ainda.</span>
+          )}
+        </div>
+        {podeEditar && (
+          <form action={registrarAnaliseSei} className="flex flex-col gap-2 border-t border-border pt-3">
+            <input type="hidden" name="processoId" value={p.id} />
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-foreground/60">Analisei até o andamento</label>
+                <Select name="ate" defaultValue={relevantes[0]?.data_hora ?? ""} className="h-9 w-80 text-xs">
+                  {relevantes.length === 0 && <option value="">(sem andamentos)</option>}
+                  {relevantes.slice(0, 20).map((a) => (
+                    <option key={a.id} value={a.data_hora}>
+                      {dataHoraBr(a.data_hora)} — {a.descricao.slice(0, 60)}
+                      {a.descricao.length > 60 ? "…" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-foreground/60">Com quem está a bola</label>
+                <Select name="bola" defaultValue={p.bola ?? "PREFEITURA"} className="h-9 w-52 text-xs">
+                  {(Object.keys(BOLA_LABELS) as SeiBola[]).map((b) => (
+                    <option key={b} value={b}>
+                      {BOLA_LABELS[b]}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+            <Input
+              name="comentario"
+              maxLength={2000}
+              placeholder="O que foi visto / o que estamos esperando (opcional)"
+              className="h-9 text-sm"
+            />
+            <div>
+              <Button type="submit" className="h-9">
+                Registrar análise
+              </Button>
+            </div>
+          </form>
+        )}
+      </Card>
 
       {manual && (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
@@ -242,7 +350,7 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold">Andamentos</h2>
+            <h2 className="text-base font-semibold">Linha do tempo</h2>
             <Link
               href={mostrarTramitacao ? `/legalizacao/sei/${p.id}` : `/legalizacao/sei/${p.id}?tramitacao=1`}
               className="text-xs text-foreground/60 hover:text-foreground"
@@ -275,20 +383,73 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
               </form>
             </details>
           )}
+          {podeEditar && (
+            <form action={comentarSei} className="flex gap-2">
+              <input type="hidden" name="processoId" value={p.id} />
+              <Input
+                name="texto"
+                required
+                maxLength={5000}
+                placeholder="Comentário interno da equipe (ex.: liguei, o fiscal vai semana que vem)"
+                className="h-9 flex-1 text-sm"
+              />
+              <Button type="submit" variant="secondary" className="h-9">
+                Comentar
+              </Button>
+            </form>
+          )}
           {dias.map((d) => (
             <div key={d.dia} className="flex flex-col gap-2">
               <div className="text-xs font-semibold text-foreground/50">{d.dia}</div>
-              {d.itens.map((a) => {
+              {d.itens.map((it) => {
+                if (it.tipo === "analise") {
+                  const an = it.an;
+                  return (
+                    <div key={`an-${an.id}`} className="flex items-center gap-2 text-xs text-brand">
+                      <div className="h-px flex-1 bg-brand/40" />
+                      <span className="max-w-[80%] text-center">
+                        Analisado por {nomeAutor(an.autor)} em {dataHoraBr(an.created_at)} ·{" "}
+                        {BOLA_LABELS[an.bola as SeiBola]}
+                        {an.comentario && ` — “${an.comentario}”`}
+                      </span>
+                      <div className="h-px flex-1 bg-brand/40" />
+                    </div>
+                  );
+                }
+                if (it.tipo === "comentario") {
+                  const c = it.c;
+                  return (
+                    <div key={`c-${c.id}`} className="rounded-lg border border-brand/30 bg-brand/5 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2 text-xs text-foreground/50">
+                        <span>
+                          {horaBr(c.created_at)} · comentário de {nomeAutor(c.autor)}
+                        </span>
+                        {podeEditar && c.criado_por === user?.id && (
+                          <form action={excluirComentarioSei}>
+                            <input type="hidden" name="comentarioId" value={c.id} />
+                            <button type="submit" className="text-foreground/40 hover:text-danger">
+                              excluir
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                      <div className="whitespace-pre-line text-sm">{c.texto}</div>
+                    </div>
+                  );
+                }
+                const a = it.a;
                 const rotina = andamentoRotineiro(a.descricao);
+                const novo = naoAnalisado(a);
                 return (
                   <div
                     key={a.id}
-                    className={`rounded-lg border px-3 py-2 ${rotina ? "border-dashed border-border text-foreground/50" : destaque(a.descricao)}`}
+                    className={`rounded-lg border px-3 py-2 ${rotina ? "border-dashed border-border text-foreground/50" : destaque(a.descricao)} ${novo ? "ring-2 ring-danger/40" : ""}`}
                   >
                     <div className="flex items-center justify-between gap-2 text-xs text-foreground/50">
                       <span>
                         {horaBr(a.data_hora)} · {a.unidade}
                         {a.manual && <span className="ml-1 rounded bg-brand/10 px-1 text-brand">lançado à mão</span>}
+                        {novo && <span className="ml-1 rounded bg-danger/10 px-1 font-semibold text-danger">não analisado</span>}
                       </span>
                       {a.manual && podeEditar && (
                         <form action={excluirAndamentoManualSei}>

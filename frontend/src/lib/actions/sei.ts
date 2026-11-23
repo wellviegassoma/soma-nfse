@@ -312,6 +312,81 @@ export async function desfazerDispensaSei(formData: FormData) {
   revalidatePath("/legalizacao/sei", "layout");
 }
 
+// ---------------------------------------------------------------------------
+// Análise ("analisado até aqui") e comentários internos
+// ---------------------------------------------------------------------------
+
+/** Registra que alguém analisou o processo até um andamento e com quem está a bola. */
+export async function registrarAnaliseSei(formData: FormData) {
+  await requirePermissao("legalizacao.editar");
+  const processoId = z.string().uuid().parse(formData.get("processoId"));
+  const bola = z.enum(["PREFEITURA", "CLIENTE", "SOMA"]).parse(formData.get("bola"));
+  const ateBruto = String(formData.get("ate") ?? "");
+  const ate = ateBruto ? z.string().datetime({ offset: true }).parse(ateBruto) : null;
+  const comentario = String(formData.get("comentario") ?? "").trim().slice(0, 2000) || null;
+
+  const supabase = await createClient();
+  const { data: user } = await supabase.auth.getUser();
+  const { data: p, error: e1 } = await supabase
+    .from("sei_processos")
+    .select("bola, bola_desde")
+    .eq("id", processoId)
+    .single();
+  if (e1) throw e1;
+
+  const agora = new Date().toISOString();
+  const { error: e2 } = await supabase.from("sei_analises").insert({
+    processo_id: processoId,
+    analisado_ate: ate,
+    bola,
+    comentario,
+    criado_por: user.user?.id ?? null,
+    created_at: agora,
+  });
+  if (e2) throw e2;
+
+  const { error: e3 } = await supabase
+    .from("sei_processos")
+    .update({
+      ultima_analise_em: agora,
+      ultima_analise_ate: ate,
+      ultima_analise_por: user.user?.id ?? null,
+      bola,
+      // "há quantos dias" conta desde que a bola mudou de mão, não desde cada análise.
+      bola_desde: p.bola === bola && p.bola_desde ? p.bola_desde : agora,
+      visto_em: agora,
+      visto_por: user.user?.id ?? null,
+    })
+    .eq("id", processoId);
+  if (e3) throw e3;
+  revalidatePath("/legalizacao/sei", "layout");
+}
+
+export async function comentarSei(formData: FormData) {
+  await requirePermissao("legalizacao.editar");
+  const processoId = z.string().uuid().parse(formData.get("processoId"));
+  const texto = z.string().trim().min(1).max(5000).parse(formData.get("texto"));
+  const supabase = await createClient();
+  const { data: user } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from("sei_comentarios")
+    .insert({ processo_id: processoId, texto, criado_por: user.user?.id ?? null });
+  if (error) throw error;
+  revalidatePath("/legalizacao/sei", "layout");
+}
+
+/** Só quem escreveu apaga o próprio comentário. */
+export async function excluirComentarioSei(formData: FormData) {
+  await requirePermissao("legalizacao.editar");
+  const id = z.string().uuid().parse(formData.get("comentarioId"));
+  const supabase = await createClient();
+  const { data: user } = await supabase.auth.getUser();
+  if (!user.user) return;
+  const { error } = await supabase.from("sei_comentarios").delete().eq("id", id).eq("criado_por", user.user.id);
+  if (error) throw error;
+  revalidatePath("/legalizacao/sei", "layout");
+}
+
 /** Tira o selo "novidade" do processo. */
 export async function marcarSeiVisto(formData: FormData) {
   await requirePermissao("legalizacao.ver");

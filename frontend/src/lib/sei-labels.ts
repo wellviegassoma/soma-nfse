@@ -20,6 +20,28 @@ export const VINCULO_LABELS: Record<VinculoOrigem, string> = {
   FORMULARIO_NOME: "pelo nome no requerimento",
 };
 
+/** Com quem está a bola depois da última análise. */
+export type SeiBola = "PREFEITURA" | "CLIENTE" | "SOMA";
+
+export const BOLA_LABELS: Record<SeiBola, string> = {
+  PREFEITURA: "Aguardando Prefeitura",
+  CLIENTE: "Aguardando cliente",
+  SOMA: "Conosco",
+};
+
+/** Nunca analisado, ou com andamento relevante depois da última análise. */
+export function precisaAnalise(p: { ultima_analise_ate: string | null; ultima_analise_em: string | null; ultimo_andamento_em: string | null }) {
+  if (!p.ultima_analise_em) return true;
+  if (!p.ultimo_andamento_em) return false;
+  if (!p.ultima_analise_ate) return false;
+  return new Date(p.ultimo_andamento_em) > new Date(p.ultima_analise_ate);
+}
+
+export function diasDesde(iso: string | null): number | null {
+  if (!iso) return null;
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+}
+
 export const MOTIVOS_ARQUIVAMENTO = ["Cliente saiu da SOMA", "Processo encerrado", "Processo de outro cliente", "Outro"] as const;
 
 export type MotivoDispensa =
