@@ -23,6 +23,16 @@ Arquivamento e cobertura (fase_cm, commit 3182ccd):
   aviso no log se nenhuma servir); processo só com acesso vencido que não abre é registrado com
   `somente_registro` (não sobrescreve dados já lidos).
 
+Processo manual (fase_cn, commit c452b44) — **só clientes de Petrópolis**; outros municípios
+seguem em Alvarás e licenças › Renovações:
+- `/legalizacao/sei/novo` (e atalho por cliente na cobertura). Origem `SEI` (entrada sem acesso
+  da SOMA; número PMP.000123/2026) ou `FISICO` (protocolo do balcão/outro sistema, número livre).
+  `vinculo_origem = MANUAL`, `cadastrado_em/por`, `data_entrada`, `observacao`.
+- Enquanto `sincronizado_em` é nulo a situação é escolhida à mão. Andamentos e anexos à mão
+  (`manual = true`, chave aleatória / `numero_sei` "M-…") convivem com os do SEI e podem ser excluídos.
+- Se o número do SEI passar a aparecer no acesso da SOMA, o upsert por `numero` assume o processo:
+  mantém cliente (MANUAL), origem, observação e lançamentos; situação passa a vir do SEI.
+
 Aprendizados da implementação (valem para manutenção da extensão `extensao-sei/`):
 - Acessar o SEI **de dentro da aba do SEI** (`chrome.scripting`); da página da extensão o cookie
   de sessão não vai.
