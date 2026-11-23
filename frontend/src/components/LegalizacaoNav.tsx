@@ -9,6 +9,7 @@ const TABS = [
   { href: "/legalizacao/licencas", label: "Alvarás e licenças" },
   { href: "/legalizacao/renovacoes", label: "Renovações" },
   { href: "/legalizacao/processos", label: "Processos" },
+  { href: "/legalizacao/sei", label: "SEI" },
   { href: "/legalizacao/fluxos", label: "Fluxos", editarOnly: true },
   { href: "/legalizacao/tipos", label: "Tipos de documento" },
   { href: "/legalizacao/regras", label: "Regras de vencimento", editarOnly: true },

@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "SOMA · SEI",
+  "version": "0.2.0",
+  "description": "Sincroniza os processos do SEI de Petrópolis (acesso externo) com o SOMA Gestão.",
+  "action": { "default_title": "SOMA · SEI — sincronizar" },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["tabs", "storage", "scripting"],
+  "host_permissions": [
+    "https://sei.petropolis.rj.gov.br/*",
+    "https://nfse.somaintegrada.com.br/*",
+    "http://localhost:3000/*",
+    "https://vercel.com/api/blob/*"
+  ]
+}
