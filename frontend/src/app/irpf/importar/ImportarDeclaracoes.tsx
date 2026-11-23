@@ -279,7 +279,7 @@ export function ImportarDeclaracoes() {
             {resumo.invalidos > 0 && <span className="text-danger"> · {resumo.invalidos} arquivo(s) inválido(s)</span>}
           </div>
           {acabou ? (
-            <Link href="/irpf">
+            <Link href="/irpf/declaracoes">
               <Button variant="secondary">Ver declarações</Button>
             </Link>
           ) : (

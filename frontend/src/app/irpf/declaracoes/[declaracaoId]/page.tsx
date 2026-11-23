@@ -99,7 +99,7 @@ export default async function DeclaracaoPage(props: PageProps<"/irpf/declaracoes
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href={`/irpf?ex=${d.exercicio}`} className="text-xs text-foreground/50 hover:text-foreground">
+          <Link href={`/irpf/declaracoes?ex=${d.exercicio}`} className="text-xs text-foreground/50 hover:text-foreground">
             ← Declarações {d.exercicio}
           </Link>
           <h1 className="mt-1 text-xl font-semibold text-foreground">

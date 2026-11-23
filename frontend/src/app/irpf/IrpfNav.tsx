@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 
 const TABS = [
-  { href: "/irpf", label: "Declarações", exact: true },
+  { href: "/irpf", label: "Painel", exact: true },
+  { href: "/irpf/declaracoes", label: "Declarações" },
   { href: "/irpf/contribuintes", label: "Contribuintes" },
   { href: "/irpf/financeiro", label: "Financeiro" },
   { href: "/irpf/importar", label: "Importar .DEC" },
@@ -16,9 +17,7 @@ export function IrpfNav() {
   return (
     <nav className="flex flex-wrap gap-x-1 border-b border-border">
       {TABS.map((t) => {
-        const ativo = t.exact
-          ? pathname === t.href || pathname.startsWith("/irpf/declaracoes")
-          : pathname.startsWith(t.href);
+        const ativo = t.exact ? pathname === t.href : pathname.startsWith(t.href);
         return (
           <Link
             key={t.href}

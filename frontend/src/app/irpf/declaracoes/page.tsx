@@ -38,7 +38,7 @@ type Linha = {
   irpf_contribuintes: { id: string; nome: string; cpf: string } | null;
 };
 
-export default async function IrpfPage(props: PageProps<"/irpf">) {
+export default async function IrpfPage(props: PageProps<"/irpf/declaracoes">) {
   const sp = await props.searchParams;
   const str = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string).trim() : "");
   const supabase = await createClient();
@@ -127,7 +127,7 @@ export default async function IrpfPage(props: PageProps<"/irpf">) {
 
   const urlCom = (extra: Record<string, string>) => {
     const p = new URLSearchParams({ ex: String(exercicio), visao, ...(filtroResp ? { resp: filtroResp } : {}), ...extra });
-    return `/irpf?${p.toString()}`;
+    return `/irpf/declaracoes?${p.toString()}`;
   };
 
   return (
