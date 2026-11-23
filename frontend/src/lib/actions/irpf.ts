@@ -5,6 +5,8 @@ import { del, get } from "@vercel/blob";
 import { createClient } from "@/lib/supabase/server";
 import { requireIrpfAccess, requireUser } from "@/lib/auth";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
+import { encryptSecret, decryptSecret, toBytea, fromBytea } from "@/lib/certificate";
+import { logAudit } from "@/lib/audit";
 import { lerDec, decodificarArquivo, DecInvalidoError, type ResumoDeclaracao } from "@/lib/irpf/dec-parser";
 import { linhasDoPdf } from "@/lib/irpf/pdf-linhas";
 import {
@@ -18,6 +20,8 @@ import {
 import {
   CHECKLIST_STATUS,
   HONORARIO_STATUS,
+  SITUACAO_RECEITA,
+  type SituacaoReceita,
   STATUS_DECLARACAO,
   camposCadastro,
   resumoParaGravar,
@@ -881,4 +885,76 @@ export async function aplicarReajusteAction(input: {
   }
   revalidar();
   return { ok: true, alteradas: mudancas.length };
+}
+
+// ------------------------------------------------------------- gov.br e pós-entrega
+
+/** Grava (ou apaga, com senha vazia) a senha do gov.br do contribuinte, cifrada. */
+export async function salvarSenhaGovbrAction(input: { contribuinteId: string; senha: string }): Promise<{ ok: true } | Erro> {
+  await requireIrpfAccess();
+  const user = await requireUser();
+  const senha = input.senha.trim();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("irpf_contribuintes")
+    .update({
+      govbr_senha_cifrada: senha ? toBytea(encryptSecret(Buffer.from(senha, "utf8"))) : null,
+      govbr_senha_atualizada_em: new Date().toISOString(),
+      govbr_senha_atualizada_por: user.id,
+    })
+    .eq("id", input.contribuinteId);
+  if (error) return { error: error.message };
+  await logAudit({ action: senha ? "UPDATE" : "DELETE", entity: "irpf_senha_govbr", entityId: input.contribuinteId });
+  revalidatePath(`/irpf/contribuintes/${input.contribuinteId}`);
+  return { ok: true };
+}
+
+/** Revela a senha do gov.br. Toda revelação fica em audit_logs (quem e quando). */
+export async function revelarSenhaGovbrAction(contribuinteId: string): Promise<{ senha: string } | Erro> {
+  await requireIrpfAccess();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("irpf_contribuintes")
+    .select("govbr_senha_cifrada")
+    .eq("id", contribuinteId)
+    .maybeSingle();
+  if (error || !data) return { error: "Contribuinte não encontrado." };
+  if (!data.govbr_senha_cifrada) return { error: "Sem senha cadastrada." };
+  let senha: string;
+  try {
+    senha = decryptSecret(fromBytea(data.govbr_senha_cifrada as string)).toString("utf8");
+  } catch {
+    return { error: "Não foi possível decifrar a senha." };
+  }
+  await logAudit({ action: "REVEAL", entity: "irpf_senha_govbr", entityId: contribuinteId });
+  return { senha };
+}
+
+/** Situação na Receita depois da entrega (processada, pendência, malha...). */
+export async function salvarSituacaoReceitaAction(input: {
+  id: string;
+  situacao: SituacaoReceita | null;
+}): Promise<{ ok: true } | Erro> {
+  await requireIrpfAccess();
+  const user = await requireUser();
+  if (input.situacao !== null && !SITUACAO_RECEITA.includes(input.situacao)) return { error: "Situação inválida." };
+  const supabase = await createClient();
+  const { data: antes } = await supabase.from("irpf_declaracoes").select("situacao_receita").eq("id", input.id).maybeSingle();
+  if (!antes) return { error: "Declaração não encontrada." };
+  if (antes.situacao_receita === input.situacao) return { ok: true };
+  const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const { error } = await supabase
+    .from("irpf_declaracoes")
+    .update({ situacao_receita: input.situacao, situacao_receita_em: input.situacao ? hoje : null })
+    .eq("id", input.id);
+  if (error) return { error: error.message };
+  await supabase.from("irpf_eventos").insert({
+    declaracao_id: input.id,
+    user_id: user.id,
+    tipo: "RECEITA",
+    de: antes.situacao_receita,
+    para: input.situacao,
+  });
+  revalidar(input.id);
+  return { ok: true };
 }

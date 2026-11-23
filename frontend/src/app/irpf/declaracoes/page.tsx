@@ -18,6 +18,9 @@ import {
   diasAte,
   type HonorarioStatus,
   type StatusDeclaracao,
+  type SituacaoReceita,
+  SITUACAO_RECEITA_LABEL,
+  SITUACAO_RECEITA_TOM,
 } from "@/lib/irpf/comum";
 import { AbrirExercicioButton } from "./AbrirExercicioButton";
 import { QuadroDeclaracoes } from "./QuadroDeclaracoes";
@@ -35,6 +38,7 @@ type Linha = {
   imposto_restituir: number | null;
   honorario_valor: number | null;
   honorario_status: HonorarioStatus;
+  situacao_receita: SituacaoReceita | null;
   irpf_contribuintes: { id: string; nome: string; cpf: string } | null;
 };
 
@@ -50,6 +54,7 @@ export default async function IrpfPage(props: PageProps<"/irpf/declaracoes">) {
   const exercicio = Number(str("ex")) || ((exs ?? [])[0]?.exercicio as number | undefined) || exercicioAtual();
   const filtroStatus = str("status");
   const filtroResp = str("resp");
+  const filtroReceita = str("receita");
   const q = str("q").toLowerCase();
   const visao = str("visao") === "lista" ? "lista" : "quadro";
 
@@ -58,7 +63,7 @@ export default async function IrpfPage(props: PageProps<"/irpf/declaracoes">) {
       supabase
         .from("irpf_declaracoes")
         .select(
-          "id, status, responsavel_id, completa, retificadora, resultado, imposto_pagar, imposto_restituir, honorario_valor, honorario_status, irpf_contribuintes(id, nome, cpf)",
+          "id, status, responsavel_id, completa, retificadora, resultado, imposto_pagar, imposto_restituir, honorario_valor, honorario_status, situacao_receita, irpf_contribuintes(id, nome, cpf)",
         )
         .eq("exercicio", exercicio)
         .order("id")
@@ -107,6 +112,7 @@ export default async function IrpfPage(props: PageProps<"/irpf/declaracoes">) {
   const filtradas = linhas
     .filter((l) => visao === "quadro" || !filtroStatus || l.status === filtroStatus)
     .filter((l) => !filtroResp || (filtroResp === "sem" ? !l.responsavel_id : l.responsavel_id === filtroResp))
+    .filter((l) => !filtroReceita || l.situacao_receita === filtroReceita)
     .filter((l) => {
       if (!q) return true;
       const dig = q.replace(/\D/g, "");
@@ -236,6 +242,7 @@ export default async function IrpfPage(props: PageProps<"/irpf/declaracoes">) {
         <form className="flex flex-col gap-2 border-b border-border px-5 py-3 sm:flex-row sm:items-center">
           <input type="hidden" name="ex" value={exercicio} />
           <input type="hidden" name="visao" value={visao} />
+          {filtroReceita && <input type="hidden" name="receita" value={filtroReceita} />}
           {visao === "lista" && filtroStatus && <input type="hidden" name="status" value={filtroStatus} />}
           <Input name="q" defaultValue={str("q")} placeholder="Buscar por nome ou CPF..." className="h-10 sm:w-64" />
           <Select name="resp" defaultValue={filtroResp} className="h-10 sm:w-56">
@@ -317,6 +324,16 @@ export default async function IrpfPage(props: PageProps<"/irpf/declaracoes">) {
                         <span className={cn("rounded-full px-2 py-1 text-xs font-medium", STATUS_PILL_CLASSES[STATUS_TOM[l.status]])}>
                           {STATUS_LABEL[l.status]}
                         </span>
+                        {l.situacao_receita && (
+                          <span
+                            className={cn(
+                              "ml-1 rounded-full px-2 py-1 text-xs font-medium",
+                              STATUS_PILL_CLASSES[SITUACAO_RECEITA_TOM[l.situacao_receita]],
+                            )}
+                          >
+                            {SITUACAO_RECEITA_LABEL[l.situacao_receita]}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-foreground/70">
                         {l.responsavel_id ? nomeEquipe.get(l.responsavel_id) ?? "—" : <span className="text-foreground/40">—</span>}

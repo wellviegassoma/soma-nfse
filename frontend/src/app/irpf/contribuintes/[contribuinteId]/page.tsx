@@ -18,6 +18,7 @@ import {
 import { EditarContribuinte } from "./EditarContribuinte";
 import { CriarDeclaracaoButton } from "./CriarDeclaracaoButton";
 import { DocumentosContribuinte } from "./DocumentosContribuinte";
+import { AcessoGovbr } from "./AcessoGovbr";
 
 export const metadata = { title: "IRPF — Contribuinte" };
 
@@ -221,6 +222,13 @@ export default async function ContribuintePage(props: PageProps<"/irpf/contribui
         </div>
 
         <div className="flex flex-col gap-5">
+        <AcessoGovbr
+          contribuinteId={contribuinteId}
+          cpf={c.cpf}
+          temSenha={!!c.govbr_senha_cifrada}
+          atualizadaEm={c.govbr_senha_atualizada_em}
+          atualizadaPor={c.govbr_senha_atualizada_por ? equipe.find((e) => e.id === c.govbr_senha_atualizada_por)?.nome ?? null : null}
+        />
         <DocumentosContribuinte
           contribuinteId={contribuinteId}
           exercicios={exerciciosDoc}

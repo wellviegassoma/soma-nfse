@@ -2,7 +2,15 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { listarEquipe } from "@/lib/tarefas";
-import { ETAPAS_QUADRO, prazoEntrega, type HonorarioStatus, type StatusDeclaracao } from "./comum";
+import {
+  ETAPAS_QUADRO,
+  SITUACAO_RECEITA,
+  SITUACAO_RECEITA_LABEL,
+  prazoEntrega,
+  type HonorarioStatus,
+  type SituacaoReceita,
+  type StatusDeclaracao,
+} from "./comum";
 
 // Indicadores do painel do IRPF (página inicial do módulo). Tudo calculado
 // a partir das declarações do exercício e do anterior — sem tabela nova.
@@ -36,6 +44,7 @@ type Decl = {
   honorario_status: HonorarioStatus;
   honorario_vencimento: string | null;
   updated_at: string;
+  situacao_receita: SituacaoReceita | null;
   irpf_contribuintes: { nome: string } | null;
 };
 
@@ -72,7 +81,7 @@ export async function montarPainel(supabase: SupabaseClient, exercicio: number) 
       supabase
         .from("irpf_declaracoes")
         .select(
-          "id, contribuinte_id, status, responsavel_id, resultado, imposto_pagar, imposto_restituir, quotas, transmitida_em, honorario_valor, honorario_status, honorario_vencimento, updated_at, irpf_contribuintes(nome)",
+          "id, contribuinte_id, status, responsavel_id, resultado, imposto_pagar, imposto_restituir, quotas, transmitida_em, honorario_valor, honorario_status, honorario_vencimento, updated_at, situacao_receita, irpf_contribuintes(nome)",
         )
         .eq("exercicio", exercicio)
         .order("id")
@@ -202,6 +211,16 @@ export async function montarPainel(supabase: SupabaseClient, exercicio: number) 
     honorarioVencido: fila(validas.filter(vencido), (d) => `R$ ${val(d).toFixed(2).replace(".", ",")}`),
   };
 
+  // Depois da entrega: situação na Receita das transmitidas.
+  const posEntrega = {
+    porSituacao: SITUACAO_RECEITA.map((s) => ({ situacao: s, n: transmitidas.filter((d) => d.situacao_receita === s).length })),
+    semInfo: transmitidas.filter((d) => !d.situacao_receita).length,
+    atencao: fila(
+      transmitidas.filter((d) => d.situacao_receita === "PENDENCIA" || d.situacao_receita === "MALHA" || d.situacao_receita === "SEM_GOVBR"),
+      (d) => SITUACAO_RECEITA_LABEL[d.situacao_receita!],
+    ),
+  };
+
   // Entregas por semana (últimas 10 semanas).
   const semanas: { semana: string; n: number }[] = [];
   for (let i = 9; i >= 0; i--) semanas.push({ semana: semana(new Date(agora - i * 7 * DIA).toISOString()), n: 0 });
@@ -242,6 +261,7 @@ export async function montarPainel(supabase: SupabaseClient, exercicio: number) 
     },
     porResponsavel,
     filas,
+    posEntrega,
     semanas,
   };
 }

@@ -51,6 +51,26 @@ export const ETAPA_CLIENTE: Partial<Record<StatusDeclaracao, true>> = {
   AGUARDANDO_APROVACAO: true,
 };
 
+/** Situação na Receita depois da entrega (pós-entrega). */
+export const SITUACAO_RECEITA = ["EM_PROCESSAMENTO", "PROCESSADA", "PENDENCIA", "MALHA", "RESTITUICAO_PAGA", "SEM_GOVBR"] as const;
+export type SituacaoReceita = (typeof SITUACAO_RECEITA)[number];
+export const SITUACAO_RECEITA_LABEL: Record<SituacaoReceita, string> = {
+  EM_PROCESSAMENTO: "Em processamento",
+  PROCESSADA: "Processada",
+  PENDENCIA: "Pendência",
+  MALHA: "Malha fina",
+  RESTITUICAO_PAGA: "Restituição paga",
+  SEM_GOVBR: "Sem acesso ao gov.br",
+};
+export const SITUACAO_RECEITA_TOM: Record<SituacaoReceita, StatusTone> = {
+  EM_PROCESSAMENTO: "neutral",
+  PROCESSADA: "success",
+  PENDENCIA: "danger",
+  MALHA: "danger",
+  RESTITUICAO_PAGA: "success",
+  SEM_GOVBR: "warning",
+};
+
 export const HONORARIO_STATUS = ["A_COBRAR", "COBRADO", "PAGO", "ISENTO"] as const;
 export type HonorarioStatus = (typeof HONORARIO_STATUS)[number];
 export const HONORARIO_LABEL: Record<HonorarioStatus, string> = {

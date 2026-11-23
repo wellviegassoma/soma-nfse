@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { cn } from "@/lib/cn";
 import { formatarMoeda } from "@/lib/formatters";
-import { STATUS_LABEL, dataBr, exercicioAtual } from "@/lib/irpf/comum";
+import { SITUACAO_RECEITA_LABEL, STATUS_LABEL, dataBr, exercicioAtual } from "@/lib/irpf/comum";
 import { DIAS_CLIENTE, DIAS_PARADA, montarPainel, type ItemFila } from "@/lib/irpf/painel";
 import { AbrirExercicioButton } from "./declaracoes/AbrirExercicioButton";
 
@@ -400,6 +400,49 @@ export default async function PainelIrpfPage(props: PageProps<"/irpf">) {
           </Card>
         </div>
       </div>
+
+      {p.transmitidas > 0 && (
+        <Card className="p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-semibold text-foreground">Depois da entrega — situação na Receita</div>
+              <div className="text-xs text-foreground/50">
+                {p.transmitidas} transmitidas · {p.posEntrega.semInfo} sem informação
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {p.posEntrega.porSituacao.map((s) => (
+              <Link
+                key={s.situacao}
+                href={lista({ receita: s.situacao })}
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-sm hover:shadow-sm",
+                  s.n === 0 ? "border-border text-foreground/40" : "border-border text-foreground",
+                  s.n > 0 && (s.situacao === "PENDENCIA" || s.situacao === "MALHA") && "border-danger/40 bg-danger-soft/50 text-danger",
+                  s.n > 0 && s.situacao === "SEM_GOVBR" && "border-warning/40 bg-warning-soft/50 text-warning",
+                )}
+              >
+                <span className="font-semibold tabular-nums">{s.n}</span> {SITUACAO_RECEITA_LABEL[s.situacao]}
+              </Link>
+            ))}
+          </div>
+          {p.posEntrega.atencao.length > 0 && (
+            <ul className="mt-3 divide-y divide-border rounded-lg border border-border text-sm">
+              {p.posEntrega.atencao.slice(0, 8).map((i) => (
+                <li key={i.id}>
+                  <Link href={`/irpf/declaracoes/${i.id}`} className="flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-surface-muted">
+                    <span className="truncate font-medium">{i.nome}</span>
+                    <span className="shrink-0 text-xs text-foreground/55">
+                      {i.detalhe} · {i.responsavel}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.4fr_1fr]">
         {/* Por responsável */}

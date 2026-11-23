@@ -16,9 +16,12 @@ import {
   type ChecklistStatus,
   type HonorarioStatus,
   type ResumoGravado,
+  type SituacaoReceita as SituacaoReceitaTipo,
+  SITUACAO_RECEITA_LABEL,
   type StatusDeclaracao,
 } from "@/lib/irpf/comum";
 import { ControleDeclaracao } from "./ControleDeclaracao";
+import { SituacaoReceita } from "./SituacaoReceita";
 import { ChecklistDeclaracao } from "./ChecklistDeclaracao";
 import { ArquivosDeclaracao } from "./ArquivosDeclaracao";
 
@@ -92,6 +95,8 @@ export default async function DeclaracaoPage(props: PageProps<"/irpf/declaracoes
       return `Honorário: ${fmt(e.de)} → ${fmt(e.para)}`;
     }
     if (e.tipo === "IMPORTACAO") return "Arquivo importado";
+    if (e.tipo === "RECEITA")
+      return `Situação na Receita: ${e.para ? SITUACAO_RECEITA_LABEL[e.para as SituacaoReceitaTipo] ?? e.para : "sem informação"}`;
     return "Comentário";
   };
 
@@ -320,6 +325,12 @@ export default async function DeclaracaoPage(props: PageProps<"/irpf/declaracoes
         </div>
 
         <div className="flex flex-col gap-5">
+          <SituacaoReceita
+            id={declaracaoId}
+            situacao={(d.situacao_receita as SituacaoReceitaTipo | null) ?? null}
+            desde={d.situacao_receita_em}
+            transmitida={status === "TRANSMITIDA"}
+          />
           <ControleDeclaracao
             id={declaracaoId}
             status={status}
