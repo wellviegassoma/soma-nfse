@@ -6,12 +6,16 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { NovoContribuinte } from "./NovoContribuinte";
+import { formatarCpf } from "@/lib/formatters";
+import { dataBr } from "@/lib/irpf/comum";
 
 export const metadata = { title: "IRPF — Contribuintes" };
 
 type Linha = {
   id: string;
   nome: string;
+  cpf: string;
+  nascimento: string | null;
   ativo: boolean;
   responsavel_id: string | null;
   irpf_declaracoes: { exercicio: number }[] | null;
@@ -21,19 +25,22 @@ export default async function ContribuintesPage(props: PageProps<"/irpf/contribu
   const sp = await props.searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim().toLowerCase() : "";
   const inativos = sp.inativos === "1";
+  const qDigitos = q.replace(/\D/g, "");
   const supabase = await createClient();
   const [linhas, equipe] = await Promise.all([
     buscarTudoPaginado<Linha>((from, to) =>
       supabase
         .from("irpf_contribuintes")
-        .select("id, nome, ativo, responsavel_id, irpf_declaracoes(exercicio)")
+        .select("id, nome, cpf, nascimento, ativo, responsavel_id, irpf_declaracoes(exercicio)")
         .order("nome")
         .range(from, to) as unknown as PromiseLike<{ data: Linha[] | null; error: { message: string } | null }>,
     ),
     listarEquipe(),
   ]);
   const nomeEquipe = new Map(equipe.map((e) => [e.id, e.nome]));
-  const filtradas = linhas.filter((l) => (inativos || l.ativo) && (!q || l.nome.toLowerCase().includes(q)));
+  const filtradas = linhas.filter(
+    (l) => (inativos || l.ativo) && (!q || l.nome.toLowerCase().includes(q) || (qDigitos.length >= 3 && l.cpf.includes(qDigitos))),
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -49,7 +56,7 @@ export default async function ContribuintesPage(props: PageProps<"/irpf/contribu
 
       <Card className="overflow-hidden">
         <form className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3">
-          <Input name="q" defaultValue={q} placeholder="Buscar por nome..." className="h-10 w-64" />
+          <Input name="q" defaultValue={q} placeholder="Buscar por nome ou CPF..." className="h-10 w-64" />
           <label className="flex items-center gap-1.5 text-sm text-foreground/60">
             <input type="checkbox" name="inativos" value="1" defaultChecked={inativos} className="accent-brand" />
             mostrar inativos
@@ -73,6 +80,8 @@ export default async function ContribuintesPage(props: PageProps<"/irpf/contribu
                     {!l.ativo && <span className="ml-2 text-xs font-normal text-foreground/40">inativo</span>}
                   </div>
                   <div className="text-xs text-foreground/45">
+                    CPF {formatarCpf(l.cpf)}
+                    {l.nascimento && <> · nasc. {dataBr(l.nascimento)}</>} ·{" "}
                     {l.responsavel_id ? nomeEquipe.get(l.responsavel_id) ?? "—" : "sem responsável"}
                   </div>
                 </div>

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { cn } from "@/lib/cn";
-import { STATUS_PILL_CLASSES, formatarMoeda } from "@/lib/formatters";
+import { STATUS_PILL_CLASSES, formatarCpf, formatarMoeda } from "@/lib/formatters";
 import {
   HONORARIO_LABEL,
   STATUS_DECLARACAO,
@@ -20,6 +20,7 @@ import {
   type StatusDeclaracao,
 } from "@/lib/irpf/comum";
 import { AbrirExercicioButton } from "./AbrirExercicioButton";
+import { QuadroDeclaracoes } from "./QuadroDeclaracoes";
 
 export const metadata = { title: "IRPF — Declarações" };
 
@@ -34,7 +35,7 @@ type Linha = {
   imposto_restituir: number | null;
   honorario_valor: number | null;
   honorario_status: HonorarioStatus;
-  irpf_contribuintes: { id: string; nome: string } | null;
+  irpf_contribuintes: { id: string; nome: string; cpf: string } | null;
 };
 
 export default async function IrpfPage(props: PageProps<"/irpf">) {
@@ -50,13 +51,14 @@ export default async function IrpfPage(props: PageProps<"/irpf">) {
   const filtroStatus = str("status");
   const filtroResp = str("resp");
   const q = str("q").toLowerCase();
+  const visao = str("visao") === "lista" ? "lista" : "quadro";
 
   const [linhas, equipe, { count: ativos }] = await Promise.all([
     buscarTudoPaginado<Linha>((from, to) =>
       supabase
         .from("irpf_declaracoes")
         .select(
-          "id, status, responsavel_id, completa, retificadora, resultado, imposto_pagar, imposto_restituir, honorario_valor, honorario_status, irpf_contribuintes(id, nome)",
+          "id, status, responsavel_id, completa, retificadora, resultado, imposto_pagar, imposto_restituir, honorario_valor, honorario_status, irpf_contribuintes(id, nome, cpf)",
         )
         .eq("exercicio", exercicio)
         .order("id")
@@ -78,6 +80,19 @@ export default async function IrpfPage(props: PageProps<"/irpf">) {
           .range(from, to),
       )
     : [];
+  const docs = ids.length
+    ? await buscarTudoPaginado<{ declaracao_id: string }>((from, to) =>
+        supabase
+          .from("irpf_arquivos")
+          .select("declaracao_id")
+          .eq("tipo", "DOCUMENTO")
+          .in("declaracao_id", ids)
+          .order("id")
+          .range(from, to),
+      )
+    : [];
+  const arquivosPorDecl = new Map<string, number>();
+  for (const a of docs) arquivosPorDecl.set(a.declaracao_id, (arquivosPorDecl.get(a.declaracao_id) ?? 0) + 1);
   const checklist = new Map<string, { ok: number; total: number }>();
   for (const it of itens) {
     const c = checklist.get(it.declaracao_id) ?? { ok: 0, total: 0 };
@@ -90,9 +105,13 @@ export default async function IrpfPage(props: PageProps<"/irpf">) {
   for (const l of linhas) porStatus.set(l.status, (porStatus.get(l.status) ?? 0) + 1);
 
   const filtradas = linhas
-    .filter((l) => !filtroStatus || l.status === filtroStatus)
+    .filter((l) => visao === "quadro" || !filtroStatus || l.status === filtroStatus)
     .filter((l) => !filtroResp || (filtroResp === "sem" ? !l.responsavel_id : l.responsavel_id === filtroResp))
-    .filter((l) => !q || (l.irpf_contribuintes?.nome ?? "").toLowerCase().includes(q))
+    .filter((l) => {
+      if (!q) return true;
+      const dig = q.replace(/\D/g, "");
+      return (l.irpf_contribuintes?.nome ?? "").toLowerCase().includes(q) || (dig.length >= 3 && (l.irpf_contribuintes?.cpf ?? "").includes(dig));
+    })
     .sort((a, b) => (a.irpf_contribuintes?.nome ?? "").localeCompare(b.irpf_contribuintes?.nome ?? ""));
 
   const transmitidas = porStatus.get("TRANSMITIDA") ?? 0;
@@ -107,7 +126,7 @@ export default async function IrpfPage(props: PageProps<"/irpf">) {
     .reduce((s, l) => s + Number(l.honorario_valor ?? 0), 0);
 
   const urlCom = (extra: Record<string, string>) => {
-    const p = new URLSearchParams({ ex: String(exercicio), ...(filtroResp ? { resp: filtroResp } : {}), ...extra });
+    const p = new URLSearchParams({ ex: String(exercicio), visao, ...(filtroResp ? { resp: filtroResp } : {}), ...extra });
     return `/irpf?${p.toString()}`;
   };
 
@@ -168,7 +187,20 @@ export default async function IrpfPage(props: PageProps<"/irpf">) {
         </Card>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="mr-2 flex overflow-hidden rounded-lg border border-border text-xs font-medium">
+          {(["quadro", "lista"] as const).map((v) => (
+            <Link
+              key={v}
+              href={urlCom({ visao: v })}
+              className={cn("px-3 py-1.5", visao === v ? "bg-brand text-brand-foreground" : "text-foreground/60 hover:bg-surface-muted")}
+            >
+              {v === "quadro" ? "Quadro" : "Lista"}
+            </Link>
+          ))}
+        </div>
+        {visao === "lista" && (
+        <>
         <Link
           href={urlCom({})}
           className={cn(
@@ -190,13 +222,16 @@ export default async function IrpfPage(props: PageProps<"/irpf">) {
             {STATUS_LABEL[s]} ({porStatus.get(s)})
           </Link>
         ))}
+        </>
+        )}
       </div>
 
       <Card className="overflow-hidden">
         <form className="flex flex-col gap-2 border-b border-border px-5 py-3 sm:flex-row sm:items-center">
           <input type="hidden" name="ex" value={exercicio} />
-          {filtroStatus && <input type="hidden" name="status" value={filtroStatus} />}
-          <Input name="q" defaultValue={str("q")} placeholder="Buscar contribuinte..." className="h-10 sm:w-64" />
+          <input type="hidden" name="visao" value={visao} />
+          {visao === "lista" && filtroStatus && <input type="hidden" name="status" value={filtroStatus} />}
+          <Input name="q" defaultValue={str("q")} placeholder="Buscar por nome ou CPF..." className="h-10 sm:w-64" />
           <Select name="resp" defaultValue={filtroResp} className="h-10 sm:w-56">
             <option value="">Todos os responsáveis</option>
             <option value="sem">Sem responsável</option>
@@ -218,6 +253,31 @@ export default async function IrpfPage(props: PageProps<"/irpf">) {
               Importe os arquivos .DEC
             </Link>{" "}
             {faltamAbrir > 0 ? "ou abra o exercício para os contribuintes cadastrados." : "para começar."}
+          </div>
+        ) : visao === "quadro" ? (
+          <div className="p-3">
+            <QuadroDeclaracoes
+              cartoes={filtradas.map((l) => {
+                const c = checklist.get(l.id);
+                return {
+                  id: l.id,
+                  nome: l.irpf_contribuintes?.nome ?? "—",
+                  cpf: l.irpf_contribuintes?.cpf ?? "",
+                  status: l.status,
+                  responsavel: l.responsavel_id ? nomeEquipe.get(l.responsavel_id) ?? null : null,
+                  docsOk: c?.ok ?? 0,
+                  docsTotal: c?.total ?? 0,
+                  arquivos: arquivosPorDecl.get(l.id) ?? 0,
+                  resultado:
+                    l.resultado === "PAGAR"
+                      ? `Pagar ${formatarMoeda(Number(l.imposto_pagar ?? 0))}`
+                      : l.resultado === "RESTITUIR"
+                        ? `Restituir ${formatarMoeda(Number(l.imposto_restituir ?? 0))}`
+                        : null,
+                  resultadoTom: l.resultado === "PAGAR" ? "danger" : l.resultado === "RESTITUIR" ? "success" : null,
+                };
+              })}
+            />
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -242,6 +302,7 @@ export default async function IrpfPage(props: PageProps<"/irpf">) {
                           {l.irpf_contribuintes?.nome ?? "—"}
                         </Link>
                         <div className="text-xs text-foreground/45">
+                          CPF {formatarCpf(l.irpf_contribuintes?.cpf)} ·{" "}
                           {l.completa === null ? "sem arquivo" : l.completa ? "Completa" : "Simplificada"}
                           {l.retificadora ? " · retificadora" : ""}
                         </div>

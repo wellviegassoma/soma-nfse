@@ -8,6 +8,7 @@ export type ResumoGravado = Omit<ResumoDeclaracao, "cpf">;
 export const STATUS_DECLARACAO = [
   "NAO_INICIADA",
   "AGUARDANDO_DOCUMENTOS",
+  "DOCUMENTOS_RECEBIDOS",
   "EM_ELABORACAO",
   "EM_REVISAO",
   "AGUARDANDO_APROVACAO",
@@ -20,23 +21,34 @@ export type StatusDeclaracao = (typeof STATUS_DECLARACAO)[number];
 export const STATUS_LABEL: Record<StatusDeclaracao, string> = {
   NAO_INICIADA: "Não iniciada",
   AGUARDANDO_DOCUMENTOS: "Aguardando documentos",
+  DOCUMENTOS_RECEBIDOS: "Documentos recebidos",
   EM_ELABORACAO: "Em elaboração",
   EM_REVISAO: "Em revisão",
   AGUARDANDO_APROVACAO: "Aguardando aprovação do cliente",
-  APROVADA: "Aprovada pelo cliente",
-  TRANSMITIDA: "Transmitida",
+  APROVADA: "Aprovada (pronta para transmitir)",
+  TRANSMITIDA: "Transmitida (entregue)",
   NAO_FARA: "Não fará",
 };
 
 export const STATUS_TOM: Record<StatusDeclaracao, StatusTone> = {
   NAO_INICIADA: "neutral",
   AGUARDANDO_DOCUMENTOS: "warning",
+  DOCUMENTOS_RECEBIDOS: "warning",
   EM_ELABORACAO: "warning",
   EM_REVISAO: "warning",
   AGUARDANDO_APROVACAO: "warning",
   APROVADA: "success",
   TRANSMITIDA: "success",
   NAO_FARA: "neutral",
+};
+
+/** Etapas do quadro, na ordem do fluxo ("Não fará" fica fora). */
+export const ETAPAS_QUADRO = STATUS_DECLARACAO.filter((s) => s !== "NAO_FARA");
+
+/** Etapas em que a bola está com o cliente. */
+export const ETAPA_CLIENTE: Partial<Record<StatusDeclaracao, true>> = {
+  AGUARDANDO_DOCUMENTOS: true,
+  AGUARDANDO_APROVACAO: true,
 };
 
 export const HONORARIO_STATUS = ["A_COBRAR", "COBRADO", "PAGO", "ISENTO"] as const;
@@ -58,6 +70,11 @@ export function prazoEntrega(exercicio: number): string {
   const d = new Date(Date.UTC(exercicio, 4, 31));
   while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
+}
+
+/** Data sem horário (AAAA-MM-DD) como dd/mm/aaaa, sem conversão de fuso. */
+export function dataBr(iso: string | null | undefined): string {
+  return iso ? iso.slice(0, 10).split("-").reverse().join("/") : "";
 }
 
 /** Dias corridos de hoje até a data (AAAA-MM-DD), no fuso de Brasília. */

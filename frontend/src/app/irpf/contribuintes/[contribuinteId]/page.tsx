@@ -4,16 +4,18 @@ import { createClient } from "@/lib/supabase/server";
 import { listarEquipe } from "@/lib/tarefas";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
-import { STATUS_PILL_CLASSES, formatarCpf, formatarMoeda } from "@/lib/formatters";
+import { STATUS_PILL_CLASSES, formatarCpf, formatarData, formatarMoeda } from "@/lib/formatters";
 import {
   STATUS_LABEL,
   STATUS_TOM,
+  dataBr,
   exercicioAtual,
   type ResumoGravado,
   type StatusDeclaracao,
 } from "@/lib/irpf/comum";
 import { EditarContribuinte } from "./EditarContribuinte";
 import { CriarDeclaracaoButton } from "./CriarDeclaracaoButton";
+import { DocumentosContribuinte } from "./DocumentosContribuinte";
 
 export const metadata = { title: "IRPF — Contribuinte" };
 
@@ -32,6 +34,25 @@ export default async function ContribuintePage(props: PageProps<"/irpf/contribui
   if (!c) notFound();
   const lista = (decls ?? []).map((d) => ({ ...d, resumo: d.resumo as ResumoGravado | null, status: d.status as StatusDeclaracao }));
   const proximo = exercicioAtual();
+  const declIds = lista.map((d) => d.id);
+  const { data: docsRaw } = declIds.length
+    ? await supabase
+        .from("irpf_arquivos")
+        .select("id, declaracao_id, nome_arquivo, descricao, created_at")
+        .eq("tipo", "DOCUMENTO")
+        .in("declaracao_id", declIds)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+  const exercicioDe = new Map(lista.map((d) => [d.id, d.exercicio]));
+  const documentos = (docsRaw ?? []).map((a) => ({
+    id: a.id as string,
+    declaracaoId: a.declaracao_id as string,
+    exercicio: exercicioDe.get(a.declaracao_id as string) ?? proximo,
+    nome: a.nome_arquivo as string,
+    descricao: a.descricao as string | null,
+    criadoEm: formatarData(a.created_at as string) ?? "",
+  }));
+  const exerciciosDoc = [...new Set([proximo, proximo - 1, ...lista.map((d) => d.exercicio)])].sort((a, b) => b - a);
   const temProximo = lista.some((d) => d.exercicio === proximo);
 
   const linhas: { campo: string; f: (r: ResumoGravado) => number }[] = [
@@ -55,7 +76,10 @@ export default async function ContribuintePage(props: PageProps<"/irpf/contribui
           ← Contribuintes
         </Link>
         <h1 className="mt-1 text-xl font-semibold text-foreground">{c.nome}</h1>
-        <p className="text-sm text-foreground/60">CPF {formatarCpf(c.cpf)}</p>
+        <p className="text-sm text-foreground/60">
+          CPF {formatarCpf(c.cpf)}
+          {c.nascimento && <> · nascimento {dataBr(c.nascimento)}</>}
+        </p>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
@@ -122,6 +146,13 @@ export default async function ContribuintePage(props: PageProps<"/irpf/contribui
           )}
         </div>
 
+        <div className="flex flex-col gap-5">
+        <DocumentosContribuinte
+          contribuinteId={contribuinteId}
+          exercicios={exerciciosDoc}
+          padrao={proximo}
+          documentos={documentos}
+        />
         <EditarContribuinte
           id={c.id}
           nome={c.nome}
@@ -132,6 +163,7 @@ export default async function ContribuintePage(props: PageProps<"/irpf/contribui
           ativo={c.ativo}
           equipe={equipe}
         />
+        </div>
       </div>
     </div>
   );

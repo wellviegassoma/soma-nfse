@@ -195,7 +195,7 @@ export async function importarDeclaracaoAction(input: {
     const statusAtual = decl!.status as StatusDeclaracao;
     let status = statusAtual;
     if (transmitida) status = "TRANSMITIDA";
-    else if (statusAtual === "NAO_INICIADA" || statusAtual === "AGUARDANDO_DOCUMENTOS") status = "EM_ELABORACAO";
+    else if (["NAO_INICIADA", "AGUARDANDO_DOCUMENTOS", "DOCUMENTOS_RECEBIDOS"].includes(statusAtual)) status = "EM_ELABORACAO";
     const { error } = await supabase
       .from("irpf_declaracoes")
       .update({ ...camposResumo, status })
@@ -620,4 +620,35 @@ export async function criarDeclaracaoAction(input: {
   await sugerirChecklistAction(data.id);
   revalidar(data.id);
   return { ok: true, id: data.id };
+}
+
+/**
+ * Documento que o cliente mandou antes de a declaração começar (ex.: informe
+ * recebido em dezembro para o IRPF de março): guarda na declaração do
+ * exercício escolhido, criando-a (Não iniciada, com checklist) se preciso.
+ */
+export async function enviarDocumentoContribuinteAction(input: {
+  contribuinteId: string;
+  exercicio: number;
+  pathname: string;
+  nome: string;
+  tamanho: number;
+  descricao?: string | null;
+}): Promise<{ ok: true; declaracaoId: string } | Erro> {
+  await requireSomaStaff();
+  if (!Number.isInteger(input.exercicio) || input.exercicio < 2020 || input.exercicio > 2100) {
+    return { error: "Exercício inválido." };
+  }
+  const decl = await criarDeclaracaoAction({ contribuinteId: input.contribuinteId, exercicio: input.exercicio });
+  if ("error" in decl) return decl;
+  const r = await registrarDocumentoAction({
+    declaracaoId: decl.id,
+    pathname: input.pathname,
+    nome: input.nome,
+    tamanho: input.tamanho,
+    descricao: input.descricao,
+  });
+  if ("error" in r) return r;
+  revalidatePath(`/irpf/contribuintes/${input.contribuinteId}`);
+  return { ok: true, declaracaoId: decl.id };
 }
