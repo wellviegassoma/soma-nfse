@@ -12,6 +12,17 @@ Pendências:
 - 9 dos 11 sem cliente têm CNPJ/CPF lido, mas a empresa não está em `companies`.
 - Anexos até 500 MB sobem num PUT só (testado com 2 PDFs de ~104 MB).
 
+Arquivamento e cobertura (fase_cm, commit 3182ccd):
+- **Arquivar** processo (motivo + observação): sai da lista/contagens/novidades e a extensão não
+  abre mais no SEI (o `iniciar` devolve os números arquivados). Cliente inativo = sugestão de arquivar.
+- **Cobertura** em `/legalizacao/sei/cobertura`: todo cliente **ativo** de Petrópolis (IBGE 3303906)
+  deve ter processo não arquivado no SEI ou dispensa. Dispensa manual em `sei_cobertura_dispensas`
+  (motivo, quem, quando; desfazível) ou automática quando "Vigilância Sanitária" está como
+  "não se aplica" em Alvarás e licenças. Meta: zero em "Sem processo" (eram 96 em 23/11).
+- Extensão 0.3.0 lê também "Ver expirados" (formato do link não verificado: três estratégias +
+  aviso no log se nenhuma servir); processo só com acesso vencido que não abre é registrado com
+  `somente_registro` (não sobrescreve dados já lidos).
+
 Aprendizados da implementação (valem para manutenção da extensão `extensao-sei/`):
 - Acessar o SEI **de dentro da aba do SEI** (`chrome.scripting`); da página da extensão o cookie
   de sessão não vai.
