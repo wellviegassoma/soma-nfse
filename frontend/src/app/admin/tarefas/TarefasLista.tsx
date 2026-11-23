@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
-import { mudarStatusTarefasAction, reatribuirTarefasAction } from "@/lib/actions/tarefas";
+import { marcarEtapaAtualAction, mudarStatusTarefasAction, reatribuirTarefasAction } from "@/lib/actions/tarefas";
+import { verificarPagamentoTarefa } from "./acoesTarefa";
 import { ChecklistTarefa } from "./ChecklistTarefa";
 import {
   SITUACAO_CLASSE,
@@ -15,6 +16,7 @@ import {
   situacaoTarefa,
   type Situacao,
   type StatusTarefa,
+  type Verificacao,
 } from "@/lib/tarefas-comum";
 
 export type TarefaLinha = {
@@ -38,6 +40,7 @@ export type TarefaLinha = {
   etapas_total: number;
   etapa_indice: number;
   etapa_nome: string | null;
+  verificacao: Verificacao | null;
 };
 
 const ORDEM_SITUACAO: Situacao[] = ["RISCO", "ATRASADA", "HOJE", "SEMANA", "DEPOIS", "SEM_PRAZO", "AGUARDANDO_CLIENTE", "CONCLUIDA", "NAO_SE_APLICA"];
@@ -108,7 +111,7 @@ export function TarefasLista({
       const r = await fn();
       if ("error" in r) setMsg({ erro: r.error });
       else {
-        setMsg({ ok });
+        setMsg({ ok: r.mensagem ?? ok });
         setSel(new Set());
       }
     });
@@ -124,6 +127,13 @@ export function TarefasLista({
       `${ids.length} tarefa(s): ${STATUS_ROTULO[status].toLowerCase()}.`,
     );
   };
+
+  const verificar = (l: TarefaLinha) =>
+    iniciar(async () => {
+      setMsg({ ok: `Consultando o pagamento de ${l.empresa}…` });
+      const r = await verificarPagamentoTarefa({ id: l.id, company_id: l.company_id, competencia: l.competencia, verificacao: l.verificacao! });
+      setMsg(r.ok ? { ok: `${l.empresa}: ${r.mensagem}` } : { erro: `${l.empresa}: ${r.mensagem}` });
+    });
 
   const alternar = (id: string) =>
     setSel((s) => {
@@ -251,16 +261,16 @@ export function TarefasLista({
                 <th className="px-2 py-2 font-medium">Situação</th>
                 <th className="px-2 py-2 font-medium">Tarefa</th>
                 <th className="px-2 py-2 font-medium">Empresa</th>
-                <th className="px-2 py-2 font-medium whitespace-nowrap">Comp.</th>
-                <th className="px-2 py-2 font-medium whitespace-nowrap">Meta</th>
-                <th className="px-2 py-2 font-medium whitespace-nowrap">Prazo legal</th>
+                {modo === "minhas" && <th className="px-2 py-2 font-medium whitespace-nowrap">Comp.</th>}
+                <th className="px-2 py-2 font-medium whitespace-nowrap">Meta · Legal</th>
                 {modo === "painel" && <th className="px-2 py-2 font-medium">Responsável</th>}
                 <th className="px-4 py-2" />
               </tr>
             </thead>
             <tbody>
               {mostradas.map((l) => (
-                <tr key={l.id} className={cn("border-b border-border/60", sel.has(l.id) ? "bg-brand-soft/30" : "")}>
+                <Fragment key={l.id}>
+                <tr className={cn(expandida === l.id ? "" : "border-b border-border/60", sel.has(l.id) ? "bg-brand-soft/30" : "")}>
                   <td className="px-4 py-2">
                     <input type="checkbox" checked={sel.has(l.id)} onChange={() => alternar(l.id)} aria-label="Selecionar" />
                   </td>
@@ -270,7 +280,7 @@ export function TarefasLista({
                       {SITUACAO_ROTULO[l.sit]}
                     </span>
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="min-w-[240px] px-2 py-2">
                     {l.etapas_total > 0 ? (
                       <button
                         type="button"
@@ -288,27 +298,38 @@ export function TarefasLista({
                       {l.concluida_por_fonte ? ` · automático: ${l.concluida_por_fonte}` : ""}
                       {l.comentario ? ` · ${l.comentario}` : ""}
                     </div>
-                    {expandida === l.id && <ChecklistTarefa tarefaId={l.id} />}
                   </td>
-                  <td className="px-2 py-2 text-foreground/85">{l.empresa}</td>
-                  <td className="px-2 py-2 whitespace-nowrap text-xs text-foreground/60">{rotuloCompetencia(l.competencia)}</td>
-                  <td className="px-2 py-2 whitespace-nowrap text-xs">{ddmm(l.prazo_meta)}</td>
-                  <td className="px-2 py-2 whitespace-nowrap text-xs text-foreground/60">{ddmm(l.prazo_legal)}</td>
+                  <td className="min-w-[180px] px-2 py-2 text-foreground/85">{l.empresa}</td>
+                  {modo === "minhas" && (
+                    <td className="px-2 py-2 whitespace-nowrap text-xs text-foreground/60">{rotuloCompetencia(l.competencia)}</td>
+                  )}
+                  <td className="px-2 py-2 whitespace-nowrap text-xs">
+                    {ddmm(l.prazo_meta)} <span className="text-foreground/50">· {ddmm(l.prazo_legal)}</span>
+                  </td>
                   {modo === "painel" && (
                     <td className="px-2 py-2 text-xs text-foreground/70">{l.responsavel ?? <em className="text-foreground/40">sem</em>}</td>
                   )}
                   <td className="px-4 py-2 text-right whitespace-nowrap">
-                    {aberta(l.status) ? (
-                      <BotaoAcao onClick={() => mudarStatus([l.id], "CONCLUIDA")} disabled={pendente} primario>
-                        Concluir
-                      </BotaoAcao>
-                    ) : (
-                      <BotaoAcao onClick={() => mudarStatus([l.id], "A_FAZER")} disabled={pendente}>
-                        Reabrir
-                      </BotaoAcao>
-                    )}
+                    <AcoesLinha
+                      l={l}
+                      pendente={pendente}
+                      concluir={() => mudarStatus([l.id], "CONCLUIDA")}
+                      reabrir={() => mudarStatus([l.id], "A_FAZER")}
+                      verificar={() => verificar(l)}
+                      marcarEtapa={() => executar(() => marcarEtapaAtualAction(l.id), `${l.empresa}: etapa "${l.etapa_nome}" concluída.`)}
+                      abrirEtapas={() => setExpandida(l.id)}
+                    />
                   </td>
                 </tr>
+                {expandida === l.id && (
+                  <tr className="border-b border-border/60 bg-surface-muted/40">
+                    <td />
+                    <td colSpan={6} className="px-2 pb-3">
+                      <ChecklistTarefa tarefaId={l.id} horizontal />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
               {visiveis.length === 0 && (
                 <tr>
@@ -337,15 +358,18 @@ function BotaoAcao({
   onClick,
   disabled,
   primario,
+  titulo,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
   primario?: boolean;
+  titulo?: string;
 }) {
   return (
     <button
       type="button"
+      title={titulo}
       onClick={onClick}
       disabled={disabled}
       className={cn(
@@ -355,5 +379,62 @@ function BotaoAcao({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Ações da linha. Tarefa com etapas NÃO tem "Concluir": avança etapa por
+ * etapa, e só fecha tudo de uma vez pelo "Verificar pagamento" (consulta na
+ * central do Simples/ISS). Sem etapas, continua o Concluir simples.
+ */
+function AcoesLinha({
+  l,
+  pendente,
+  concluir,
+  reabrir,
+  verificar,
+  marcarEtapa,
+  abrirEtapas,
+}: {
+  l: TarefaLinha;
+  pendente: boolean;
+  concluir: () => void;
+  reabrir: () => void;
+  verificar: () => void;
+  marcarEtapa: () => void;
+  abrirEtapas: () => void;
+}) {
+  if (!aberta(l.status)) {
+    return l.etapas_total > 0 && l.status === "CONCLUIDA" ? (
+      <BotaoAcao onClick={abrirEtapas} disabled={pendente}>
+        Ver etapas
+      </BotaoAcao>
+    ) : (
+      <BotaoAcao onClick={reabrir} disabled={pendente}>
+        Reabrir
+      </BotaoAcao>
+    );
+  }
+  if (!l.etapas_total) {
+    return (
+      <BotaoAcao onClick={concluir} disabled={pendente} primario>
+        Concluir
+      </BotaoAcao>
+    );
+  }
+  const etapaPagamento = l.verificacao && l.aguardando_cliente;
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      {!etapaPagamento && l.etapa_nome && (
+        <BotaoAcao onClick={marcarEtapa} disabled={pendente} primario={!l.verificacao} titulo={`Concluir a etapa: ${l.etapa_nome}`}>
+          ✓ Etapa {l.etapa_indice + 1}
+        </BotaoAcao>
+      )}
+      {l.verificacao && (
+        <BotaoAcao onClick={verificar} disabled={pendente} primario titulo="Consulta o pagamento na central e, se pago, conclui todas as etapas">
+          Verificar pgto.
+        </BotaoAcao>
+      )}
+    </span>
   );
 }

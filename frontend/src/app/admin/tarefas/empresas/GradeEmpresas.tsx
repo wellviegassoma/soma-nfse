@@ -15,6 +15,7 @@ import {
 } from "@/lib/tarefas-comum";
 import type { TarefaLinha } from "../TarefasLista";
 import { ChecklistTarefa } from "../ChecklistTarefa";
+import { verificarPagamentoTarefa } from "../acoesTarefa";
 
 // Símbolo curto na célula para a grade inteira caber na tela.
 const SIGLA: Record<Situacao, string> = {
@@ -80,6 +81,16 @@ export function GradeEmpresas({ linhas, hoje }: { linhas: TarefaLinha[]; hoje: s
     });
   };
 
+  const verificar = () => {
+    if (!tarefaAberta?.verificacao) return;
+    const t = tarefaAberta;
+    iniciar(async () => {
+      setMsg("Consultando o pagamento…");
+      const r = await verificarPagamentoTarefa({ id: t.id, company_id: t.company_id, competencia: t.competencia, verificacao: t.verificacao! });
+      setMsg(r.mensagem);
+    });
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -121,7 +132,21 @@ export function GradeEmpresas({ linhas, hoje }: { linhas: TarefaLinha[]; hoje: s
               {tarefaAberta.comentario ? ` · ${tarefaAberta.comentario}` : ""}
             </div>
           </div>
-          {(["CONCLUIDA", "EM_ANDAMENTO", "NAO_SE_APLICA", "A_FAZER"] as StatusTarefa[])
+          {tarefaAberta.verificacao && (tarefaAberta.status === "A_FAZER" || tarefaAberta.status === "EM_ANDAMENTO") && (
+            <button
+              type="button"
+              disabled={pendente}
+              onClick={verificar}
+              className="rounded-lg bg-brand px-2.5 py-1 text-xs font-medium text-brand-foreground disabled:opacity-50"
+            >
+              Verificar pagamento
+            </button>
+          )}
+          {/* Com etapas: só "não se aplica" (e desfazer); o resto é pelas etapas. */}
+          {(tarefaAberta.etapas_total > 0
+            ? ((tarefaAberta.status === "NAO_SE_APLICA" ? ["A_FAZER"] : ["NAO_SE_APLICA"]) as StatusTarefa[])
+            : (["CONCLUIDA", "EM_ANDAMENTO", "NAO_SE_APLICA", "A_FAZER"] as StatusTarefa[])
+          )
             .filter((s) => s !== tarefaAberta.status)
             .map((s) => (
               <button
@@ -140,10 +165,10 @@ export function GradeEmpresas({ linhas, hoje }: { linhas: TarefaLinha[]; hoje: s
           <button type="button" onClick={() => setAberta(null)} className="text-xs text-foreground/60 underline">
             fechar
           </button>
-          {msg && <div className="w-full text-xs text-danger">{msg}</div>}
+          {msg && <div className="w-full text-xs text-foreground/70">{msg}</div>}
           {tarefaAberta.etapas_total > 0 && (
             <div className="w-full">
-              <ChecklistTarefa key={tarefaAberta.id} tarefaId={tarefaAberta.id} />
+              <ChecklistTarefa key={tarefaAberta.id} tarefaId={tarefaAberta.id} horizontal />
             </div>
           )}
         </Card>

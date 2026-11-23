@@ -5,7 +5,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
-import { FONTES_ROTULO, type FonteAutomatica } from "@/lib/tarefas-comum";
+import { FONTES_PAGAMENTO, FONTES_ROTULO, type FonteAutomatica } from "@/lib/tarefas-comum";
 
 type Db = SupabaseClient;
 type Resultado = "OK" | "NAO_SE_APLICA";
@@ -301,6 +301,16 @@ export async function sincronizarAutomacoes(db: Db, competencias?: string[]): Pr
         if (error) throw new Error(error.message);
         nEtapas++;
         tocadas.push(t.id);
+        // Pagamento confirmado na central encerra a tarefa inteira (todas as etapas).
+        if (FONTES_PAGAMENTO.includes(e.fonte_automatica as FonteAutomatica)) {
+          const { error: eTudo } = await db
+            .from("tarefa_etapas")
+            .update({ concluida_em: agora, automatica: true })
+            .eq("tarefa_id", t.id)
+            .is("concluida_em", null);
+          if (eTudo) throw new Error(eTudo.message);
+          break;
+        }
       }
     }
     if (tocadas.length) await recalcularTarefas(db, tocadas);

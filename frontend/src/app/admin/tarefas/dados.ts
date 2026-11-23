@@ -3,7 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { listarEquipe, nomeEmpresa } from "@/lib/tarefas";
-import type { StatusTarefa } from "@/lib/tarefas-comum";
+import { IBGE_PETROPOLIS, IBGE_RIO, type StatusTarefa, type Verificacao } from "@/lib/tarefas-comum";
 import type { TarefaLinha } from "./TarefasLista";
 
 type Db = Awaited<ReturnType<typeof createClient>>;
@@ -23,12 +23,12 @@ type Bruta = {
   etapa_atual: number | null;
   concluida_por_fonte: string | null;
   tarefa_modelos: { nome: string; ordem: number } | null;
-  companies: { legal_name: string; trade_name: string | null; codigo_cliente: string | null } | null;
+  companies: { legal_name: string; trade_name: string | null; codigo_cliente: string | null; municipality_ibge_code: string | null } | null;
   atendimento_departamentos: { nome: string } | null;
 };
 
 const COLUNAS =
-  "id, modelo_id, company_id, competencia, departamento_id, responsavel_id, prazo_meta, prazo_legal, status, comentario, aguardando_cliente, etapa_atual, concluida_por_fonte, tarefa_modelos(nome, ordem), companies(legal_name, trade_name, codigo_cliente), atendimento_departamentos(nome)";
+  "id, modelo_id, company_id, competencia, departamento_id, responsavel_id, prazo_meta, prazo_legal, status, comentario, aguardando_cliente, etapa_atual, concluida_por_fonte, tarefa_modelos(nome, ordem), companies(legal_name, trade_name, codigo_cliente, municipality_ibge_code), atendimento_departamentos(nome)";
 
 export async function carregarTarefas(
   db: Db,
@@ -54,10 +54,10 @@ export async function carregarTarefas(
   // Etapas dos modelos presentes (poucas linhas): nome da etapa atual e "2/4".
   const modeloIds = [...new Set(brutas.map((t) => t.modelo_id))];
   const { data: defs } = modeloIds.length
-    ? await db.from("tarefa_modelo_etapas").select("modelo_id, ordem, nome").in("modelo_id", modeloIds).order("ordem")
-    : { data: [] as { modelo_id: string; ordem: number; nome: string }[] };
-  const etapasPorModelo = new Map<string, { ordem: number; nome: string }[]>();
-  for (const e of (defs ?? []) as { modelo_id: string; ordem: number; nome: string }[]) {
+    ? await db.from("tarefa_modelo_etapas").select("modelo_id, ordem, nome, fonte_automatica").in("modelo_id", modeloIds).order("ordem")
+    : { data: [] as { modelo_id: string; ordem: number; nome: string; fonte_automatica: string | null }[] };
+  const etapasPorModelo = new Map<string, { ordem: number; nome: string; fonte_automatica: string | null }[]>();
+  for (const e of (defs ?? []) as { modelo_id: string; ordem: number; nome: string; fonte_automatica: string | null }[]) {
     const arr = etapasPorModelo.get(e.modelo_id) ?? [];
     arr.push(e);
     etapasPorModelo.set(e.modelo_id, arr);
@@ -83,8 +83,19 @@ export async function carregarTarefas(
       aguardando_cliente: t.aguardando_cliente,
       concluida_por_fonte: t.concluida_por_fonte,
       ...etapaInfo(etapasPorModelo.get(t.modelo_id) ?? [], t.etapa_atual),
+      verificacao: verificacaoDe(etapasPorModelo.get(t.modelo_id) ?? [], t.companies?.municipality_ibge_code ?? null),
     })),
   };
+}
+
+/** Tarefa com etapa de pagamento ⇒ botão "Verificar pagamento" na central certa. */
+function verificacaoDe(etapas: { fonte_automatica: string | null }[], ibge: string | null): Verificacao | null {
+  if (etapas.some((e) => e.fonte_automatica === "DAS_PAGO")) return "DAS";
+  if (etapas.some((e) => e.fonte_automatica === "ISS_PAGO")) {
+    if (ibge === IBGE_RIO) return "ISS_RIO";
+    if (ibge === IBGE_PETROPOLIS) return "ISS_PETROPOLIS";
+  }
+  return null;
 }
 
 function etapaInfo(etapas: { ordem: number; nome: string }[], atual: number | null) {

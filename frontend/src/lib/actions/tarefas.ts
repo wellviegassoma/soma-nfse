@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff, requireSuperAdmin, requireUser } from "@/lib/auth";
 import { gerarTarefas } from "@/lib/tarefas";
 import { garantirEtapas, recalcularTarefas, sincronizarAutomacoes } from "@/lib/tarefas-automacao";
-import { FONTES_ROTULO } from "@/lib/tarefas-comum";
+import { FONTES_PAGAMENTO, FONTES_ROTULO, type FonteAutomatica } from "@/lib/tarefas-comum";
 import type { StatusTarefa } from "@/lib/tarefas-comum";
 
 type Resultado = { ok: true; mensagem?: string } | { error: string };
@@ -34,8 +34,19 @@ export async function mudarStatusTarefasAction(input: {
   if (input.status === "NAO_SE_APLICA" && !comentario) return { error: "Diga por que não se aplica." };
 
   const supabase = await createClient();
-  const { data: antes, error: e1 } = await supabase.from("tarefas").select("id, status").in("id", input.ids);
+  const { data: antesTodas, error: e1 } = await supabase.from("tarefas").select("id, status").in("id", input.ids);
   if (e1) return { error: e1.message };
+  // Tarefa com etapas só conclui pelas etapas (ou pela verificação de pagamento).
+  const { data: comEtapasRaw } = await supabase.from("tarefa_etapas").select("tarefa_id").in("tarefa_id", input.ids);
+  const comEtapas = new Set((comEtapasRaw ?? []).map((r) => r.tarefa_id as string));
+  const permitida = (t: { id: string; status: string }) =>
+    !comEtapas.has(t.id) || input.status === "NAO_SE_APLICA" || (input.status === "A_FAZER" && t.status === "NAO_SE_APLICA");
+  const antes = (antesTodas ?? []).filter(permitida);
+  const puladas = (antesTodas ?? []).length - antes.length;
+  if (!antes.length) {
+    return { error: "Essas tarefas têm etapas: marque as etapas (ou use Verificar pagamento) em vez de concluir direto." };
+  }
+  const ids = antes.map((t) => t.id);
   const concluida = input.status === "CONCLUIDA";
   const { error } = await supabase
     .from("tarefas")
@@ -45,14 +56,20 @@ export async function mudarStatusTarefasAction(input: {
       concluida_por: concluida ? user.id : null,
       ...(comentario ? { comentario } : {}),
     })
-    .in("id", input.ids);
+    .in("id", ids);
   if (error) return { error: error.message };
-  const eventos = (antes ?? [])
+  // Reaberta de "não se aplica": volta para a etapa certa.
+  const reabertas = antes.filter((t) => comEtapas.has(t.id) && input.status === "A_FAZER").map((t) => t.id);
+  if (reabertas.length) await recalcularTarefas(supabase, reabertas);
+  const eventos = antes
     .filter((t) => t.status !== input.status)
     .map((t) => ({ tarefa_id: t.id, user_id: user.id, tipo: "STATUS", de: t.status, para: input.status, comentario }));
   if (eventos.length) await supabase.from("tarefa_eventos").insert(eventos);
   revalidar();
-  return { ok: true };
+  return {
+    ok: true,
+    mensagem: puladas ? `${antes.length} atualizada(s); ${puladas} com etapas ficaram como estavam (use as etapas).` : undefined,
+  };
 }
 
 export async function reatribuirTarefasAction(input: { ids: string[]; responsavelId: string | null }): Promise<Resultado> {
@@ -284,6 +301,8 @@ export type EtapaTarefa = {
   departamento: string | null;
   depende_do_cliente: boolean;
   fonte: string | null;
+  /** Etapa de pagamento: só conclui pela verificação na central. */
+  pagamento: boolean;
   concluida_em: string | null;
   automatica: boolean;
 };
@@ -322,6 +341,7 @@ export async function etapasDaTarefaAction(tarefaId: string): Promise<{ etapas: 
         departamento: d.atendimento_departamentos?.nome ?? null,
         depende_do_cliente: d.depende_do_cliente,
         fonte: d.fonte_automatica ? (FONTES_ROTULO[d.fonte_automatica as keyof typeof FONTES_ROTULO] ?? null) : null,
+        pagamento: FONTES_PAGAMENTO.includes(d.fonte_automatica as FonteAutomatica),
         concluida_em: l.concluida_em,
         automatica: l.automatica,
       };
@@ -335,6 +355,12 @@ export async function marcarEtapaAction(input: { tarefaId: string; etapaId: stri
   await requireSomaStaff();
   const user = await requireUser();
   const supabase = await createClient();
+  if (input.feita) {
+    const { data: def } = await supabase.from("tarefa_modelo_etapas").select("fonte_automatica").eq("id", input.etapaId).maybeSingle();
+    if (def && FONTES_PAGAMENTO.includes(def.fonte_automatica as FonteAutomatica)) {
+      return { error: "Essa etapa só se conclui pela verificação de pagamento (botão Verificar pagamento)." };
+    }
+  }
   const { error } = await supabase
     .from("tarefa_etapas")
     .update(
@@ -371,13 +397,24 @@ export async function moverTarefaParaEtapaAction(input: { tarefaId: string; orde
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("tarefa_etapas")
-    .select("etapa_id, concluida_em, tarefa_modelo_etapas(ordem)")
+    .select("etapa_id, concluida_em, tarefa_modelo_etapas(ordem, fonte_automatica)")
     .eq("tarefa_id", input.tarefaId);
   if (error) return { error: error.message };
   const agora = new Date().toISOString();
   let voltou = false;
-  type Linha = { etapa_id: string; concluida_em: string | null; tarefa_modelo_etapas: { ordem: number } | null };
-  for (const l of (data ?? []) as unknown as Linha[]) {
+  type Linha = {
+    etapa_id: string;
+    concluida_em: string | null;
+    tarefa_modelo_etapas: { ordem: number; fonte_automatica: string | null } | null;
+  };
+  const lista = (data ?? []) as unknown as Linha[];
+  const pulaPagamento = lista.some((l) => {
+    const ordem = l.tarefa_modelo_etapas?.ordem ?? 0;
+    const marcaria = !l.concluida_em && (input.ordem == null || ordem < input.ordem);
+    return marcaria && FONTES_PAGAMENTO.includes(l.tarefa_modelo_etapas?.fonte_automatica as FonteAutomatica);
+  });
+  if (pulaPagamento) return { error: "Pagamento só se confirma pela verificação na central (Verificar pagamento)." };
+  for (const l of lista) {
     const ordem = l.tarefa_modelo_etapas?.ordem ?? 0;
     const deveEstarFeita = input.ordem == null || ordem < input.ordem;
     if (deveEstarFeita === !!l.concluida_em) continue;
@@ -483,4 +520,62 @@ export async function salvarEtapasModeloAction(input: { modeloId: string; etapas
   revalidatePath("/admin/configuracoes/tarefa-modelos", "layout");
   revalidar();
   return { ok: true, mensagem: `${input.etapas.length} etapa(s) salva(s).` };
+}
+
+/** Marca a etapa atual da tarefa (botão rápido da lista). */
+export async function marcarEtapaAtualAction(tarefaId: string): Promise<Resultado> {
+  await requireSomaStaff();
+  const supabase = await createClient();
+  const { data: t } = await supabase.from("tarefas").select("modelo_id, etapa_atual").eq("id", tarefaId).maybeSingle();
+  if (!t || t.etapa_atual == null) return { error: "Tarefa sem etapa pendente." };
+  const { data: e } = await supabase
+    .from("tarefa_modelo_etapas")
+    .select("id")
+    .eq("modelo_id", t.modelo_id)
+    .eq("ordem", t.etapa_atual)
+    .maybeSingle();
+  if (!e) return { error: "Etapa não encontrada." };
+  return marcarEtapaAction({ tarefaId, etapaId: e.id as string, feita: true });
+}
+
+/**
+ * Depois que a tela consultou o pagamento na central (mesma rota das
+ * Centrais do Simples/ISS, que grava das_pagamentos/iss_pagamentos): se a guia
+ * da competência está paga, conclui TODAS as etapas da tarefa de uma vez.
+ */
+export async function concluirSePagoAction(tarefaId: string): Promise<{ ok: true; pago: boolean; mensagem: string } | { error: string }> {
+  await requireSomaStaff();
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { data: t } = await supabase.from("tarefas").select("id, modelo_id, company_id, competencia, status").eq("id", tarefaId).maybeSingle();
+  if (!t) return { error: "Tarefa não encontrada." };
+  const { data: defs } = await supabase.from("tarefa_modelo_etapas").select("id, fonte_automatica").eq("modelo_id", t.modelo_id);
+  const fontes = new Set((defs ?? []).map((d) => d.fonte_automatica as string | null));
+  let pago = false;
+  let fonte: FonteAutomatica | null = null;
+  if (fontes.has("DAS_PAGO")) {
+    fonte = "DAS_PAGO";
+    const { data } = await supabase.from("das_pagamentos").select("status").eq("company_id", t.company_id).eq("competencia", t.competencia).maybeSingle();
+    pago = data?.status === "pago";
+  } else if (fontes.has("ISS_PAGO")) {
+    fonte = "ISS_PAGO";
+    const { data } = await supabase.from("iss_pagamentos").select("status").eq("company_id", t.company_id).eq("competencia", t.competencia);
+    pago = (data ?? []).some((r) => r.status === "paga");
+  } else {
+    return { error: "Essa tarefa não tem etapa de pagamento." };
+  }
+  if (!pago) return { ok: true, pago: false, mensagem: "Guia ainda não consta como paga — nada foi concluído." };
+
+  const agora = new Date().toISOString();
+  const { error } = await supabase
+    .from("tarefa_etapas")
+    .update({ concluida_em: agora, concluida_por: user.id })
+    .eq("tarefa_id", tarefaId)
+    .is("concluida_em", null);
+  if (error) return { error: error.message };
+  await recalcularTarefas(supabase, [tarefaId]);
+  await supabase.from("tarefas").update({ concluida_por: user.id, concluida_por_fonte: `${FONTES_ROTULO[fonte]} (verificado)` }).eq("id", tarefaId);
+  await supabase.from("tarefa_eventos").insert({ tarefa_id: tarefaId, user_id: user.id, tipo: "VERIFICACAO", para: "CONCLUIDA", comentario: FONTES_ROTULO[fonte] });
+  revalidar();
+  return { ok: true, pago: true, mensagem: "Pago — tarefa concluída com todas as etapas." };
 }

@@ -41,6 +41,15 @@ export const FONTES_ROTULO: Record<FonteAutomatica, string> = {
   MES_FECHADO: "Mês fechado",
 };
 
+// Etapas de pagamento: só se concluem pela verificação na central (nunca na mão).
+export const FONTES_PAGAMENTO: FonteAutomatica[] = ["DAS_PAGO", "ISS_PAGO"];
+
+/** Onde a tarefa verifica o pagamento (botão "Verificar pagamento"). */
+export type Verificacao = "DAS" | "ISS_RIO" | "ISS_PETROPOLIS";
+
+export const IBGE_RIO = "3304557";
+export const IBGE_PETROPOLIS = "3303906";
+
 export function aberta(status: StatusTarefa): boolean {
   return status === "A_FAZER" || status === "EM_ANDAMENTO";
 }

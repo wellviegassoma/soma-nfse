@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
 import { etapasDaTarefaAction, marcarEtapaAction, type EtapaTarefa } from "@/lib/actions/tarefas";
 
 /** Etapas de uma tarefa, marcáveis. Carrega sob demanda (ao abrir a linha). */
-export function ChecklistTarefa({ tarefaId }: { tarefaId: string }) {
+export function ChecklistTarefa({ tarefaId, horizontal = false }: { tarefaId: string; horizontal?: boolean }) {
   const [etapas, setEtapas] = useState<EtapaTarefa[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [pendente, iniciar] = useTransition();
@@ -41,13 +41,25 @@ export function ChecklistTarefa({ tarefaId }: { tarefaId: string }) {
   const proxima = etapas.find((e) => !e.concluida_em)?.etapa_id;
 
   return (
-    <ol className="mt-2 flex flex-col gap-1 rounded-lg border border-border bg-surface-muted/50 p-2">
+    <ol
+      className={cn(
+        "mt-1 flex gap-1.5 rounded-lg border border-border bg-surface p-2",
+        horizontal ? "flex-wrap items-stretch" : "flex-col",
+      )}
+    >
       {etapas.map((e) => (
-        <li key={e.etapa_id} className="flex flex-wrap items-center gap-2 text-xs">
+        <li
+          key={e.etapa_id}
+          className={cn(
+            "flex flex-wrap items-center gap-2 text-xs",
+            horizontal ? "min-w-[200px] flex-1 rounded-md border border-border/70 px-2 py-1.5" : "",
+          )}
+        >
           <input
             type="checkbox"
             checked={!!e.concluida_em}
-            disabled={pendente}
+            disabled={pendente || (e.pagamento && !e.concluida_em)}
+            title={e.pagamento && !e.concluida_em ? "Só conclui pelo botão Verificar pagamento" : undefined}
             onChange={() => marcar(e)}
             aria-label={e.nome}
           />
