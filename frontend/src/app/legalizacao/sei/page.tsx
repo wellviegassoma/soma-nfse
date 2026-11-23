@@ -56,13 +56,17 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
       .order("iniciado_em", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    coberturaPetropolis(supabase),
+    // A contagem de cobertura não pode derrubar a lista de processos.
+    coberturaPetropolis(supabase).catch((e) => {
+      console.error("SEI: falha na cobertura de Petrópolis", e);
+      return null;
+    }),
   ]);
   const todosProcessos = processos as unknown as Linha[];
   const arquivados = todosProcessos.filter((l) => l.arquivado_em);
   // Fora "Arquivados", os arquivados não entram em lista nem em contagem.
   const todas = todosProcessos.filter((l) => !l.arquivado_em);
-  const semProcesso = cobertura.filter((c) => c.situacao === "SEM_PROCESSO").length;
+  const semProcesso = cobertura ? cobertura.filter((c) => c.situacao === "SEM_PROCESSO").length : 0;
   const clienteInativo = (l: Linha) => !!l.empresa && !l.empresa.ativa;
 
   const nomeCliente = (l: Linha) => l.empresa?.trade_name || l.empresa?.legal_name || null;
@@ -107,7 +111,7 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
     { chave: "sem_cliente", label: "Sem cliente", n: contar((l) => !l.company_id), href: url({ filtro: filtro === "sem_cliente" ? "" : "sem_cliente" }), ativo: filtro === "sem_cliente" },
   ];
   const cardsExtras: typeof cards = [
-    { chave: "cobertura", label: "Clientes de Petrópolis sem processo", n: semProcesso, href: "/legalizacao/sei/cobertura", ativo: false, destaque: true },
+    { chave: "cobertura", label: cobertura ? "Clientes de Petrópolis sem processo" : "Clientes sem processo (erro ao contar)", n: semProcesso, href: "/legalizacao/sei/cobertura", ativo: false, destaque: true },
     { chave: "cliente_inativo", label: "Cliente inativo (arquivar?)", n: contar(clienteInativo), href: url({ filtro: filtro === "cliente_inativo" ? "" : "cliente_inativo" }), ativo: filtro === "cliente_inativo", destaque: true },
     { chave: "arquivados", label: "Arquivados", n: arquivados.length, href: url({ filtro: filtro === "arquivados" ? "" : "arquivados" }), ativo: filtro === "arquivados" },
   ];

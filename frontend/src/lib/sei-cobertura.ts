@@ -5,7 +5,8 @@ import { IBGE_PETROPOLIS, type MotivoDispensa } from "@/lib/sei-labels";
 
 // Cobertura do SEI: todo cliente ativo de Petrópolis deve ter processo no SEI
 // (não arquivado) ou uma dispensa conferida — manual (sei_cobertura_dispensas)
-// ou "Vigilância Sanitária não se aplica" já marcado em Alvarás e licenças.
+// ou "Vigilância Sanitária não se aplica" já marcado em Alvarás e licenças
+// (legalizacao_tipos_empresas_excecao com aplicavel=false).
 
 export type SituacaoCobertura = "COM_PROCESSO" | "SEM_PROCESSO" | "DISPENSADO" | "DISPENSADO_LEGALIZACAO";
 
@@ -55,7 +56,14 @@ export async function coberturaPetropolis(supabase: SupabaseClient): Promise<Lin
   const tiposVisa = (tipos ?? []).map((t) => t.id as string);
   const [{ data: naoAplica, error: e3 }, { data: licencas, error: e4 }] = tiposVisa.length
     ? await Promise.all([
-        supabase.from("legalizacao_tipos_nao_aplicaveis").select("company_id").in("tipo_id", tiposVisa).limit(5000),
+        // Só a marcação explícita "não se aplica" (aplicavel=false) conta como
+        // dispensa: é uma decisão de alguém, não o padrão do tipo.
+        supabase
+          .from("legalizacao_tipos_empresas_excecao")
+          .select("company_id")
+          .in("tipo_id", tiposVisa)
+          .eq("aplicavel", false)
+          .limit(5000),
         supabase.from("legalizacao_documentos").select("company_id, data_vencimento").in("tipo_id", tiposVisa).limit(5000),
       ])
     : [{ data: [], error: null }, { data: [], error: null }];
