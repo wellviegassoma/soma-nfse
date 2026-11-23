@@ -5,6 +5,7 @@ import { chaveObrigacao, itemRelevante } from "@/lib/agenda-tributaria";
 import { mesAnteriorBrasilia } from "@/lib/competencia";
 import {
   MODELO_COLUNAS,
+  listarEquipe,
   carregarEmpresas,
   casaObrigacao,
   empresaAtendida,
@@ -25,7 +26,7 @@ export default async function TarefaModelosPage() {
   const supabase = await createClient();
   const competencia = mesAnteriorBrasilia();
 
-  const [{ data: modelosRaw }, { data: deptos }, itens, empresas, excecoes, folha, { data: etapasRaw }] = await Promise.all([
+  const [{ data: modelosRaw }, { data: deptos }, itens, empresas, excecoes, folha, { data: etapasRaw }, equipe] = await Promise.all([
     supabase.from("tarefa_modelos").select(MODELO_COLUNAS).order("ordem").order("nome"),
     supabase.from("atendimento_departamentos").select("id, nome").eq("ativo", true).order("nome"),
     buscarTudoPaginado<ItemRow>((from, to) =>
@@ -52,6 +53,7 @@ export default async function TarefaModelosPage() {
       .from("tarefa_modelo_etapas")
       .select("id, modelo_id, ordem, nome, departamento_id, fonte_automatica, depende_do_cliente")
       .order("ordem"),
+    listarEquipe(),
   ]);
   const etapas: Record<string, EtapaModeloInput[]> = {};
   for (const e of (etapasRaw ?? []) as (EtapaModeloInput & { modelo_id: string })[]) {
@@ -126,6 +128,7 @@ export default async function TarefaModelosPage() {
         obrigacaoDoModelo={obrigacaoDoModelo}
         competenciaPadrao={competencia}
         etapas={etapas}
+        equipe={equipe}
       />
     </div>
   );

@@ -121,7 +121,7 @@ export async function recalcularTarefas(db: Db, tarefaIds: string[], opcoes: { r
     const [{ data: tarefas, error: e1 }, { data: feitas, error: e2 }] = await Promise.all([
       db
         .from("tarefas")
-        .select("id, modelo_id, company_id, departamento_id, responsavel_id, status, etapa_atual, aguardando_cliente, tarefa_modelos(departamento_id)")
+        .select("id, modelo_id, company_id, departamento_id, responsavel_id, status, etapa_atual, aguardando_cliente, tarefa_modelos(departamento_id, responsavel_fixo_id)")
         .in("id", ids),
       db.from("tarefa_etapas").select("tarefa_id, etapa_id, concluida_em").in("tarefa_id", ids),
     ]);
@@ -136,7 +136,7 @@ export async function recalcularTarefas(db: Db, tarefaIds: string[], opcoes: { r
       status: string;
       etapa_atual: number | null;
       aguardando_cliente: boolean;
-      tarefa_modelos: { departamento_id: string } | null;
+      tarefa_modelos: { departamento_id: string; responsavel_fixo_id: string | null } | null;
     };
     const lista = (tarefas ?? []) as unknown as T[];
     const defs = await etapasDosModelos(db, [...new Set(lista.map((t) => t.modelo_id))]);
@@ -179,7 +179,9 @@ export async function recalcularTarefas(db: Db, tarefaIds: string[], opcoes: { r
         if (depto !== t.departamento_id) {
           // Cascata: passa para o responsável do próximo departamento.
           upd.departamento_id = depto;
-          upd.responsavel_id = dono.get(`${t.company_id}|${depto}`) ?? null;
+          // No departamento do modelo, o responsável fixo (se houver) vence a carteira.
+          const fixo = depto === t.tarefa_modelos?.departamento_id ? t.tarefa_modelos?.responsavel_fixo_id : null;
+          upd.responsavel_id = fixo ?? dono.get(`${t.company_id}|${depto}`) ?? null;
         }
       }
       if (Object.keys(upd).length) {

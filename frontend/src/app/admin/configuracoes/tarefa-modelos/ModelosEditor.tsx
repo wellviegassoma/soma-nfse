@@ -39,6 +39,7 @@ const NOVO: ModeloInput = {
   aplica_municipios: null,
   aplica_folha: null,
   fonte_automatica: null,
+  responsavel_fixo_id: null,
   ativo: false,
   ordem: 0,
 };
@@ -76,6 +77,7 @@ export function ModelosEditor({
   obrigacaoDoModelo,
   competenciaPadrao,
   etapas,
+  equipe,
 }: {
   modelos: Modelo[];
   departamentos: Opcao[];
@@ -87,6 +89,7 @@ export function ModelosEditor({
   obrigacaoDoModelo: Record<string, string | null>;
   competenciaPadrao: string;
   etapas: Record<string, EtapaModeloInput[]>;
+  equipe: Opcao[];
 }) {
   const [editando, setEditando] = useState<ModeloInput | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; erro?: string } | null>(null);
@@ -167,6 +170,7 @@ export function ModelosEditor({
           excecoes={excecoes.filter((x) => x.modelo_id === editando.id)}
           obrigacaoAtual={editando.id ? obrigacaoDoModelo[editando.id] ?? null : null}
           etapas={editando.id ? etapas[editando.id] ?? [] : []}
+          equipe={equipe}
           aoFechar={(texto) => {
             setEditando(null);
             if (texto) setMsg({ ok: texto });
@@ -208,7 +212,14 @@ export function ModelosEditor({
                     {m.periodicidade !== "MENSAL" && m.meses?.length ? ` (${m.meses.map((x) => MESES[x - 1]).join(", ")})` : ""}
                   </div>
                 </td>
-                <td className="px-2 py-2 text-xs">{nomeDepto.get(m.departamento_id) ?? "—"}</td>
+                <td className="px-2 py-2 text-xs">
+                  {nomeDepto.get(m.departamento_id) ?? "—"}
+                  {m.responsavel_fixo_id && (
+                    <div className="mt-0.5 font-medium text-foreground/80">
+                      fixo: {equipe.find((u) => u.id === m.responsavel_fixo_id)?.nome ?? "—"}
+                    </div>
+                  )}
+                </td>
                 <td className="max-w-[340px] px-2 py-2 text-xs">{resumoPrazo(m, obrigacaoDoModelo[m.id])}</td>
                 <td className="px-2 py-2 text-xs">{resumoAplica(m, municipios)}</td>
                 <td className="px-2 py-2 text-center text-xs">{alcance[m.id] ?? 0}</td>
@@ -242,6 +253,7 @@ function FormModelo({
   excecoes,
   obrigacaoAtual,
   etapas,
+  equipe,
   aoFechar,
 }: {
   inicial: ModeloInput;
@@ -252,6 +264,7 @@ function FormModelo({
   excecoes: { company_id: string; tipo: "INCLUIR" | "EXCLUIR" }[];
   obrigacaoAtual: string | null;
   etapas: EtapaModeloInput[];
+  equipe: Opcao[];
   aoFechar: (msg?: string) => void;
 }) {
   const [m, setM] = useState<ModeloInput>(inicial);
@@ -294,6 +307,23 @@ function FormModelo({
             {departamentos.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.nome}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className={rotulo} title="Vazio = responsável da carteira de cada empresa">
+            Responsável fixo (opcional)
+          </span>
+          <select
+            value={m.responsavel_fixo_id ?? ""}
+            onChange={(e) => set("responsavel_fixo_id", e.target.value || null)}
+            className={campo}
+          >
+            <option value="">Carteira da empresa</option>
+            {equipe.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.nome}
               </option>
             ))}
           </select>

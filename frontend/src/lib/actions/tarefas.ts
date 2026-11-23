@@ -139,6 +139,7 @@ export type ModeloInput = {
   aplica_municipios: string[] | null;
   aplica_folha: boolean | null;
   fonte_automatica: string | null;
+  responsavel_fixo_id: string | null;
   ativo: boolean;
   ordem: number;
 };
@@ -176,14 +177,25 @@ export async function salvarModeloAction(m: ModeloInput): Promise<Resultado & { 
     aplica_municipios: m.aplica_municipios?.length ? m.aplica_municipios : null,
     aplica_folha: m.aplica_folha,
     fonte_automatica: m.fonte_automatica || null,
+    responsavel_fixo_id: m.responsavel_fixo_id || null,
     ativo: m.ativo,
     ordem: m.ordem,
   };
+  const anterior = m.id
+    ? (await supabase.from("tarefa_modelos").select("responsavel_fixo_id").eq("id", m.id).maybeSingle()).data
+    : null;
   const r = m.id
     ? await supabase.from("tarefa_modelos").update(linha).eq("id", m.id).select("id").single()
     : await supabase.from("tarefa_modelos").insert(linha).select("id").single();
   if (r.error) return { error: r.error.message };
+  // Responsável fixo (ou a volta para a carteira) vale para as tarefas abertas do modelo.
+  // Só quando o fixo mudou (ativar/editar outro campo não desfaz "Passar para…").
+  if (m.id && (anterior?.responsavel_fixo_id ?? null) !== linha.responsavel_fixo_id) {
+    const erroResp = await aplicarResponsavelDoModelo(supabase, r.data.id as string);
+    if (erroResp) return { error: erroResp };
+  }
   revalidatePath("/admin/configuracoes/tarefa-modelos", "layout");
+  revalidar();
   return { ok: true, id: r.data.id as string };
 }
 
@@ -246,12 +258,15 @@ export async function salvarResponsavelAction(input: {
         .eq("company_id", input.companyId)
         .eq("departamento_id", input.departamentoId);
   if (error) return { error: error.message };
-  const { error: e2 } = await supabase
+  const fixos = await modelosComFixo(supabase, input.departamentoId);
+  let q = supabase
     .from("tarefas")
     .update({ responsavel_id: input.userId })
     .eq("company_id", input.companyId)
     .eq("departamento_id", input.departamentoId)
     .in("status", ["A_FAZER", "EM_ANDAMENTO"]);
+  if (fixos.length) q = q.not("modelo_id", "in", `(${fixos.join(",")})`);
+  const { error: e2 } = await q;
   if (e2) return { error: e2.message };
   revalidatePath("/admin/configuracoes/carteira");
   revalidar();
@@ -267,6 +282,7 @@ export async function salvarResponsaveisEmLoteAction(input: {
   await requireSuperAdmin();
   if (!input.companyIds.length) return { error: "Nenhuma empresa." };
   const supabase = await createClient();
+  const fixos = await modelosComFixo(supabase, input.departamentoId);
   for (let i = 0; i < input.companyIds.length; i += 200) {
     const ids = input.companyIds.slice(i, i + 200);
     const { error } = input.userId
@@ -280,12 +296,14 @@ export async function salvarResponsaveisEmLoteAction(input: {
         )
       : await supabase.from("tarefa_responsaveis").delete().eq("departamento_id", input.departamentoId).in("company_id", ids);
     if (error) return { error: error.message };
-    const { error: e2 } = await supabase
+    let q = supabase
       .from("tarefas")
       .update({ responsavel_id: input.userId })
       .eq("departamento_id", input.departamentoId)
       .in("company_id", ids)
       .in("status", ["A_FAZER", "EM_ANDAMENTO"]);
+    if (fixos.length) q = q.not("modelo_id", "in", `(${fixos.join(",")})`);
+    const { error: e2 } = await q;
     if (e2) return { error: e2.message };
   }
   revalidatePath("/admin/configuracoes/carteira");
@@ -643,4 +661,62 @@ export async function aplicarRegeracaoAction(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/**
+ * Tarefas abertas do modelo que estão no departamento dele passam para o
+ * responsável fixo; sem fixo, voltam para a carteira de cada empresa.
+ */
+async function aplicarResponsavelDoModelo(supabase: Awaited<ReturnType<typeof createClient>>, modeloId: string): Promise<string | null> {
+  const { data: m } = await supabase.from("tarefa_modelos").select("departamento_id, responsavel_fixo_id").eq("id", modeloId).maybeSingle();
+  if (!m) return null;
+  if (m.responsavel_fixo_id) {
+    const { error } = await supabase
+      .from("tarefas")
+      .update({ responsavel_id: m.responsavel_fixo_id })
+      .eq("modelo_id", modeloId)
+      .eq("departamento_id", m.departamento_id)
+      .in("status", ["A_FAZER", "EM_ANDAMENTO"])
+      .or(`responsavel_id.is.null,responsavel_id.neq.${m.responsavel_fixo_id}`);
+    return error?.message ?? null;
+  }
+  // Sem fixo: devolve à carteira (só o que não bate com ela).
+  const { data: abertas } = await supabase
+    .from("tarefas")
+    .select("id, company_id, responsavel_id")
+    .eq("modelo_id", modeloId)
+    .eq("departamento_id", m.departamento_id)
+    .in("status", ["A_FAZER", "EM_ANDAMENTO"])
+    .limit(5000);
+  if (!abertas?.length) return null;
+  const { data: carteira } = await supabase
+    .from("tarefa_responsaveis")
+    .select("company_id, user_id")
+    .eq("departamento_id", m.departamento_id);
+  const dono = new Map((carteira ?? []).map((c) => [c.company_id as string, c.user_id as string]));
+  const porDono = new Map<string, string[]>();
+  for (const t of abertas) {
+    const novo = dono.get(t.company_id as string) ?? "";
+    if ((t.responsavel_id ?? "") === novo) continue;
+    const arr = porDono.get(novo) ?? [];
+    arr.push(t.id as string);
+    porDono.set(novo, arr);
+  }
+  for (const [novo, ids] of porDono) {
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await supabase.from("tarefas").update({ responsavel_id: novo || null }).in("id", ids.slice(i, i + 200));
+      if (error) return error.message;
+    }
+  }
+  return null;
+}
+
+/** Modelos com responsável fixo no departamento (a carteira não mexe nas tarefas deles). */
+async function modelosComFixo(supabase: Awaited<ReturnType<typeof createClient>>, departamentoId: string): Promise<string[]> {
+  const { data } = await supabase
+    .from("tarefa_modelos")
+    .select("id")
+    .eq("departamento_id", departamentoId)
+    .not("responsavel_fixo_id", "is", null);
+  return (data ?? []).map((m) => m.id as string);
 }

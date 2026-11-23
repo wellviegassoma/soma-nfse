@@ -31,12 +31,13 @@ export type Modelo = {
   aplica_municipios: string[] | null;
   aplica_folha: boolean | null;
   fonte_automatica: string | null;
+  responsavel_fixo_id: string | null;
   ativo: boolean;
   ordem: number;
 };
 
 export const MODELO_COLUNAS =
-  "id, nome, descricao, departamento_id, periodicidade, meses, prazo_tipo, agenda_chave, dia_prazo, dia_meta, mes_prazo_offset, aplica_regimes, aplica_pessoa, aplica_municipios, aplica_folha, fonte_automatica, ativo, ordem";
+  "id, nome, descricao, departamento_id, periodicidade, meses, prazo_tipo, agenda_chave, dia_prazo, dia_meta, mes_prazo_offset, aplica_regimes, aplica_pessoa, aplica_municipios, aplica_folha, fonte_automatica, responsavel_fixo_id, ativo, ordem";
 
 export type EmpresaTarefa = {
   id: string;
@@ -262,7 +263,8 @@ export async function gerarTarefas(
         company_id: e.id,
         competencia,
         departamento_id: m.departamento_id,
-        responsavel_id: responsavel.get(`${e.id}|${m.departamento_id}`) ?? null,
+        // Responsável fixo do modelo vence a carteira.
+        responsavel_id: m.responsavel_fixo_id ?? responsavel.get(`${e.id}|${m.departamento_id}`) ?? null,
         ...prazos,
       });
     }
