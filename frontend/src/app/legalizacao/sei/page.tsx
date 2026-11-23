@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SITUACAO_LABELS, type SeiSituacao } from "@/lib/sei-labels";
+import { coberturaPetropolis } from "@/lib/sei-cobertura";
 import { NovidadeBadge, SituacaoBadge, dataHoraBr, temNovidade } from "./situacao";
 
 export const metadata = { title: "SEI — Legalização" };
@@ -25,7 +26,9 @@ type Linha = {
   novidade_em: string | null;
   visto_em: string | null;
   acesso_expirado: boolean;
-  empresa: { legal_name: string; trade_name: string | null; codigo_cliente: string | null } | null;
+  arquivado_em: string | null;
+  motivo_arquivamento: string | null;
+  empresa: { legal_name: string; trade_name: string | null; codigo_cliente: string | null; ativa: boolean } | null;
 };
 
 export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
@@ -36,12 +39,12 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
   const filtro = typeof sp.filtro === "string" ? sp.filtro : "";
 
   const supabase = await createClient();
-  const [processos, { data: ultimaSync }] = await Promise.all([
+  const [processos, { data: ultimaSync }, cobertura] = await Promise.all([
     buscarTudoPaginado((from, to) =>
       supabase
         .from("sei_processos")
         .select(
-          "id, numero, tipo, situacao, company_id, requerente_nome, interessados, ultimo_andamento_em, ultimo_andamento_texto, novidade_em, visto_em, acesso_expirado, empresa:companies(legal_name, trade_name, codigo_cliente)",
+          "id, numero, tipo, situacao, company_id, requerente_nome, interessados, ultimo_andamento_em, ultimo_andamento_texto, novidade_em, visto_em, acesso_expirado, arquivado_em, motivo_arquivamento, empresa:companies(legal_name, trade_name, codigo_cliente, ativa)",
         )
         .order("ultimo_andamento_em", { ascending: false, nullsFirst: false })
         .order("id")
@@ -53,15 +56,22 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
       .order("iniciado_em", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    coberturaPetropolis(supabase),
   ]);
-  const todas = processos as unknown as Linha[];
+  const todosProcessos = processos as unknown as Linha[];
+  const arquivados = todosProcessos.filter((l) => l.arquivado_em);
+  // Fora "Arquivados", os arquivados não entram em lista nem em contagem.
+  const todas = todosProcessos.filter((l) => !l.arquivado_em);
+  const semProcesso = cobertura.filter((c) => c.situacao === "SEM_PROCESSO").length;
+  const clienteInativo = (l: Linha) => !!l.empresa && !l.empresa.ativa;
 
   const nomeCliente = (l: Linha) => l.empresa?.trade_name || l.empresa?.legal_name || null;
   const alvo = normalizar(q);
-  const linhas = todas.filter((l) => {
+  const linhas = (filtro === "arquivados" ? arquivados : todas).filter((l) => {
     if (situacao && l.situacao !== situacao) return false;
     if (filtro === "sem_cliente" && l.company_id) return false;
     if (filtro === "novidade" && !temNovidade(l)) return false;
+    if (filtro === "cliente_inativo" && !clienteInativo(l)) return false;
     if (alvo) {
       const texto = normalizar(
         [l.numero, l.tipo, nomeCliente(l), l.empresa?.legal_name, l.requerente_nome, ...l.interessados].join(" "),
@@ -96,6 +106,11 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
     })),
     { chave: "sem_cliente", label: "Sem cliente", n: contar((l) => !l.company_id), href: url({ filtro: filtro === "sem_cliente" ? "" : "sem_cliente" }), ativo: filtro === "sem_cliente" },
   ];
+  const cardsExtras: typeof cards = [
+    { chave: "cobertura", label: "Clientes de Petrópolis sem processo", n: semProcesso, href: "/legalizacao/sei/cobertura", ativo: false, destaque: true },
+    { chave: "cliente_inativo", label: "Cliente inativo (arquivar?)", n: contar(clienteInativo), href: url({ filtro: filtro === "cliente_inativo" ? "" : "cliente_inativo" }), ativo: filtro === "cliente_inativo", destaque: true },
+    { chave: "arquivados", label: "Arquivados", n: arquivados.length, href: url({ filtro: filtro === "arquivados" ? "" : "arquivados" }), ativo: filtro === "arquivados" },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
@@ -121,6 +136,19 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
             <Card className={`p-4 transition-colors ${c.ativo ? "border-brand ring-2 ring-brand/20" : "hover:bg-surface-muted"}`}>
               <div className={`text-2xl font-semibold ${c.destaque && c.n > 0 ? "text-danger" : "text-foreground"}`}>{c.n}</div>
               <div className="text-xs text-foreground/50">{c.label}</div>
+            </Card>
+          </Link>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {cardsExtras.map((c) => (
+          <Link key={c.chave} href={c.href}>
+            <Card
+              className={`flex items-center justify-between gap-3 px-4 py-3 transition-colors ${c.ativo ? "border-brand ring-2 ring-brand/20" : "hover:bg-surface-muted"}`}
+            >
+              <div className="text-sm text-foreground/70">{c.label}</div>
+              <div className={`text-xl font-semibold ${c.destaque && c.n > 0 ? "text-danger" : "text-foreground"}`}>{c.n}</div>
             </Card>
           </Link>
         ))}
@@ -177,7 +205,16 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
                     <SituacaoBadge situacao={l.situacao} />
                     {temNovidade(l) && <NovidadeBadge />}
                     {l.acesso_expirado && <span className="text-xs text-foreground/40">acesso expirado</span>}
+                    {!l.arquivado_em && clienteInativo(l) && (
+                      <span className="text-xs text-danger">cliente inativo — arquivar?</span>
+                    )}
                   </div>
+                  {l.arquivado_em && (
+                    <div className="mt-1 text-xs text-foreground/50">
+                      Arquivado em {dataHoraBr(l.arquivado_em)}
+                      {l.motivo_arquivamento && ` — ${l.motivo_arquivamento}`}
+                    </div>
+                  )}
                 </td>
                 <td className="max-w-md px-4 py-3">
                   <div className="text-xs text-foreground/50">{dataHoraBr(l.ultimo_andamento_em)}</div>

@@ -279,11 +279,13 @@ function camposDoForm(form) {
   return campos;
 }
 
-async function lerAcessos(urlControle) {
-  const primeira = await seiDoc(urlControle);
-  // O SEI lembra na sessão a última página vista: o GET pode voltar na página 3.
-  // Então a 1ª resposta só serve para saber quantas páginas há; todas (inclusive
-  // a 1) são pedidas explicitamente pelo POST de paginação.
+/**
+ * Lê todas as páginas de uma lista de acessos. O SEI lembra na sessão a última
+ * página vista (o GET pode voltar na página 3), então a 1ª resposta só serve
+ * para saber quantas páginas há; todas são pedidas pelo POST de paginação.
+ * `extras` = campos que mantêm o modo da lista (ex.: ver expirados).
+ */
+async function lerListaPaginada(primeira, rotulo, extras = []) {
   const sel = primeira.doc.querySelector("#selInfraPaginacaoSuperior");
   const paginas = sel ? sel.options.length : 1;
   const legenda = primeira.doc.querySelector("caption")?.textContent.trim() || "";
@@ -294,35 +296,94 @@ async function lerAcessos(urlControle) {
   if (!form || paginas === 1) {
     todos.push(...linhasAcessos(primeira.doc, primeira.url));
     porPagina.push(`p1=${todos.length}`);
+    log(`${rotulo}: ${todos.length} acessos (${legenda || "sem legenda"}).`, "dim");
   }
   for (let p = 0; form && paginas > 1 && p < paginas; p++) {
-    const campos = camposDoForm(form).filter(([k]) => k !== "hdnInfraPaginaAtual");
-    campos.push(["hdnInfraPaginaAtual", String(p)]);
+    const nomesExtras = new Set(extras.map(([k]) => k));
+    const campos = camposDoForm(form).filter(([k]) => k !== "hdnInfraPaginaAtual" && !nomesExtras.has(k));
+    campos.push(...extras, ["hdnInfraPaginaAtual", String(p)]);
     const pag = await seiDoc(action, campos);
     const linhas = linhasAcessos(pag.doc, pag.url);
     const leg = pag.doc.querySelector("caption")?.textContent.trim() || "";
-    log(`Página ${p + 1}: ${linhas.length} acessos (${leg || "sem legenda"}); primeiro ${linhas[0]?.numero ?? "—"}.`, "dim");
+    log(`${rotulo}, página ${p + 1}: ${linhas.length} acessos (${leg || "sem legenda"}); primeiro ${linhas[0]?.numero ?? "—"}.`, "dim");
     porPagina.push(`p${p + 1}=${linhas.length} (1º ${linhas[0]?.numero ?? "—"})`);
     todos.push(...linhas);
     await dormir(PAUSA_DOC_MS);
   }
-  // Agrupa por processo: acessos mais recentes primeiro.
+  const esperado = Number(legenda.match(/\((\d+) registros?/)?.[1] || 0);
+  const avisos = [];
+  if (esperado && todos.length < esperado) {
+    avisos.push({
+      onde: rotulo,
+      erro: `li ${todos.length} de ${esperado} acessos em ${paginas} página(s); por página: ${porPagina.join(", ")}`,
+    });
+  }
+  return { linhas: todos, paginas, avisos };
+}
+
+/**
+ * Como abrir a lista com os acessos expirados, a partir do link "Ver expirados":
+ * link direto, URL dentro do onclick, ou campo escondido + envio do formulário.
+ */
+function modoExpirados(doc, url) {
+  const a = [...doc.querySelectorAll("a")].find((x) => /ver expirados/i.test(x.textContent));
+  if (!a) return { erro: "link 'Ver expirados' não encontrado" };
+  const href = a.getAttribute("href") || "";
+  const onclick = a.getAttribute("onclick") || "";
+  if (/\.php\?/.test(href) && !/^javascript:/i.test(href)) return { url: new URL(href, url).href };
+  const urlNoClick = `${href} ${onclick}`.match(/['"]([\w./-]*\.php\?[^'"]+)['"]/)?.[1];
+  if (urlNoClick) return { url: new URL(urlNoClick.replace(/&amp;/g, "&"), url).href };
+  // Ex.: document.getElementById('hdnVerExpirados').value='S'; ...submit()
+  const campo = `${href} ${onclick}`.match(/getElementById\(['"](\w+)['"]\)\.value\s*=\s*['"]([^'"]*)['"]/);
+  if (campo) {
+    const el = doc.getElementById(campo[1]);
+    return { extras: [[el?.getAttribute("name") || campo[1], campo[2]]] };
+  }
+  const resumo = `${href} ${onclick}`
+    .replace(/[0-9a-f]{16,}/gi, "H")
+    .replace(/=([^&'"\s]{12,})/g, "=…")
+    .slice(0, 200);
+  return { erro: `não reconheci o link 'Ver expirados': ${resumo}` };
+}
+
+async function lerAcessos(urlControle) {
+  const primeira = await seiDoc(urlControle);
+  const validos = await lerListaPaginada(primeira, "Acessos válidos");
+  const avisos = [...validos.avisos];
+  const todos = validos.linhas.map((l) => ({ ...l, expirado: false }));
+
+  // Expirados: o processo existe (conta para a cobertura do cliente) mesmo
+  // que o acesso tenha vencido. Se ainda abrir no SEI, sincroniza normalmente.
+  let expirados = 0;
+  try {
+    const modo = modoExpirados(primeira.doc, primeira.url);
+    if (modo.erro) throw new Error(modo.erro);
+    const base = modo.url ? await seiDoc(modo.url) : primeira;
+    const lista = await lerListaPaginada(base, "Acessos expirados", modo.extras ?? []);
+    avisos.push(...lista.avisos);
+    const jaTem = new Set(todos.map((l) => `${l.numero}|${l.liberacao}|${l.validade}`));
+    for (const l of lista.linhas) {
+      const chave = `${l.numero}|${l.liberacao}|${l.validade}`;
+      if (jaTem.has(chave)) continue;
+      jaTem.add(chave);
+      todos.push({ ...l, expirado: true });
+      expirados++;
+    }
+  } catch (e) {
+    avisos.push({ onde: "acessos expirados", erro: String(e.message || e).slice(0, 500) });
+  }
+
+  // Agrupa por processo: acessos válidos primeiro, depois os mais recentes.
   const porNumero = new Map();
   for (const a of todos) {
     const lista = porNumero.get(a.numero) ?? [];
     lista.push(a);
     porNumero.set(a.numero, lista);
   }
-  for (const lista of porNumero.values()) lista.sort((x, y) => dataBr(y.liberacao).localeCompare(dataBr(x.liberacao)));
-  const esperado = Number(legenda.match(/\((\d+) registros?/)?.[1] || 0);
-  const avisos = [];
-  if (esperado && todos.length < esperado) {
-    avisos.push({
-      onde: "lista de acessos",
-      erro: `li ${todos.length} de ${esperado} acessos em ${paginas} página(s); por página: ${porPagina.join(", ")}`,
-    });
+  for (const lista of porNumero.values()) {
+    lista.sort((x, y) => Number(x.expirado) - Number(y.expirado) || dataBr(y.liberacao).localeCompare(dataBr(x.liberacao)));
   }
-  return { total: todos.length, paginas, processos: porNumero, avisos };
+  return { total: todos.length, expirados, paginas: validos.paginas, processos: porNumero, avisos };
 }
 
 function lerProcesso(doc, url) {
@@ -436,11 +497,13 @@ async function sincronizar() {
   try {
     const urlControle = await verificar();
     if (!urlControle) throw new Error("Verifique o login no SOMA e no SEI.");
-    sincronizacaoId = (await soma("/api/sei/sync", { acao: "iniciar" })).sincronizacao_id;
+    const inicio = await soma("/api/sei/sync", { acao: "iniciar" });
+    sincronizacaoId = inicio.sincronizacao_id;
+    const arquivados = new Set(inicio.arquivados ?? []);
 
     log("Lendo a lista de acessos externos…");
-    const { total, paginas, processos, avisos } = await lerAcessos(urlControle);
-    log(`${total} acessos em ${paginas} página(s), ${processos.size} processos.`, "ok");
+    const { total, expirados, processos, avisos } = await lerAcessos(urlControle);
+    log(`${total} acessos (${expirados} só expirados), ${processos.size} processos, ${arquivados.size} arquivado(s) no SOMA.`, "ok");
     for (const a of avisos) {
       tot.erros.push(a);
       log(`AVISO: ${a.erro}`, "err");
@@ -453,13 +516,20 @@ async function sincronizar() {
       if (parar) break;
       i++;
       $("resumo").textContent = `Processo ${i} de ${processos.size}: ${numero}`;
+      if (arquivados.has(numero)) {
+        tot.arquivados = (tot.arquivados || 0) + 1;
+        $("prog").value = i;
+        continue; // arquivado no SOMA: não abre no SEI
+      }
       try {
         const r = await sincronizarProcesso(sincronizacaoId, numero, acessos, tot);
         tot.processos++;
         log(
-          `${numero}: ${r.andamentos_novos} andamento(s) novo(s), ${r.baixados} doc(s) baixado(s)` +
-            (r.vinculo ? ` — vínculo: ${r.vinculo}` : " — SEM CLIENTE"),
-          r.vinculo ? "" : "dim",
+          r.soRegistro
+            ? `${numero}: acesso expirado e não abre mais no SEI — registrado só o número.`
+            : `${numero}: ${r.andamentos_novos} andamento(s) novo(s), ${r.baixados} doc(s) baixado(s)` +
+                (r.vinculo ? ` — vínculo: ${r.vinculo}` : " — SEM CLIENTE"),
+          r.vinculo && !r.soRegistro ? "" : "dim",
         );
       } catch (e) {
         tot.erros.push({ onde: numero, erro: String(e.message || e).slice(0, 2000) });
@@ -481,7 +551,7 @@ async function sincronizar() {
         (e) => log(`Falha ao registrar o fim: ${e.message}`, "err"),
       );
     }
-    const fim = `${parar ? "Interrompida" : "Concluída"}: ${tot.processos} processos, ${tot.andamentos_novos} andamentos novos, ${tot.documentos_novos} documentos baixados, ${tot.sem_acesso || 0} sem acesso no SEI, ${tot.erros.length} erro(s).`;
+    const fim = `${parar ? "Interrompida" : "Concluída"}: ${tot.processos} processos, ${tot.andamentos_novos} andamentos novos, ${tot.documentos_novos} documentos baixados, ${tot.sem_acesso || 0} sem acesso no SEI, ${tot.arquivados || 0} arquivado(s) pulado(s), ${tot.erros.length} erro(s).`;
     $("resumo").textContent = fim;
     log(fim, tot.erros.length ? "err" : "ok");
     rodando = false;
@@ -504,13 +574,39 @@ async function sincronizarProcesso(sincronizacaoId, numero, acessos, tot) {
       }
     } catch (e) {
       ultimoErro = e;
-      if (e.message === MSG_EXPIRADA) throw e;
+      // Acesso vencido pode responder como "sessão expirada": só é sessão caída
+      // de verdade se acontecer num acesso válido.
+      if (e.message === MSG_EXPIRADA && !acesso.expirado) throw e;
     }
   }
-  if (!lido) throw ultimoErro ?? new Error("nenhum acesso abriu o processo");
-
   const hoje = new Date().toISOString().slice(0, 10);
   const validade = acessos.map((a) => dataBr(a.validade)).filter(Boolean).sort().pop() || "";
+
+  if (!lido) {
+    // Só acesso expirado e o SEI não abre mais: registra que o processo existe
+    // (conta para a cobertura do cliente) sem mexer no que já estava guardado.
+    if (acessos.every((a) => a.expirado)) {
+      const resp = await soma("/api/sei/sync", {
+        acao: "processo",
+        sincronizacao_id: sincronizacaoId,
+        somente_registro: true,
+        processo: {
+          numero,
+          tipo: null,
+          data_geracao: null,
+          nivel_acesso: null,
+          interessados: [],
+          acesso_validade: validade ? validade.split("-").reverse().join("/") : null,
+          acesso_expirado: true,
+        },
+        formulario_texto: null,
+        documentos: [],
+        andamentos: [],
+      });
+      return { andamentos_novos: 0, baixados: 0, vinculo: resp.vinculo, soRegistro: true };
+    }
+    throw ultimoErro ?? new Error("nenhum acesso abriu o processo");
+  }
 
   // Formulário = primeiro documento, se for HTML gerado no SEI.
   let formularioTexto = null;

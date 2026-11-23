@@ -5,8 +5,17 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { SeletorEmpresa } from "@/components/SeletorEmpresa";
-import { vincularProcessoSei, marcarSeiVisto } from "@/lib/actions/sei";
-import { VINCULO_LABELS, andamentoRotineiro, formatarDocumento, type SeiSituacao, type VinculoOrigem } from "@/lib/sei-labels";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { vincularProcessoSei, marcarSeiVisto, arquivarProcessoSei, desarquivarProcessoSei } from "@/lib/actions/sei";
+import {
+  MOTIVOS_ARQUIVAMENTO,
+  VINCULO_LABELS,
+  andamentoRotineiro,
+  formatarDocumento,
+  type SeiSituacao,
+  type VinculoOrigem,
+} from "@/lib/sei-labels";
 import { NovidadeBadge, SituacaoBadge, dataBr, dataHoraBr, diaBr, temNovidade } from "../situacao";
 
 export const metadata = { title: "Processo SEI — Legalização" };
@@ -21,7 +30,7 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
   const supabase = await createClient();
   const { data: p } = await supabase
     .from("sei_processos")
-    .select("*, empresa:companies(id, legal_name, trade_name, codigo_cliente)")
+    .select("*, empresa:companies(id, legal_name, trade_name, codigo_cliente, ativa)")
     .eq("id", processoId)
     .maybeSingle();
   if (!p) notFound();
@@ -44,7 +53,13 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
       : Promise.resolve({ data: [] }),
   ]);
 
-  const empresa = p.empresa as { id: string; legal_name: string; trade_name: string | null; codigo_cliente: string | null } | null;
+  const empresa = p.empresa as {
+    id: string;
+    legal_name: string;
+    trade_name: string | null;
+    codigo_cliente: string | null;
+    ativa: boolean;
+  } | null;
   const novidade = temNovidade(p);
   const lista = (andamentos ?? []).filter((a) => mostrarTramitacao || !andamentoRotineiro(a.descricao));
   const ocultos = (andamentos ?? []).length - lista.length;
@@ -131,6 +146,53 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
           </form>
         )}
       </Card>
+
+      {p.arquivado_em ? (
+        <Card className="flex flex-wrap items-center justify-between gap-3 border-warning bg-warning/5 p-4 text-sm">
+          <div>
+            <span className="font-medium">Arquivado</span> em {dataHoraBr(p.arquivado_em)}
+            {p.motivo_arquivamento && ` — ${p.motivo_arquivamento}`}. A extensão não abre mais este processo no SEI.
+          </div>
+          {podeEditar && (
+            <form action={desarquivarProcessoSei}>
+              <input type="hidden" name="processoId" value={p.id} />
+              <Button type="submit" variant="secondary">Desarquivar</Button>
+            </form>
+          )}
+        </Card>
+      ) : (
+        podeEditar && (
+          <details className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+            <summary className="cursor-pointer text-foreground/70">
+              Arquivar processo{empresa && empresa.ativa === false ? " (cliente inativo)" : ""}
+            </summary>
+            <form action={arquivarProcessoSei} className="mt-3 flex flex-wrap items-end gap-2">
+              <input type="hidden" name="processoId" value={p.id} />
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-foreground/60">Motivo</label>
+                <Select name="motivo" defaultValue={empresa && empresa.ativa === false ? "Cliente saiu da SOMA" : ""} required className="w-64">
+                  <option value="" disabled>
+                    Escolha…
+                  </option>
+                  {MOTIVOS_ARQUIVAMENTO.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex min-w-60 flex-1 flex-col gap-1.5">
+                <label className="text-xs font-medium text-foreground/60">Observação (opcional)</label>
+                <Input name="observacao" maxLength={500} />
+              </div>
+              <Button type="submit" variant="secondary">Arquivar</Button>
+            </form>
+            <p className="mt-2 text-xs text-foreground/50">
+              Some da lista e das novidades, e a extensão deixa de abrir no SEI. O que já foi baixado fica guardado.
+            </p>
+          </details>
+        )
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="flex flex-col gap-3">

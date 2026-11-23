@@ -20,6 +20,26 @@ export const VINCULO_LABELS: Record<VinculoOrigem, string> = {
   FORMULARIO_NOME: "pelo nome no requerimento",
 };
 
+export const MOTIVOS_ARQUIVAMENTO = ["Cliente saiu da SOMA", "Processo encerrado", "Processo de outro cliente", "Outro"] as const;
+
+export type MotivoDispensa =
+  | "PONTO_REFERENCIA"
+  | "SEM_ATENDIMENTO_LOCAL"
+  | "ATIVIDADE_DISPENSADA"
+  | "PROCESSO_FORA_SEI"
+  | "OUTRO";
+
+export const MOTIVO_DISPENSA_LABELS: Record<MotivoDispensa, string> = {
+  PONTO_REFERENCIA: "Ponto de referência",
+  SEM_ATENDIMENTO_LOCAL: "Sem atendimento no local",
+  ATIVIDADE_DISPENSADA: "Atividade dispensada da licença",
+  PROCESSO_FORA_SEI: "Processo fora do SEI (físico/outro órgão)",
+  OUTRO: "Outro",
+};
+
+/** Petrópolis/RJ no IBGE — clientes daqui precisam de processo no SEI ou dispensa. */
+export const IBGE_PETROPOLIS = "3303906";
+
 /** Tramitação e controle de acesso: não contam como "o que aconteceu" no processo. */
 export function andamentoRotineiro(descricao: string): boolean {
   return /^(Processo (recebido|remetido) |Disponibilizado acesso externo|Cancelada disponibiliza|Processo p[úu]blico gerado|Envio de correspond[êe]ncia eletr[ôo]nica|Reabertura do processo)/i.test(

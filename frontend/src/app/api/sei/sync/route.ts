@@ -21,6 +21,8 @@ const Iniciar = z.object({ acao: z.literal("iniciar") });
 const Processo = z.object({
   acao: z.literal("processo"),
   sincronizacao_id: z.string().uuid(),
+  // Acesso expirado que não abre mais: só registra que o processo existe.
+  somente_registro: z.boolean().optional(),
   processo: z.object({
     numero: z.string().regex(/^[A-Z]+\.\d+\/\d{4}$/),
     tipo: z.string().max(300).nullable(),
@@ -97,7 +99,14 @@ export async function POST(request: Request) {
           .select("id")
           .single();
         if (error) throw error;
-        return NextResponse.json({ sincronizacao_id: data.id });
+        // Arquivados: a extensão nem abre no SEI.
+        const { data: arquivados, error: erroArq } = await supabase
+          .from("sei_processos")
+          .select("numero")
+          .not("arquivado_em", "is", null)
+          .limit(5000);
+        if (erroArq) throw erroArq;
+        return NextResponse.json({ sincronizacao_id: data.id, arquivados: (arquivados ?? []).map((a) => a.numero) });
       }
 
       case "processo":
@@ -176,6 +185,28 @@ async function gravarProcesso(supabase: Supa, corpo: z.infer<typeof Processo>) {
     .eq("numero", p.numero)
     .maybeSingle();
   if (erroExistente) throw erroExistente;
+
+  if (corpo.somente_registro) {
+    // Não sobrescreve o que já foi lido quando o acesso ainda abria.
+    const base = {
+      acesso_validade: dataSei(p.acesso_validade),
+      acesso_expirado: true,
+      sincronizado_em: agora,
+      updated_at: agora,
+    };
+    if (existente) {
+      const { error } = await supabase.from("sei_processos").update(base).eq("id", existente.id);
+      if (error) throw error;
+      return { processo_id: existente.id, andamentos_novos: 0, documentos_faltando: [], vinculo: existente.vinculo_origem };
+    }
+    const { data, error } = await supabase
+      .from("sei_processos")
+      .insert({ numero: p.numero, ...base })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return { processo_id: data.id as string, andamentos_novos: 0, documentos_faltando: [], vinculo: null };
+  }
 
   // Andamentos normalizados, mais recente primeiro (o SEI já lista assim).
   const andamentos = corpo.andamentos
