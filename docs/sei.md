@@ -208,6 +208,19 @@ Destaques automáticos por texto do andamento (regras simples, sem IA no começo
 "Aguardando cumprimento", "Termo de Intimação", "exigências" → **exigência pendente**;
 "EXPEDIDA E ASSINADA LS" → **licença emitida**; "Conclusão do processo" → **concluído**.
 
+
+### Análise e comentários (fase_co, 23/11/26)
+
+- **Registrar análise** na página do processo: "analisei até o andamento X" + com quem está a
+  bola (`PREFEITURA` = Aguardando Prefeitura, `CLIENTE` = Aguardando cliente, `SOMA` = Conosco)
+  + comentário. Histórico em `sei_analises`; o resumo fica em `sei_processos.ultima_analise_*`,
+  `bola`, `bola_desde` (só muda quando a bola troca de mão, então os dias contam a espera real).
+- **A analisar** = nunca analisado, ou `ultimo_andamento_em > ultima_analise_ate`
+  (`precisaAnalise` em lib/sei-labels.ts). Substituiu o "Com novidade" e o "Marcar como visto".
+  Sem marcação inicial em massa: todos os processos começaram "a analisar".
+- **Comentários internos** em `sei_comentarios`, misturados na linha do tempo; só o autor apaga.
+- Andamentos posteriores à última análise aparecem com o selo "não analisado".
+
 ## Fases
 
 1. **Fase 1 — leitura e carga inicial**: migration + API `/api/sei/sync` + extensão com o botão
