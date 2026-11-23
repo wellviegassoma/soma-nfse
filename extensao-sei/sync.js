@@ -119,6 +119,54 @@ function injPaginaRenderizada(url) {
   });
 }
 
+/**
+ * Roda no mundo da PÁGINA (world: MAIN): abre a lista de acessos num iframe,
+ * chama a função do próprio SEI verValidosExpirados(valor) — o link "Ver
+ * expirados" é "#" com esse onclick — e devolve o HTML depois que a lista
+ * recarrega. valor 'S' mostra os expirados; 'N' volta ao normal.
+ */
+function injAlternarExpirados(url, valor) {
+  return new Promise((resolve) => {
+    const f = document.createElement("iframe");
+    f.style.cssText = "position:absolute;width:1px;height:1px;left:-9999px;top:0;border:0";
+    let etapa = 0;
+    let feito = false;
+    const fim = (v) => {
+      if (feito) return;
+      feito = true;
+      clearTimeout(tempo);
+      f.remove();
+      resolve(v);
+    };
+    const tempo = setTimeout(() => fim({ __erro: "tempo esgotado alternando a lista de expirados" }), 90000);
+    f.onload = () => {
+      try {
+        const w = f.contentWindow;
+        if (etapa === 0) {
+          etapa = 1;
+          if (typeof w.verValidosExpirados !== "function") {
+            fim({ __erro: "a página do SEI não tem a função verValidosExpirados" });
+            return;
+          }
+          w.verValidosExpirados(valor); // envia o formulário: o iframe recarrega
+          return;
+        }
+        setTimeout(() => {
+          try {
+            fim({ url: f.contentWindow.location.href, status: 200, html: f.contentDocument.documentElement.outerHTML });
+          } catch (e) {
+            fim({ __erro: String(e && e.message ? e.message : e) });
+          }
+        }, 300);
+      } catch (e) {
+        fim({ __erro: String(e && e.message ? e.message : e) });
+      }
+    };
+    f.src = url;
+    document.body.appendChild(f);
+  });
+}
+
 function injDocumento(url, upload, querTexto) {
   return (async () => {
     try {
@@ -170,11 +218,11 @@ function injDocumento(url, upload, querTexto) {
   })();
 }
 
-async function naAba(func, args = []) {
+async function naAba(func, args = [], world = "ISOLATED") {
   if (abaSeiId == null) throw new Error(MSG_EXPIRADA);
   let res;
   try {
-    [res] = await chrome.scripting.executeScript({ target: { tabId: abaSeiId }, func, args });
+    [res] = await chrome.scripting.executeScript({ target: { tabId: abaSeiId }, func, args, world });
   } catch (e) {
     throw new Error(`Não consegui usar a aba do SEI (${e.message}). Ela foi fechada?`);
   }
@@ -355,11 +403,30 @@ async function lerAcessos(urlControle) {
   // Expirados: o processo existe (conta para a cobertura do cliente) mesmo
   // que o acesso tenha vencido. Se ainda abrir no SEI, sincroniza normalmente.
   let expirados = 0;
+  let voltarAoNormal = false;
   try {
-    const modo = modoExpirados(primeira.doc, primeira.url);
-    if (modo.erro) throw new Error(modo.erro);
-    const base = modo.url ? await seiDoc(modo.url) : primeira;
-    const lista = await lerListaPaginada(base, "Acessos expirados", modo.extras ?? []);
+    const linkExp = [...primeira.doc.querySelectorAll("a")].find((x) => /ver expirados/i.test(x.textContent));
+    const usaFuncao = /verValidosExpirados\s*\(/.test(
+      `${linkExp?.getAttribute("href") || ""} ${linkExp?.getAttribute("onclick") || ""}`,
+    );
+    let base;
+    let extras = [];
+    if (usaFuncao) {
+      // O link é "#" + verValidosExpirados('S'): chama a função da página.
+      voltarAoNormal = true;
+      const r = await naAba(injAlternarExpirados, [urlControle, "S"], "MAIN");
+      const doc = parse(r.html);
+      if (doc.querySelector("#txtEmail, #pwdSenha") || /md_gov_br_(acessar|desconectar)/.test(r.url)) {
+        throw new Error(MSG_EXPIRADA);
+      }
+      base = { doc, url: r.url };
+    } else {
+      const modo = modoExpirados(primeira.doc, primeira.url);
+      if (modo.erro) throw new Error(modo.erro);
+      base = modo.url ? await seiDoc(modo.url) : primeira;
+      extras = modo.extras ?? [];
+    }
+    const lista = await lerListaPaginada(base, "Acessos expirados", extras);
     avisos.push(...lista.avisos);
     const jaTem = new Set(todos.map((l) => `${l.numero}|${l.liberacao}|${l.validade}`));
     for (const l of lista.linhas) {
@@ -370,7 +437,11 @@ async function lerAcessos(urlControle) {
       expirados++;
     }
   } catch (e) {
+    if (e.message === MSG_EXPIRADA) throw e;
     avisos.push({ onde: "acessos expirados", erro: String(e.message || e).slice(0, 500) });
+  } finally {
+    // Não deixa a sessão do SEI presa no modo "expirados".
+    if (voltarAoNormal) await naAba(injAlternarExpirados, [urlControle, "N"], "MAIN").catch(() => {});
   }
 
   // Agrupa por processo: acessos válidos primeiro, depois os mais recentes.
