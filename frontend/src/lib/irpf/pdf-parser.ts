@@ -72,6 +72,14 @@ function numeroApos(linhas: LinhaPdf[], re: RegExp, de = 0, ate = linhas.length)
     // valor colado no rótulo na mesma célula ("Imposto pago no exterior 0,00")
     const m = l.celulas[k].texto.match(/(-?\d{1,3}(?:\.\d{3})*,\d{2})$/);
     if (m) return numeroBr(m[1]);
+    // Valor desalinhado alguns pontos acima/abaixo do rótulo (recibo do e-CAC):
+    // linha vizinha que tem só um número.
+    for (const j of [i - 1, i + 1]) {
+      const v = linhas[j];
+      if (v && v.pagina === l.pagina && Math.abs(v.y - l.y) <= 6 && v.celulas.length === 1 && RE_NUM.test(v.celulas[0].texto)) {
+        return numeroBr(v.celulas[0].texto);
+      }
+    }
     return 0;
   }
   return null;
