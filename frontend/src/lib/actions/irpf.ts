@@ -193,7 +193,9 @@ async function gravarImportacao(resumo: ResumoDeclaracao, arquivos: ArquivoImpor
   const user = await requireUser();
   const supabase = await createClient();
   const principal = arquivos[0];
-  const transmitida = !!(resumo.numeroRecibo && resumo.transmissao);
+  // O .REC (ou o recibo em PDF) com data de entrega já prova a transmissão, mesmo
+  // quando o .DEC foi gravado antes e não traz o número do recibo.
+  const transmitida = !!resumo.transmissao;
   const resumoCurto = {
     nome: resumo.nome,
     exercicio: resumo.exercicio,
