@@ -3,7 +3,7 @@ import type { ResumoDeclaracao } from "./dec-parser";
 import type { StatusTone } from "@/lib/formatters";
 
 /** Resumo como fica gravado em irpf_declaracoes.resumo (sem o CPF do titular). */
-export type ResumoGravado = Omit<ResumoDeclaracao, "cpf">;
+export type ResumoGravado = Omit<ResumoDeclaracao, "cpf" | "cadastro">;
 
 export const STATUS_DECLARACAO = [
   "NAO_INICIADA",
@@ -213,9 +213,61 @@ export function alertaVariacaoPatrimonial(r: ResumoGravado): { excesso: number }
   return excesso > 1 ? { excesso } : null;
 }
 
-/** Resumo sem o CPF do titular (ele fica no contribuinte). */
+export const TIPO_CONTA_LABEL: Record<string, string> = {
+  "1": "Conta corrente",
+  "2": "Conta poupança",
+  "3": "Conta pagamento",
+  "4": "Pix (chave CPF)",
+};
+
+export const DEPENDENCIA_LABEL: Record<string, string> = {
+  "11": "Cônjuge",
+  "12": "Companheiro(a)",
+  "21": "Filho(a)/enteado(a) até 21 anos",
+  "22": "Filho(a)/enteado(a) universitário até 24 anos",
+  "24": "Filho(a)/enteado(a) incapaz",
+  "25": "Irmão, neto ou bisneto sem arrimo dos pais, até 21 anos",
+  "26": "Irmão, neto ou bisneto universitário até 24 anos",
+  "28": "Irmão, neto ou bisneto incapaz",
+  "31": "Pais, avós e bisavós",
+  "41": "Menor pobre com guarda judicial",
+  "51": "Pessoa absolutamente incapaz (tutela/curatela)",
+};
+
+/** Colunas de irpf_contribuintes preenchidas a partir do .DEC. */
+export function camposCadastro(r: ResumoDeclaracao) {
+  const c = r.cadastro;
+  return {
+    tipo_logradouro: c.tipoLogradouro,
+    logradouro: c.logradouro,
+    numero: c.numero,
+    complemento: c.complemento,
+    bairro: c.bairro,
+    cep: c.cep,
+    municipio: c.municipio,
+    municipio_codigo_rfb: c.municipioCodigoRfb,
+    uf: c.uf,
+    celular: c.celular,
+    telefone_fixo: c.telefoneFixo,
+    titulo_eleitor: c.tituloEleitor,
+    ocupacao_codigo: c.ocupacaoCodigo,
+    natureza_ocupacao_codigo: c.naturezaOcupacaoCodigo,
+    tem_conjuge: c.temConjuge,
+    cpf_conjuge: c.cpfConjuge,
+    banco: c.banco,
+    agencia: c.agencia,
+    conta: c.conta,
+    conta_dv: c.contaDv,
+    tipo_conta: c.tipoConta,
+    doenca_grave: c.doencaGrave,
+    cadastro_exercicio: r.exercicio,
+  };
+}
+
+/** Resumo sem o CPF do titular nem o cadastro (eles ficam no contribuinte). */
 export function resumoParaGravar(r: ResumoDeclaracao): ResumoGravado {
-  const { cpf: _cpf, ...resto } = r;
+  const { cpf: _cpf, cadastro: _cad, ...resto } = r;
   void _cpf;
+  void _cad;
   return resto;
 }

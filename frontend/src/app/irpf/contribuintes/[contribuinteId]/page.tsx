@@ -8,6 +8,8 @@ import { STATUS_PILL_CLASSES, formatarCpf, formatarData, formatarMoeda } from "@
 import {
   STATUS_LABEL,
   STATUS_TOM,
+  DEPENDENCIA_LABEL,
+  TIPO_CONTA_LABEL,
   dataBr,
   exercicioAtual,
   type ResumoGravado,
@@ -68,6 +70,40 @@ export default async function ContribuintePage(props: PageProps<"/irpf/contribui
     { campo: "Patrimônio líquido", f: (r) => r.totais.bensAtual - r.totais.dividasAtual },
   ];
   const comResumo = lista.filter((d) => d.resumo).slice().reverse();
+  const ultimoResumo = lista.find((d) => d.resumo)?.resumo ?? null;
+  const responsavel = c.responsavel_id ? equipe.find((e) => e.id === c.responsavel_id)?.nome ?? null : null;
+  const fone = (t: string | null) =>
+    t ? (t.length >= 10 ? `(${t.slice(0, 2)}) ${t.slice(2, -4)}-${t.slice(-4)}` : t) : null;
+  const endereco = [
+    [c.tipo_logradouro, c.logradouro].filter(Boolean).join(" "),
+    c.numero,
+    c.complemento,
+    c.bairro,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const cidade = [c.municipio, c.uf].filter(Boolean).join(" / ");
+  const dadosCadastro: [string, string | null][] = [
+    ["Endereço", endereco || null],
+    ["Cidade", cidade || null],
+    ["CEP", c.cep ? `${c.cep.slice(0, 5)}-${c.cep.slice(5)}` : null],
+    ["E-mail", c.email],
+    ["Celular", fone(c.celular)],
+    ["Telefone", fone(c.telefone_fixo)],
+    ["Título de eleitor", c.titulo_eleitor],
+    ["Ocupação (código RFB)", c.ocupacao_codigo],
+    ["Natureza da ocupação (código RFB)", c.natureza_ocupacao_codigo],
+    ["Cônjuge", c.tem_conjuge === null ? null : c.tem_conjuge ? `Sim${c.cpf_conjuge ? ` · CPF ${formatarCpf(c.cpf_conjuge)}` : ""}` : "Não"],
+    [
+      "Restituição / débito",
+      c.tipo_conta === "4"
+        ? "Pix (chave CPF)"
+        : c.banco
+          ? `${TIPO_CONTA_LABEL[c.tipo_conta ?? ""] ?? "Conta"} · banco ${c.banco} · ag. ${c.agencia ?? "—"} · conta ${c.conta ?? "—"}${c.conta_dv ? `-${c.conta_dv}` : ""}`
+          : null,
+    ],
+    ["Doença grave / deficiência", c.doenca_grave === null ? null : c.doenca_grave ? "Sim" : "Não"],
+  ];
 
   return (
     <div className="flex flex-col gap-5">
@@ -79,6 +115,9 @@ export default async function ContribuintePage(props: PageProps<"/irpf/contribui
         <p className="text-sm text-foreground/60">
           CPF {formatarCpf(c.cpf)}
           {c.nascimento && <> · nascimento {dataBr(c.nascimento)}</>}
+        </p>
+        <p className="text-sm text-foreground/60">
+          Responsável pela declaração: <span className="font-medium text-foreground">{responsavel ?? "não definido"}</span>
         </p>
       </div>
 
@@ -113,6 +152,41 @@ export default async function ContribuintePage(props: PageProps<"/irpf/contribui
               ))}
               {lista.length === 0 && <div className="px-5 py-4 text-sm text-foreground/50">Nenhuma declaração.</div>}
             </div>
+          </Card>
+
+          <Card className="overflow-hidden">
+            <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
+              Cadastro {c.cadastro_exercicio ? `(da declaração ${c.cadastro_exercicio})` : ""}
+            </div>
+            {c.cadastro_exercicio ? (
+              <dl className="grid gap-x-6 gap-y-2 px-5 py-4 text-sm sm:grid-cols-2">
+                {dadosCadastro.map(([k, v]) => (
+                  <div key={k}>
+                    <dt className="text-xs text-foreground/50">{k}</dt>
+                    <dd className="text-foreground">{v ?? <span className="text-foreground/35">—</span>}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <div className="px-5 py-4 text-sm text-foreground/50">Sem .DEC importado — o cadastro vem da declaração.</div>
+            )}
+            {ultimoResumo && ultimoResumo.dependentes.length > 0 && (
+              <div className="border-t border-border px-5 py-3 text-sm">
+                <div className="mb-1 text-xs text-foreground/50">Dependentes</div>
+                <ul className="flex flex-col gap-0.5">
+                  {ultimoResumo.dependentes.map((d, i) => (
+                    <li key={i}>
+                      {d.nome}
+                      <span className="text-foreground/50">
+                        {" "}
+                        · {DEPENDENCIA_LABEL[d.codigo] ?? `código ${d.codigo}`}
+                        {d.nascimento && ` · nasc. ${dataBr(d.nascimento)}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Card>
 
           {comResumo.length > 1 && (

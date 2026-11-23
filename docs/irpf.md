@@ -197,3 +197,14 @@ RLS só para equipe com permissão `irpf`. CPF nunca aparece em log nem em URL.
 5. **Portal:** o cliente enviar documentos pelo SOMA Gestão já em 2027 (fase 2 antes de março) ou
    continua por e-mail/eContador?
 6. **Integra Contador:** aceita o teto da fase 3 (ex.: até X chamadas por mês para CPF)?
+
+## Ajustes de 23/11/2026 (noite)
+
+- Quadro Kanban em `/irpf` com a etapa "Documentos recebidos" (migration `fase_cf_irpf_etapas`).
+- Documentos do contribuinte por exercício na ficha (cria a declaração do ano quando preciso).
+- Cadastro completo lido do registro 16 do .DEC (endereço, contatos, título, ocupação, cônjuge,
+  conta de restituição, doença grave) — migration `fase_cg_irpf_cadastro`; atualiza com a
+  declaração mais recente importada. Os 101 contribuintes já importados foram preenchidos.
+- Exportar Excel: `/api/irpf/planilha/contribuintes` e `/api/irpf/planilha/declaracoes?ex=`.
+  A de declarações traz o ID e a coluna "Honorário novo (preencher)" para reajuste em lote:
+  o Wellington devolve a planilha e o honorário é atualizado pelo ID.

@@ -48,6 +48,32 @@ export type Divida = {
   valorAtual: number;
 };
 
+/** Dados cadastrais da ficha Identificação (registro 16). */
+export type CadastroDeclarante = {
+  tipoLogradouro: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cep: string | null;
+  municipio: string | null;
+  municipioCodigoRfb: string | null;
+  uf: string | null;
+  tituloEleitor: string | null;
+  ocupacaoCodigo: string | null;
+  naturezaOcupacaoCodigo: string | null;
+  temConjuge: boolean;
+  cpfConjuge: string | null;
+  banco: string | null;
+  agencia: string | null;
+  conta: string | null;
+  contaDv: string | null;
+  tipoConta: string | null; // 1 corrente, 2 poupança, 3 pagamento, 4 Pix (chave CPF)
+  doencaGrave: boolean;
+  celular: string | null;
+  telefoneFixo: string | null;
+};
+
 export type ResumoDeclaracao = {
   exercicio: number;
   anoCalendario: number;
@@ -96,6 +122,7 @@ export type ResumoDeclaracao = {
   bens: BemDireito[];
   dividas: Divida[];
   transmissao: { data: string; hora: string } | null; // do .REC
+  cadastro: CadastroDeclarante;
 };
 
 export class DecInvalidoError extends Error {}
@@ -279,6 +306,32 @@ export function lerDec(textoDec: string, textoRec?: string | null): ResumoDeclar
     }
   }
 
+  const banco = txt(r16, 404, 406);
+  const cadastro: CadastroDeclarante = {
+    tipoLogradouro: vazioParaNull(txt(r16, 74, 88)),
+    logradouro: vazioParaNull(txt(r16, 89, 128)),
+    numero: vazioParaNull(txt(r16, 129, 134)),
+    complemento: vazioParaNull(txt(r16, 135, 155)),
+    bairro: vazioParaNull(txt(r16, 156, 174)),
+    cep: vazioParaNull(txt(r16, 175, 183)),
+    municipioCodigoRfb: vazioParaNull(txt(r16, 184, 187)),
+    municipio: vazioParaNull(txt(r16, 188, 227)),
+    uf: vazioParaNull(txt(r16, 228, 229)),
+    tituloEleitor: vazioParaNull(txt(r16, 369, 381)),
+    ocupacaoCodigo: vazioParaNull(txt(r16, 382, 384)),
+    naturezaOcupacaoCodigo: vazioParaNull(txt(r16, 385, 386)),
+    temConjuge: txt(r16, 497, 497) === "S",
+    cpfConjuge: /^\d{11}$/.test(txt(r16, 337, 347)) ? txt(r16, 337, 347) : null,
+    banco: Number(banco) > 0 ? banco : null,
+    agencia: Number(banco) > 0 ? vazioParaNull(txt(r16, 407, 410)) : null,
+    conta: vazioParaNull(txt(r16, 510, 529)),
+    contaDv: vazioParaNull(txt(r16, 426, 427)),
+    tipoConta: /^[1-9]$/.test(txt(r16, 509, 509)) ? txt(r16, 509, 509) : null,
+    doencaGrave: txt(r16, 411, 411) === "S",
+    celular: cel ? `${ddd}${cel}`.replace(/\D/g, "") : null,
+    telefoneFixo: fixo ? `${dddFixo}${fixo}`.replace(/\D/g, "") : null,
+  };
+
   const recibo = txt(ir, 165, 174);
   const reciboAnterior = txt(ir, 204, 213);
 
@@ -305,5 +358,6 @@ export function lerDec(textoDec: string, textoRec?: string | null): ResumoDeclar
     bens,
     dividas,
     transmissao,
+    cadastro,
   };
 }

@@ -43,7 +43,7 @@ export function EditarContribuinte(props: {
         <Input value={telefone} onChange={(e) => setTelefone(e.target.value)} className="h-10 text-sm" />
       </label>
       <label className="flex flex-col gap-1">
-        <span className={label}>Responsável padrão</span>
+        <span className={label}>Responsável pela declaração</span>
         <Select value={resp} onChange={(e) => setResp(e.target.value)} className="h-10 text-sm">
           <option value="">—</option>
           {props.equipe.map((e) => (

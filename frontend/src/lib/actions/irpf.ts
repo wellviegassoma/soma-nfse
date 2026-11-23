@@ -10,6 +10,7 @@ import {
   CHECKLIST_STATUS,
   HONORARIO_STATUS,
   STATUS_DECLARACAO,
+  camposCadastro,
   resumoParaGravar,
   sugerirChecklist,
   type ChecklistStatus,
@@ -103,7 +104,7 @@ export async function importarDeclaracaoAction(input: {
   // Contribuinte pelo CPF (cria ou completa e-mail/telefone/nascimento).
   const { data: existente, error: e1 } = await supabase
     .from("irpf_contribuintes")
-    .select("id, email, telefone, nascimento")
+    .select("id, email, telefone, nascimento, cadastro_exercicio")
     .eq("cpf", resumo.cpf)
     .maybeSingle();
   if (e1) return { error: e1.message };
@@ -111,7 +112,11 @@ export async function importarDeclaracaoAction(input: {
   let contribuinteNovo = false;
   if (existente) {
     contribuinteId = existente.id;
-    const completar: Record<string, string> = {};
+    const completar: Record<string, unknown> = {};
+    // Cadastro (endereço, banco, ocupação…) acompanha a declaração mais recente.
+    if (!existente.cadastro_exercicio || resumo.exercicio >= existente.cadastro_exercicio) {
+      Object.assign(completar, camposCadastro(resumo));
+    }
     if (!existente.email && resumo.email) completar.email = resumo.email;
     if (!existente.telefone && resumo.telefone) completar.telefone = resumo.telefone;
     if (!existente.nascimento && resumo.nascimento) completar.nascimento = resumo.nascimento;
@@ -127,6 +132,7 @@ export async function importarDeclaracaoAction(input: {
         nascimento: resumo.nascimento,
         email: resumo.email,
         telefone: resumo.telefone,
+        ...camposCadastro(resumo),
       })
       .select("id")
       .single();

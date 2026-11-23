@@ -51,7 +51,15 @@ export default async function ContribuintesPage(props: PageProps<"/irpf/contribu
             Base própria do IRPF, separada das empresas. {linhas.filter((l) => l.ativo).length} ativo(s).
           </p>
         </div>
-        <NovoContribuinte />
+        <div className="flex items-center gap-2">
+          <a
+            href="/api/irpf/planilha/contribuintes"
+            className="inline-flex h-10 items-center rounded-lg border border-border bg-surface px-4 text-sm font-medium text-foreground hover:bg-surface-muted"
+          >
+            Exportar Excel
+          </a>
+          <NovoContribuinte />
+        </div>
       </div>
 
       <Card className="overflow-hidden">
@@ -82,7 +90,7 @@ export default async function ContribuintesPage(props: PageProps<"/irpf/contribu
                   <div className="text-xs text-foreground/45">
                     CPF {formatarCpf(l.cpf)}
                     {l.nascimento && <> · nasc. {dataBr(l.nascimento)}</>} ·{" "}
-                    {l.responsavel_id ? nomeEquipe.get(l.responsavel_id) ?? "—" : "sem responsável"}
+                    {l.responsavel_id ? `Responsável pela declaração: ${nomeEquipe.get(l.responsavel_id) ?? "—"}` : "sem responsável"}
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-1">
