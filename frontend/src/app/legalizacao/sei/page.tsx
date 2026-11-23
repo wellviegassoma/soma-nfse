@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePermissao } from "@/lib/auth";
+import { requirePermissao, temPermissao } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { Card } from "@/components/ui/Card";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SITUACAO_LABELS, type SeiSituacao } from "@/lib/sei-labels";
 import { coberturaPetropolis } from "@/lib/sei-cobertura";
-import { NovidadeBadge, SituacaoBadge, dataHoraBr, temNovidade } from "./situacao";
+import { NovidadeBadge, OrigemBadge, SituacaoBadge, dataHoraBr, temNovidade } from "./situacao";
 
 export const metadata = { title: "SEI — Legalização" };
 
@@ -28,11 +28,15 @@ type Linha = {
   acesso_expirado: boolean;
   arquivado_em: string | null;
   motivo_arquivamento: string | null;
+  origem: string | null;
+  cadastrado_em: string | null;
+  sincronizado_em: string | null;
   empresa: { legal_name: string; trade_name: string | null; codigo_cliente: string | null; ativa: boolean } | null;
 };
 
 export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
   await requirePermissao("legalizacao.ver");
+  const podeEditar = await temPermissao("legalizacao.editar");
   const sp = await props.searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const situacao = typeof sp.situacao === "string" ? sp.situacao : "";
@@ -44,7 +48,7 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
       supabase
         .from("sei_processos")
         .select(
-          "id, numero, tipo, situacao, company_id, requerente_nome, interessados, ultimo_andamento_em, ultimo_andamento_texto, novidade_em, visto_em, acesso_expirado, arquivado_em, motivo_arquivamento, empresa:companies(legal_name, trade_name, codigo_cliente, ativa)",
+          "id, numero, tipo, situacao, company_id, requerente_nome, interessados, ultimo_andamento_em, ultimo_andamento_texto, novidade_em, visto_em, acesso_expirado, arquivado_em, motivo_arquivamento, origem, cadastrado_em, sincronizado_em, empresa:companies(legal_name, trade_name, codigo_cliente, ativa)",
         )
         .order("ultimo_andamento_em", { ascending: false, nullsFirst: false })
         .order("id")
@@ -119,9 +123,16 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold text-foreground">SEI — Prefeitura de Petrópolis</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold text-foreground">SEI — Prefeitura de Petrópolis</h1>
+          {podeEditar && (
+            <Link href="/legalizacao/sei/novo">
+              <Button variant="secondary">+ Processo manual</Button>
+            </Link>
+          )}
+        </div>
         <p className="text-sm text-foreground/60">
-          {todas.length} processo(s) com acesso externo da SOMA.{" "}
+          {todas.length} processo(s) acompanhados (acesso externo da SOMA e cadastrados à mão).{" "}
           {ultimaSync ? (
             <>
               Última sincronização: {dataHoraBr(ultimaSync.finalizado_em ?? ultimaSync.iniciado_em)}
@@ -207,6 +218,7 @@ export default async function SeiPage(props: PageProps<"/legalizacao/sei">) {
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     <SituacaoBadge situacao={l.situacao} />
+                    <OrigemBadge origem={l.origem} cadastradoEm={l.cadastrado_em} sincronizadoEm={l.sincronizado_em} />
                     {temNovidade(l) && <NovidadeBadge />}
                     {l.acesso_expirado && <span className="text-xs text-foreground/40">acesso expirado</span>}
                     {!l.arquivado_em && clienteInativo(l) && (

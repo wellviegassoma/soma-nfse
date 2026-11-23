@@ -16,6 +16,33 @@ export function SituacaoBadge({ situacao }: { situacao: SeiSituacao }) {
   );
 }
 
+/** "manual" = cadastrado à mão e ainda não assumido pela sincronização; "físico" = fora do SEI. */
+export function OrigemBadge({
+  origem,
+  cadastradoEm,
+  sincronizadoEm,
+}: {
+  origem: string | null;
+  cadastradoEm: string | null;
+  sincronizadoEm: string | null;
+}) {
+  if (origem === "FISICO") {
+    return (
+      <span className="inline-flex whitespace-nowrap rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
+        físico / fora do SEI
+      </span>
+    );
+  }
+  if (cadastradoEm && !sincronizadoEm) {
+    return (
+      <span className="inline-flex whitespace-nowrap rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
+        manual
+      </span>
+    );
+  }
+  return null;
+}
+
 export function NovidadeBadge() {
   return (
     <span className="inline-flex whitespace-nowrap rounded-full bg-danger/10 px-2 py-0.5 text-xs font-semibold text-danger">

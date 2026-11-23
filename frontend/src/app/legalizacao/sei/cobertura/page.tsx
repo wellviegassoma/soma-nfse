@@ -146,6 +146,10 @@ function Acoes({ l }: { l: LinhaCobertura }) {
   }
   if (l.situacao !== "SEM_PROCESSO") return null;
   return (
+    <div className="flex shrink-0 flex-col items-end gap-2">
+      <Link href={`/legalizacao/sei/novo?companyId=${l.id}`} className="text-xs text-brand hover:underline">
+        + Cadastrar processo manual
+      </Link>
     <form action={dispensarClienteSei} className="flex shrink-0 flex-wrap items-center gap-2">
       <input type="hidden" name="companyId" value={l.id} />
       <Select name="motivo" required defaultValue="" className="h-9 w-56 text-xs">
@@ -163,5 +167,6 @@ function Acoes({ l }: { l: LinhaCobertura }) {
         Não precisa de processo
       </Button>
     </form>
+    </div>
   );
 }
