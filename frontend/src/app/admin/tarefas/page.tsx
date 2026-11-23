@@ -29,6 +29,7 @@ export default async function MinhasTarefasPage() {
         equipe={minhas.equipe}
         hoje={hoje}
         modo="minhas"
+        meuId={user.id}
         vazio="Nenhuma tarefa aberta com você. 🎉"
       />
       {semDono.linhas.length > 0 && (

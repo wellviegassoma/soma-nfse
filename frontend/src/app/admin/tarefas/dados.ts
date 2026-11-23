@@ -21,6 +21,8 @@ type Bruta = {
   comentario: string | null;
   aguardando_cliente: boolean;
   etapa_atual: number | null;
+  titulo: string | null;
+  atribuida_em: string | null;
   concluida_por_fonte: string | null;
   tarefa_modelos: { nome: string; ordem: number } | null;
   companies: { legal_name: string; trade_name: string | null; codigo_cliente: string | null; municipality_ibge_code: string | null } | null;
@@ -28,17 +30,19 @@ type Bruta = {
 };
 
 const COLUNAS =
-  "id, modelo_id, company_id, competencia, departamento_id, responsavel_id, prazo_meta, prazo_legal, status, comentario, aguardando_cliente, etapa_atual, concluida_por_fonte, tarefa_modelos(nome, ordem), companies(legal_name, trade_name, codigo_cliente, municipality_ibge_code), atendimento_departamentos(nome)";
+  "id, modelo_id, company_id, competencia, departamento_id, responsavel_id, prazo_meta, prazo_legal, status, comentario, aguardando_cliente, etapa_atual, concluida_por_fonte, titulo, atribuida_em, tarefa_modelos(nome, ordem), companies(legal_name, trade_name, codigo_cliente, municipality_ibge_code), atendimento_departamentos(nome)";
 
 export async function carregarTarefas(
   db: Db,
-  filtro: { competencia?: string; modeloId?: string; responsavelId?: string; abertas?: boolean; departamentos?: string[]; semResponsavel?: boolean },
+  filtro: { competencia?: string; competencias?: string[]; companyId?: string; modeloId?: string; responsavelId?: string; abertas?: boolean; departamentos?: string[]; semResponsavel?: boolean },
 ): Promise<{ linhas: TarefaLinha[]; equipe: { id: string; nome: string }[] }> {
   const [brutas, equipe] = await Promise.all([
     buscarTudoPaginado<Bruta>((from, to) => {
       let q = db.from("tarefas").select(COLUNAS);
       if (filtro.competencia) q = q.eq("competencia", filtro.competencia);
       if (filtro.modeloId) q = q.eq("modelo_id", filtro.modeloId);
+      if (filtro.companyId) q = q.eq("company_id", filtro.companyId);
+      if (filtro.competencias) q = q.in("competencia", filtro.competencias);
       if (filtro.responsavelId) q = q.eq("responsavel_id", filtro.responsavelId);
       if (filtro.semResponsavel) q = q.is("responsavel_id", null);
       if (filtro.departamentos) q = q.in("departamento_id", filtro.departamentos);
@@ -52,7 +56,7 @@ export async function carregarTarefas(
   ]);
   const nome = new Map(equipe.map((u) => [u.id, u.nome]));
   // Etapas dos modelos presentes (poucas linhas): nome da etapa atual e "2/4".
-  const modeloIds = [...new Set(brutas.map((t) => t.modelo_id))];
+  const modeloIds = [...new Set(brutas.map((t) => t.modelo_id).filter(Boolean))];
   const { data: defs } = modeloIds.length
     ? await db.from("tarefa_modelo_etapas").select("modelo_id, ordem, nome, fonte_automatica").in("modelo_id", modeloIds).order("ordem")
     : { data: [] as { modelo_id: string; ordem: number; nome: string; fonte_automatica: string | null }[] };
@@ -67,8 +71,10 @@ export async function carregarTarefas(
     linhas: brutas.map((t) => ({
       id: t.id,
       modelo_id: t.modelo_id,
-      modelo: t.tarefa_modelos?.nome ?? "—",
-      ordem: t.tarefa_modelos?.ordem ?? 0,
+      modelo: t.titulo ?? t.tarefa_modelos?.nome ?? "—",
+      avulsa: !t.tarefa_modelos,
+      atribuida_em: t.atribuida_em,
+      ordem: t.tarefa_modelos?.ordem ?? 9999,
       company_id: t.company_id,
       empresa: t.companies ? nomeEmpresa(t.companies) : "—",
       competencia: t.competencia,

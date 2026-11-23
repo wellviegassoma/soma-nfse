@@ -20,6 +20,7 @@ type Aberta = {
   prazo_meta: string | null;
   prazo_legal: string | null;
   aguardando_cliente: boolean;
+  titulo: string | null;
   tarefa_modelos: { nome: string } | null;
   companies: { legal_name: string; trade_name: string | null; codigo_cliente: string | null } | null;
 };
@@ -67,7 +68,7 @@ function montar(nome: string, tarefas: Aberta[], hoje: string, site: string, tit
         mostrar
           .map(
             (t) =>
-              `<tr><td style="padding:3px 6px;border-bottom:1px solid #eee">${esc(t.tarefa_modelos?.nome ?? "—")}</td>` +
+              `<tr><td style="padding:3px 6px;border-bottom:1px solid #eee">${esc(t.titulo ?? t.tarefa_modelos?.nome ?? "—")}</td>` +
               `<td style="padding:3px 6px;border-bottom:1px solid #eee">${esc(t.companies ? nomeEmpresa(t.companies) : "—")}</td>` +
               `<td style="padding:3px 6px;border-bottom:1px solid #eee;white-space:nowrap">${rotuloCompetencia(t.competencia)}</td>` +
               `<td style="padding:3px 6px;border-bottom:1px solid #eee;white-space:nowrap">meta ${ddmm(t.prazo_meta)} · legal ${ddmm(t.prazo_legal)}</td></tr>`,
@@ -78,7 +79,7 @@ function montar(nome: string, tarefas: Aberta[], hoje: string, site: string, tit
     );
     secoesTexto.push(
       `${g.titulo} — ${lista.length}\n` +
-        mostrar.map((t) => `- ${t.tarefa_modelos?.nome ?? "—"} · ${t.companies ? nomeEmpresa(t.companies) : "—"} · meta ${ddmm(t.prazo_meta)}`).join("\n"),
+        mostrar.map((t) => `- ${t.titulo ?? t.tarefa_modelos?.nome ?? "—"} · ${t.companies ? nomeEmpresa(t.companies) : "—"} · meta ${ddmm(t.prazo_meta)}`).join("\n"),
     );
   }
   const link = `${site}/admin/tarefas`;
@@ -101,7 +102,7 @@ export async function montarAlertas(db: Db, hoje: string): Promise<EmailAlerta[]
   const abertas = await buscarTudoPaginado<Aberta>((from, to) =>
     db
       .from("tarefas")
-      .select("id, competencia, responsavel_id, status, prazo_meta, prazo_legal, aguardando_cliente, tarefa_modelos(nome), companies(legal_name, trade_name, codigo_cliente)")
+      .select("id, competencia, responsavel_id, status, prazo_meta, prazo_legal, aguardando_cliente, titulo, tarefa_modelos(nome), companies(legal_name, trade_name, codigo_cliente)")
       .in("status", ["A_FAZER", "EM_ANDAMENTO"])
       .lte("prazo_meta", somarDias(hoje, 3))
       .order("id")

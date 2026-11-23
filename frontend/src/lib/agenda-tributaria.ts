@@ -1,3 +1,5 @@
+import { diaUtil, diaUtilAnterior } from "@/lib/feriados";
+
 // Agenda Tributária da Receita Federal — importação da agenda oficial.
 //
 // Todo mês a RFB publica um ADE Corat com a agenda do mês seguinte (por volta
@@ -430,13 +432,13 @@ export function dataMeta(vencimento: string | null, diaMeta: number): string | n
   if (!vencimento) return null;
   const [a, m] = vencimento.split("-").map(Number);
   const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate();
-  const d = new Date(Date.UTC(a, m - 1, Math.min(diaMeta, ultimo)));
-  const dow = d.getUTCDay();
-  if (dow === 6) d.setUTCDate(d.getUTCDate() - 1);
-  if (dow === 0) d.setUTCDate(d.getUTCDate() - 2);
-  if (d.getUTCMonth() !== m - 1) {
-    d.setUTCDate(d.getUTCDate() + 3); // saiu do mês (sexta anterior) → segunda seguinte
+  // Fim de semana/feriado nacional antecipa para o dia útil anterior; se isso
+  // sair do mês, vai para o primeiro dia útil do mês.
+  let iso = diaUtilAnterior(new Date(Date.UTC(a, m - 1, Math.min(diaMeta, ultimo))).toISOString().slice(0, 10));
+  if (Number(iso.slice(5, 7)) !== m) {
+    const d = new Date(Date.UTC(a, m - 1, 1));
+    while (!diaUtil(d.toISOString().slice(0, 10))) d.setUTCDate(d.getUTCDate() + 1);
+    iso = d.toISOString().slice(0, 10);
   }
-  const iso = d.toISOString().slice(0, 10);
   return iso > vencimento ? vencimento : iso;
 }

@@ -11,7 +11,8 @@ export const metadata = { title: "Produtividade — Painel SOMA" };
 
 type Linha = {
   competencia: string;
-  modelo_id: string;
+  modelo_id: string | null;
+  titulo: string | null;
   company_id: string;
   departamento_id: string;
   responsavel_id: string | null;
@@ -87,7 +88,7 @@ export default async function ProdutividadePage(props: PageProps<"/admin/tarefas
       supabase
         .from("tarefas")
         .select(
-          "competencia, modelo_id, company_id, departamento_id, responsavel_id, concluida_por, status, prazo_meta, prazo_legal, aguardando_cliente, etapa_atual, concluida_em, created_at, tarefa_modelos(nome), atendimento_departamentos(nome), companies(legal_name, trade_name, codigo_cliente)",
+          "competencia, modelo_id, titulo, company_id, departamento_id, responsavel_id, concluida_por, status, prazo_meta, prazo_legal, aguardando_cliente, etapa_atual, concluida_em, created_at, tarefa_modelos(nome), atendimento_departamentos(nome), companies(legal_name, trade_name, codigo_cliente)",
         )
         .in("competencia", competencias)
         .order("id")
@@ -121,7 +122,7 @@ export default async function ProdutividadePage(props: PageProps<"/admin/tarefas
   for (const t of doMes) {
     if (t.status !== "A_FAZER" && t.status !== "EM_ANDAMENTO") continue;
     const etapa = t.etapa_atual != null ? nomeEtapa.get(`${t.modelo_id}|${t.etapa_atual}`) : null;
-    const chave = `${t.tarefa_modelos?.nome ?? "—"}${etapa ? ` › ${etapa}` : ""}`;
+    const chave = `${t.titulo ? "Avulsas" : t.tarefa_modelos?.nome ?? "—"}${etapa ? ` › ${etapa}` : ""}`;
     travas.set(chave, (travas.get(chave) ?? 0) + 1);
   }
   const listaTravas = [...travas.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);

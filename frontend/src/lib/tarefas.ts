@@ -11,6 +11,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { chaveObrigacao, dataMeta } from "@/lib/agenda-tributaria";
 import { REGIMES, somarMeses, type StatusTarefa } from "@/lib/tarefas-comum";
 import { garantirEtapas } from "@/lib/tarefas-automacao";
+import { diaUtilAnterior } from "@/lib/feriados";
 
 type Db = SupabaseClient;
 
@@ -92,15 +93,12 @@ export async function listarEquipe(): Promise<{ id: string; nome: string }[]> {
 
 // ------------------------------------------------------------------ prazos
 
-/** Dia `dia` do mês (limitado ao último); sábado/domingo antecipa para sexta. */
+/** Dia `dia` do mês (limitado ao último), antecipado para dia útil. */
 function diaNoMes(mes: string, dia: number): string {
   const [a, m] = mes.split("-").map(Number);
   const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate();
-  const d = new Date(Date.UTC(a, m - 1, Math.min(dia, ultimo)));
-  const dow = d.getUTCDay();
-  if (dow === 6) d.setUTCDate(d.getUTCDate() - 1);
-  if (dow === 0) d.setUTCDate(d.getUTCDate() - 2);
-  return d.toISOString().slice(0, 10);
+  // Fim de semana ou feriado nacional antecipa para o dia útil anterior.
+  return diaUtilAnterior(new Date(Date.UTC(a, m - 1, Math.min(dia, ultimo))).toISOString().slice(0, 10));
 }
 
 /** A chave do modelo pode ser a chave inteira da obrigação ou um prefixo dela. */

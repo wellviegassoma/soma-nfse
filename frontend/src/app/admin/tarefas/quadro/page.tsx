@@ -18,6 +18,7 @@ export default async function QuadroTarefasPage(props: PageProps<"/admin/tarefas
     .from("tarefas")
     .select("modelo_id, tarefa_modelos(nome, ordem)")
     .eq("competencia", competencia)
+    .not("modelo_id", "is", null)
     .limit(10000);
   const modelos = [
     ...new Map(

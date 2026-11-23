@@ -1,5 +1,6 @@
 "use client";
 
+import { SITUACAO_CLASSE, SITUACAO_ROTULO, type Situacao } from "@/lib/tarefas-comum";
 import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
@@ -96,11 +97,15 @@ function etiquetas(itens: AgendaLinha[]): Etiqueta[] {
 
 type Selecao = string; // YYYY-MM-DD | "diario" | "outros"
 
+/** Tarefa minha com meta no mês (Tarefas) — aparece no calendário. */
+export type MinhaTarefaDia = { id: string; data: string; titulo: string; empresa: string; situacao: Situacao };
+
 export function AgendaTributariaLista({
   mes,
   hoje,
   info,
   linhas,
+  minhas = [],
   erro,
   hrefAnterior,
   hrefProximo,
@@ -110,6 +115,7 @@ export function AgendaTributariaLista({
   hoje: string;
   info: { ade: string | null; fonte_url: string | null; origem: string; importado_em: string } | null;
   linhas: AgendaLinha[];
+  minhas?: MinhaTarefaDia[];
   erro: string | null;
   hrefAnterior: string;
   hrefProximo: string;
@@ -155,10 +161,15 @@ export function AgendaTributariaLista({
     }
     return m;
   }, [filtradas]);
-  const temNoDia = (k: string) => porChave.has(k) || metasPorData.has(k);
+  const minhasPorData = useMemo(() => {
+    const m = new Map<string, MinhaTarefaDia[]>();
+    for (const t of minhas) m.set(t.data, [...(m.get(t.data) ?? []), t]);
+    return m;
+  }, [minhas]);
+  const temNoDia = (k: string) => porChave.has(k) || metasPorData.has(k) || minhasPorData.has(k);
 
   // Dia aberto por padrão: hoje, senão o próximo prazo/meta, senão o 1º do mês.
-  const datas = [...new Set([...porChave.keys(), ...metasPorData.keys()])].filter((k) => /^\d{4}/.test(k)).sort();
+  const datas = [...new Set([...porChave.keys(), ...metasPorData.keys(), ...minhasPorData.keys()])].filter((k) => /^\d{4}/.test(k)).sort();
   const padrao: Selecao | null =
     (temNoDia(hoje) ? hoje : null) ?? datas.find((d) => d >= hoje) ?? datas[0] ?? null;
   const [escolhida, setEscolhida] = useState<Selecao | null>(null);
@@ -264,7 +275,8 @@ export function AgendaTributariaLista({
               const doMes = d.slice(0, 7) === mes;
               const itens = doMes ? porChave.get(d) ?? [] : [];
               const metas = doMes ? metasPorData.get(d) ?? [] : [];
-              const tem = itens.length + metas.length > 0;
+              const minhasDia = doMes ? minhasPorData.get(d) ?? [] : [];
+              const tem = itens.length + metas.length + minhasDia.length > 0;
               const tagsMeta = [...new Set(metas.map((l) => rotuloCurto(l)))];
               const ehHoje = d === hoje;
               const proximo = d > hoje && d <= fimSemana;
@@ -322,6 +334,16 @@ export function AgendaTributariaLista({
                       </span>
                     )}
                   </span>
+                  {minhasDia.length > 0 && (
+                    <span
+                      className={cn(
+                        "mt-1 hidden truncate rounded px-1 text-[10px] font-bold leading-4 sm:block",
+                        ehHoje || proximo ? "bg-white/90 text-emerald-800" : "bg-emerald-100 text-emerald-800",
+                      )}
+                    >
+                      {minhasDia.length} {minhasDia.length === 1 ? "tarefa minha" : "tarefas minhas"}
+                    </span>
+                  )}
                   {tem && (
                     <span className="mt-1 hidden flex-wrap gap-0.5 sm:flex">
                       {tagsMeta.slice(0, 3).map((r) => (
@@ -366,6 +388,7 @@ export function AgendaTributariaLista({
                       {itens.some((i) => i.tipo === "TRIBUTO") && <span className={cn("h-1.5 w-1.5 rounded-full", ehHoje ? "bg-white" : "bg-brand")} />}
                       {itens.some((i) => i.tipo === "DECLARACAO") && <span className="h-1.5 w-1.5 rounded-full bg-success" />}
                       {metas.length > 0 && <span className={cn("h-1.5 w-1.5 rounded-full", ehHoje ? "bg-violet-200" : "bg-violet-600")} />}
+                      {minhasDia.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
                     </span>
                   )}
                 </button>
@@ -377,6 +400,9 @@ export function AgendaTributariaLista({
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-brand-soft ring-1 ring-brand/40" />Pagamento</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-success-soft ring-1 ring-success/40" />Declaração</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-violet-100 ring-1 ring-violet-500" />Meta SOMA</span>
+            {minhas.length > 0 && (
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-100 ring-1 ring-emerald-500" />Minhas tarefas</span>
+            )}
             {mesCorrente && (
               <>
                 <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-900" />Hoje ({venceHoje})</span>
@@ -416,6 +442,29 @@ export function AgendaTributariaLista({
               mostrarData
             />
           ) : selecao ? (
+            <>
+            {minhasPorData.get(selecao)?.length ? (
+              <div className="border-b border-border px-4 py-3">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
+                    Minhas tarefas ({minhasPorData.get(selecao)!.length})
+                  </span>
+                  <Link href="/admin/tarefas" className="text-xs text-brand underline">
+                    abrir
+                  </Link>
+                </div>
+                <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto text-sm">
+                  {minhasPorData.get(selecao)!.map((t) => (
+                    <li key={t.id} className="flex items-center gap-2">
+                      <span className={cn("shrink-0 rounded px-1 text-[10px] font-semibold", SITUACAO_CLASSE[t.situacao])}>{SITUACAO_ROTULO[t.situacao]}</span>
+                      <span className="truncate">
+                        {t.titulo} · <span className="text-foreground/60">{t.empresa}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <PainelItens
               titulo={
                 selecao === "diario" ? "Diárias" : selecao === "outros" ? "Outros prazos" : dataPorExtenso(selecao)
@@ -439,6 +488,7 @@ export function AgendaTributariaLista({
               itens={porChave.get(selecao) ?? []}
               destaque={selecao === hoje ? "hoje" : selecao > hoje && selecao <= fimSemana ? "semana" : undefined}
             />
+            </>
           ) : (
             <div className="p-5 text-sm text-foreground/60">Nenhuma obrigação com esse filtro.</div>
           )}

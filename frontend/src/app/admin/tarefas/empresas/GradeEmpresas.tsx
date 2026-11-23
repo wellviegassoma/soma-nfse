@@ -16,6 +16,7 @@ import {
 import type { TarefaLinha } from "../TarefasLista";
 import { ChecklistTarefa } from "../ChecklistTarefa";
 import { verificarPagamentoTarefa } from "../acoesTarefa";
+import { DetalheTarefa } from "../DetalheTarefa";
 
 // Símbolo curto na célula para a grade inteira caber na tela.
 const SIGLA: Record<Situacao, string> = {
@@ -38,6 +39,7 @@ export function GradeEmpresas({ linhas, hoje }: { linhas: TarefaLinha[]; hoje: s
   const [busca, setBusca] = useState("");
   const [depto, setDepto] = useState("");
   const [aberta, setAberta] = useState<string | null>(null);
+  const [detalhe, setDetalhe] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [pendente, iniciar] = useTransition();
 
@@ -45,10 +47,11 @@ export function GradeEmpresas({ linhas, hoje }: { linhas: TarefaLinha[]; hoje: s
     () => [...new Map(linhas.map((l) => [l.departamento_id, l.departamento])).entries()].sort((a, b) => a[1].localeCompare(b[1])),
     [linhas],
   );
-  const filtradas = useMemo(() => linhas.filter((l) => !depto || l.departamento_id === depto), [linhas, depto]);
+  // Grade é da rotina (modelos); avulsas ficam nas listas.
+  const filtradas = useMemo(() => linhas.filter((l) => l.modelo_id && (!depto || l.departamento_id === depto)), [linhas, depto]);
   const modelos = useMemo(
     () =>
-      [...new Map(filtradas.map((l) => [l.modelo_id, { id: l.modelo_id, nome: l.modelo, ordem: l.ordem }])).values()].sort(
+      [...new Map(filtradas.map((l) => [l.modelo_id!, { id: l.modelo_id!, nome: l.modelo, ordem: l.ordem }])).values()].sort(
         (a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome),
       ),
     [filtradas],
@@ -59,7 +62,7 @@ export function GradeEmpresas({ linhas, hoje }: { linhas: TarefaLinha[]; hoje: s
     for (const l of filtradas) {
       if (q && !semAcento(l.empresa).includes(q)) continue;
       const e = m.get(l.company_id) ?? { id: l.company_id, nome: l.empresa, tarefas: new Map() };
-      e.tarefas.set(l.modelo_id, l);
+      e.tarefas.set(l.modelo_id!, l);
       m.set(l.company_id, e);
     }
     return [...m.values()].sort((a, b) => a.nome.localeCompare(b.nome));
@@ -93,6 +96,7 @@ export function GradeEmpresas({ linhas, hoje }: { linhas: TarefaLinha[]; hoje: s
 
   return (
     <div className="flex flex-col gap-3">
+      {detalhe && tarefaAberta && <DetalheTarefa linha={tarefaAberta} hoje={hoje} aoFechar={() => setDetalhe(false)} />}
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="search"
@@ -162,6 +166,9 @@ export function GradeEmpresas({ linhas, hoje }: { linhas: TarefaLinha[]; hoje: s
                 {s === "A_FAZER" ? "Reabrir" : s === "CONCLUIDA" ? "Concluir" : STATUS_ROTULO[s]}
               </button>
             ))}
+          <button type="button" onClick={() => setDetalhe(true)} className="rounded-lg border border-border px-2.5 py-1 text-xs">
+            Abrir detalhes
+          </button>
           <button type="button" onClick={() => setAberta(null)} className="text-xs text-foreground/60 underline">
             fechar
           </button>

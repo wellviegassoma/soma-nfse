@@ -1,6 +1,8 @@
 import { requireSomaStaff } from "@/lib/auth";
 import { TarefasNav } from "./TarefasNav";
 import { Sincronizar } from "./Sincronizar";
+import { NovaTarefaAvulsa } from "./NovaTarefaAvulsa";
+import { hojeBrasilia } from "@/lib/competencia";
 
 export default async function TarefasLayout({ children }: { children: React.ReactNode }) {
   await requireSomaStaff();
@@ -14,6 +16,7 @@ export default async function TarefasLayout({ children }: { children: React.Reac
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <NovaTarefaAvulsa hoje={hojeBrasilia()} />
           <Sincronizar />
           <TarefasNav />
         </div>
