@@ -21,6 +21,7 @@ import {
   type StatusDeclaracao,
 } from "@/lib/irpf/comum";
 import { ControleDeclaracao } from "./ControleDeclaracao";
+import { analisar } from "@/lib/irpf/analise";
 import { SituacaoReceita } from "./SituacaoReceita";
 import { ChecklistDeclaracao } from "./ChecklistDeclaracao";
 import { ArquivosDeclaracao } from "./ArquivosDeclaracao";
@@ -82,6 +83,19 @@ export default async function DeclaracaoPage(props: PageProps<"/irpf/declaracoes
   const nomeEquipe = new Map(equipe.map((e) => [e.id, e.nome]));
   const anterior = (anteriorRow?.resumo as ResumoGravado | null) ?? null;
   const alerta = resumo ? alertaVariacaoPatrimonial(resumo) : null;
+  // Análise (destaques e conciliação) com todos os anos já importados.
+  const { data: anosRows } = resumo
+    ? await supabase
+        .from("irpf_declaracoes")
+        .select("exercicio, resumo")
+        .eq("contribuinte_id", contribuinte.id)
+        .lte("exercicio", d.exercicio)
+        .not("resumo", "is", null)
+    : { data: [] };
+  const analise =
+    resumo && !resumo.parcial
+      ? analisar((anosRows ?? []).map((x) => ({ exercicio: x.exercicio as number, resumo: x.resumo as ResumoGravado })), d.exercicio)
+      : null;
   const status = d.status as StatusDeclaracao;
 
   const textoEvento = (e: { tipo: string; de: string | null; para: string | null }) => {
@@ -191,11 +205,49 @@ export default async function DeclaracaoPage(props: PageProps<"/irpf/declaracoes
                 </Card>
               )}
 
-              {alerta && (
+              {analise && (
+                <Card className="p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="text-sm font-semibold text-foreground/70">Análise do ano</div>
+                    <Link href={`/irpf/declaracoes/${declaracaoId}/relatorio`} className="text-xs text-brand hover:underline">
+                      Ver no relatório do cliente →
+                    </Link>
+                  </div>
+                  <div className="mb-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                    {(
+                      [
+                        ["Patrimônio início", analise.plInicio],
+                        ["+ Renda líquida", analise.rendaDisponivel],
+                        [analise.gastosEstimados >= 0 ? "− Gastos estimados" : "Sem origem na renda", Math.abs(analise.gastosEstimados)],
+                        ["Patrimônio fim", analise.plFim],
+                      ] as [string, number][]
+                    ).map(([k, v]) => (
+                      <div key={k} className={cn("rounded-lg bg-surface-muted p-2", k === "Sem origem na renda" && "bg-danger-soft text-danger")}>
+                        <div className="text-[11px] text-foreground/55">{k}</div>
+                        <div className="font-semibold tabular-nums">{formatarMoeda(v)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <ul className="flex flex-col gap-2">
+                    {analise.destaques.map((dq) => (
+                      <li
+                        key={dq.titulo}
+                        className={cn(
+                          "rounded-lg border-l-4 px-3 py-2 text-sm",
+                          dq.tom === "atencao" ? "border-danger bg-danger-soft/50" : dq.tom === "bom" ? "border-success bg-success-soft/50" : "border-warning bg-warning-soft/40",
+                        )}
+                      >
+                        <div className="font-medium text-foreground">{dq.titulo}</div>
+                        <div className="text-xs text-foreground/65">{dq.texto}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
+              {!analise && alerta && (
                 <Card className="border-warning/40 bg-warning-soft p-4 text-sm text-warning">
                   <b>Atenção — variação patrimonial:</b> o patrimônio líquido cresceu {formatarMoeda(alerta.excesso)} a mais
-                  do que a renda declarada do ano (tributáveis + isentos + exclusivos − imposto). Confira se faltou rendimento,
-                  empréstimo ou venda de bem.
+                  do que a renda declarada do ano. Confira se faltou rendimento, empréstimo ou venda de bem.
                 </Card>
               )}
 

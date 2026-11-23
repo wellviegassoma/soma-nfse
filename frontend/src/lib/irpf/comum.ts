@@ -149,6 +149,9 @@ const CODIGO_PAGAMENTO: Record<string, string> = {
   "26": "Plano de saúde",
   "36": "Previdência complementar",
   "37": "FUNPRESP",
+  "70": "Aluguel pago",
+  "71": "Arrendamento rural",
+  "72": "Outros pagamentos",
 };
 
 export function descricaoPagamento(codigo: string): string {
