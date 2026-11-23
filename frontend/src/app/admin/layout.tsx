@@ -73,6 +73,12 @@ export default async function AdminLayout({
             >
               Extratos
             </Link>
+            <Link
+              href="/irpf"
+              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground/70 hover:bg-surface-muted sm:inline-block"
+            >
+              IRPF
+            </Link>
             {/* Financeiro e Atendimento saíram da barra (17/11/2026, sem uso por
                 enquanto) — as páginas /financeiro e /atendimento continuam. */}
             <div className="hidden h-8 w-px bg-border sm:block" />
