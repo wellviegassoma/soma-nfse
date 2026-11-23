@@ -481,7 +481,7 @@ async function sincronizar() {
         (e) => log(`Falha ao registrar o fim: ${e.message}`, "err"),
       );
     }
-    const fim = `${parar ? "Interrompida" : "Concluída"}: ${tot.processos} processos, ${tot.andamentos_novos} andamentos novos, ${tot.documentos_novos} documentos baixados, ${tot.erros.length} erro(s).`;
+    const fim = `${parar ? "Interrompida" : "Concluída"}: ${tot.processos} processos, ${tot.andamentos_novos} andamentos novos, ${tot.documentos_novos} documentos baixados, ${tot.sem_acesso || 0} sem acesso no SEI, ${tot.erros.length} erro(s).`;
     $("resumo").textContent = fim;
     log(fim, tot.erros.length ? "err" : "ok");
     rodando = false;
@@ -546,13 +546,14 @@ async function sincronizarProcesso(sincronizacaoId, numero, acessos, tot) {
   // Sem ponto: o Blob trata o que vem depois do 1º ponto como extensão.
   const pasta = numero.replace(/[^A-Za-z0-9]/g, "-");
   let baixadosAgora = 0;
+  // Documento listado sem link = o acesso externo da SOMA não deixa abrir.
+  // Não é erro: marca no SOMA e tenta de novo na próxima rodada.
+  const semAcesso = [];
   for (const d of lido.documentos) {
     if (parar) break;
     if (!faltando.has(d.numero_sei)) continue;
     if (!d.href) {
-      const msg = `sem link do documento na página do processo — linha tem: ${d.semLink}`;
-      tot.erros.push({ onde: `${numero} doc ${d.numero_sei}`, erro: msg.slice(0, 2000) });
-      log(`${numero} doc ${d.numero_sei}: ${msg}`, "err");
+      semAcesso.push(d.numero_sei);
       continue;
     }
     try {
@@ -582,6 +583,13 @@ async function sincronizarProcesso(sincronizacaoId, numero, acessos, tot) {
       log(`${numero} doc ${d.numero_sei}: ${e.message || e}`, "err");
       if (/sessão expirada|aba do SEI/i.test(e.message || "")) throw new Error(MSG_EXPIRADA);
     }
+  }
+  if (semAcesso.length) {
+    tot.sem_acesso = (tot.sem_acesso || 0) + semAcesso.length;
+    log(`${numero}: ${semAcesso.length} documento(s) sem acesso no SEI (o acesso externo não deixa abrir).`, "dim");
+    await soma("/api/sei/sync", { acao: "sem_acesso", processo_id: resp.processo_id, numeros_sei: semAcesso }).catch((e) =>
+      log(`${numero}: falha ao marcar sem acesso (${e.message})`, "err"),
+    );
   }
   return { andamentos_novos: resp.andamentos_novos, baixados: baixadosAgora, vinculo: resp.vinculo };
 }

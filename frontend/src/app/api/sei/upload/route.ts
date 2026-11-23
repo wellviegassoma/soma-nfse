@@ -20,7 +20,8 @@ export async function POST(request: Request) {
           // (o tipo real fica em sei_documentos.mime).
           allowedContentTypes: ["application/pdf", "text/html", "text/plain", "image/*", "application/zip", "application/octet-stream"],
           addRandomSuffix: true,
-          maximumSizeInBytes: 100 * 1024 * 1024,
+          // Há anexos de vistoria (fotos/vídeo) acima de 100 MB.
+          maximumSizeInBytes: 500 * 1024 * 1024,
         };
       },
     });

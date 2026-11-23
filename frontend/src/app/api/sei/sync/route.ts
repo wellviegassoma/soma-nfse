@@ -57,6 +57,13 @@ const Documento = z.object({
   nome_arquivo: z.string().max(300),
 });
 
+// Documentos listados que o acesso externo da SOMA não deixa abrir (sem link).
+const SemAcesso = z.object({
+  acao: z.literal("sem_acesso"),
+  processo_id: z.string().uuid(),
+  numeros_sei: z.array(z.string().regex(/^\d{5,10}$/)).max(2000),
+});
+
 const Finalizar = z.object({
   acao: z.literal("finalizar"),
   sincronizacao_id: z.string().uuid(),
@@ -67,7 +74,7 @@ const Finalizar = z.object({
   interrompida: z.boolean().optional(),
 });
 
-const Corpo = z.discriminatedUnion("acao", [Iniciar, Processo, Documento, Finalizar]);
+const Corpo = z.discriminatedUnion("acao", [Iniciar, Processo, Documento, SemAcesso, Finalizar]);
 
 export async function POST(request: Request) {
   const negado = await autorizarApi("legalizacao.editar");
@@ -105,10 +112,24 @@ export async function POST(request: Request) {
             tamanho: corpo.tamanho,
             nome_arquivo: corpo.nome_arquivo,
             baixado_em: new Date().toISOString(),
+            sem_acesso_em: null,
           })
           .eq("processo_id", corpo.processo_id)
           .eq("numero_sei", corpo.numero_sei);
         if (error) throw error;
+        return NextResponse.json({ ok: true });
+      }
+
+      case "sem_acesso": {
+        if (corpo.numeros_sei.length) {
+          const { error } = await supabase
+            .from("sei_documentos")
+            .update({ sem_acesso_em: new Date().toISOString() })
+            .eq("processo_id", corpo.processo_id)
+            .in("numero_sei", corpo.numeros_sei)
+            .is("blob_pathname", null);
+          if (error) throw error;
+        }
         return NextResponse.json({ ok: true });
       }
 

@@ -35,7 +35,7 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
       .limit(5000),
     supabase
       .from("sei_documentos")
-      .select("id, numero_sei, ordem, tipo, data, unidade, nome_arquivo, tamanho, blob_pathname")
+      .select("id, numero_sei, ordem, tipo, data, unidade, nome_arquivo, tamanho, blob_pathname, sem_acesso_em")
       .eq("processo_id", processoId)
       .order("ordem", { ascending: true })
       .limit(5000),
@@ -188,6 +188,13 @@ export default async function SeiProcessoPage(props: PageProps<"/legalizacao/sei
                       baixar
                     </a>
                   </div>
+                ) : d.sem_acesso_em ? (
+                  <span
+                    className="shrink-0 text-xs text-warning"
+                    title="O acesso externo da SOMA neste processo não permite abrir este documento no SEI. Para baixar, é preciso pedir acesso integral ao processo."
+                  >
+                    sem acesso no SEI
+                  </span>
                 ) : (
                   <span className="shrink-0 text-xs text-foreground/40">não baixado</span>
                 )}
