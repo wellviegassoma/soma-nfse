@@ -12,6 +12,7 @@ import {
   type ModeloInput,
 } from "@/lib/actions/tarefas";
 import { EtapasEditor } from "./EtapasEditor";
+import { RevisarGeracao } from "./RevisarGeracao";
 import { FONTES_ROTULO, REGIMES, rotuloCompetencia } from "@/lib/tarefas-comum";
 import type { Modelo } from "@/lib/tarefas";
 
@@ -90,6 +91,7 @@ export function ModelosEditor({
   const [editando, setEditando] = useState<ModeloInput | null>(null);
   const [msg, setMsg] = useState<{ ok?: string; erro?: string } | null>(null);
   const [competencia, setCompetencia] = useState(competenciaPadrao);
+  const [revisando, setRevisando] = useState(false);
   const [pendente, iniciar] = useTransition();
   const nomeDepto = new Map(departamentos.map((d) => [d.id, d.nome]));
   const ativos = modelos.filter((m) => m.ativo).length;
@@ -134,9 +136,25 @@ export function ModelosEditor({
           >
             Gerar
           </button>
+          <button
+            type="button"
+            onClick={() => setRevisando(true)}
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium"
+            title="Mostra o que sobra e o que falta pelo cadastro atual antes de mexer"
+          >
+            Revisar e gerar novamente
+          </button>
         </div>
       </div>
       {msg && <div className={cn("text-sm", msg.erro ? "text-danger" : "text-success")}>{msg.erro ?? msg.ok}</div>}
+
+      {revisando && (
+        <RevisarGeracao
+          competenciaInicial={competencia}
+          modelos={modelos.map((m) => ({ id: m.id, nome: m.nome }))}
+          aoFechar={() => setRevisando(false)}
+        />
+      )}
 
       {editando && (
         <FormModelo

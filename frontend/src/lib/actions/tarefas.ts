@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff, requireSuperAdmin, requireUser } from "@/lib/auth";
-import { gerarTarefas } from "@/lib/tarefas";
+import { gerarTarefas, previaRegeracao, type PreviaRegeracao } from "@/lib/tarefas";
+import { logAudit } from "@/lib/audit";
 import { garantirEtapas, recalcularTarefas, sincronizarAutomacoes } from "@/lib/tarefas-automacao";
 import { FONTES_PAGAMENTO, FONTES_ROTULO, type FonteAutomatica } from "@/lib/tarefas-comum";
 import type { StatusTarefa } from "@/lib/tarefas-comum";
@@ -578,4 +579,68 @@ export async function concluirSePagoAction(tarefaId: string): Promise<{ ok: true
   await supabase.from("tarefa_eventos").insert({ tarefa_id: tarefaId, user_id: user.id, tipo: "VERIFICACAO", para: "CONCLUIDA", comentario: FONTES_ROTULO[fonte] });
   revalidar();
   return { ok: true, pago: true, mensagem: "Pago — tarefa concluída com todas as etapas." };
+}
+
+// ------------------------------------------------ regerar com revisão
+
+/** Lista o que sobra (e por quê) e o que falta na competência. Não apaga nada. */
+export async function previaRegeracaoAction(input: { competencia: string; modeloId?: string | null }): Promise<PreviaRegeracao | { error: string }> {
+  await requireSuperAdmin();
+  if (!COMPETENCIA.test(input.competencia)) return { error: "Competência inválida." };
+  try {
+    return await previaRegeracao(await createClient(), input.competencia, input.modeloId ? [input.modeloId] : undefined);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Apaga SÓ as tarefas escolhidas que continuam na lista "sobra" recalculada
+ * agora no servidor (nunca um id fora dela) e, se pedido, cria as que faltam.
+ */
+export async function aplicarRegeracaoAction(input: {
+  competencia: string;
+  modeloId?: string | null;
+  removerIds: string[];
+  criarFaltantes: boolean;
+}): Promise<Resultado> {
+  await requireSuperAdmin();
+  if (!COMPETENCIA.test(input.competencia)) return { error: "Competência inválida." };
+  const supabase = await createClient();
+  try {
+    const modeloIds = input.modeloId ? [input.modeloId] : undefined;
+    const previa = await previaRegeracao(supabase, input.competencia, modeloIds);
+    const permitidas = new Map(previa.remover.map((r) => [r.id, r]));
+    const ids = [...new Set(input.removerIds)].filter((id) => permitidas.has(id));
+    const ignoradas = input.removerIds.length - ids.length;
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await supabase.from("tarefas").delete().in("id", ids.slice(i, i + 200));
+      if (error) return { error: error.message };
+    }
+    if (ids.length) {
+      await logAudit({
+        action: "DELETE_REGERAR",
+        entity: "tarefas",
+        oldValue: ids.map((id) => {
+          const r = permitidas.get(id)!;
+          return { id, modelo: r.modelo, empresa: r.empresa, status: r.status, motivo: r.motivo };
+        }),
+        newValue: { competencia: input.competencia },
+      });
+    }
+    let criadas = 0;
+    if (input.criarFaltantes) criadas = (await gerarTarefas(supabase, input.competencia, { modeloIds })).criadas;
+    revalidatePath("/admin/configuracoes/tarefa-modelos", "layout");
+    revalidar();
+    return {
+      ok: true,
+      mensagem:
+        `${ids.length} tarefa(s) removida(s)` +
+        (input.criarFaltantes ? `, ${criadas} criada(s)` : "") +
+        (ignoradas ? `; ${ignoradas} ignorada(s) porque não estão mais na lista de sobra` : "") +
+        ".",
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
 }

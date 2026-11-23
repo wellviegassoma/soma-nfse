@@ -9,7 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { chaveObrigacao, dataMeta } from "@/lib/agenda-tributaria";
-import { somarMeses, type StatusTarefa } from "@/lib/tarefas-comum";
+import { REGIMES, somarMeses, type StatusTarefa } from "@/lib/tarefas-comum";
 import { garantirEtapas } from "@/lib/tarefas-automacao";
 
 type Db = SupabaseClient;
@@ -303,4 +303,129 @@ export async function competenciasSemPrazo(db: Db): Promise<string[]> {
     .limit(1000);
   if (error) throw new Error(error.message);
   return [...new Set((data ?? []).map((r) => r.competencia as string))].sort();
+}
+
+// ------------------------------------------------- regerar (revisão segura)
+
+export type TarefaParaRemover = {
+  id: string;
+  modelo: string;
+  empresa: string;
+  status: StatusTarefa;
+  motivo: string;
+  etapasFeitas: number;
+  mexidaPorAlguem: boolean; // alguém da equipe já mudou status/etapa/responsável
+  sugerida: boolean; // marcada por padrão na revisão
+};
+
+export type PreviaRegeracao = {
+  competencia: string;
+  remover: TarefaParaRemover[];
+  criar: { modelo: string; empresa: string }[];
+};
+
+/**
+ * Compara o que existe na competência com o que o cadastro ATUAL dos modelos
+ * geraria. Não apaga nada: só lista o que sobra (com o motivo) e o que falta.
+ * Sugere remover só o que ninguém tocou (A fazer, sem etapa feita, sem
+ * histórico de pessoa); o resto aparece desmarcado para decisão manual.
+ */
+export async function previaRegeracao(db: Db, competencia: string, modeloIds?: string[]): Promise<PreviaRegeracao> {
+  let qm = db.from("tarefa_modelos").select(MODELO_COLUNAS);
+  if (modeloIds?.length) qm = qm.in("id", modeloIds);
+  const { data: modelosRaw, error } = await qm;
+  if (error) throw new Error(error.message);
+  const modelos = (modelosRaw ?? []) as Modelo[];
+  const modeloPorId = new Map(modelos.map((m) => [m.id, m]));
+
+  const [empresas, folha, excecoes, existentes] = await Promise.all([
+    carregarEmpresas(db),
+    empresasComFolha(db, competencia),
+    buscarTudoPaginado<{ modelo_id: string; company_id: string; tipo: "INCLUIR" | "EXCLUIR" }>((from, to) =>
+      db.from("tarefa_modelo_excecoes").select("modelo_id, company_id, tipo").range(from, to),
+    ),
+    buscarTudoPaginado<{ id: string; modelo_id: string; company_id: string; status: StatusTarefa }>((from, to) =>
+      db
+        .from("tarefas")
+        .select("id, modelo_id, company_id, status")
+        .eq("competencia", competencia)
+        .in("modelo_id", modelos.map((m) => m.id))
+        .order("id")
+        .range(from, to),
+    ),
+  ]);
+  const empresaPorId = new Map(empresas.map((e) => [e.id, e]));
+  const excecao = new Map(excecoes.map((x) => [`${x.modelo_id}|${x.company_id}`, x.tipo]));
+
+  const esperada = (m: Modelo, e: EmpresaTarefa): string | null => {
+    if (!m.ativo) return "modelo desativado";
+    if (!modeloGeraNaCompetencia(m, competencia)) return "modelo não gera nessa competência";
+    if (!empresaAtendida(e, competencia)) return "empresa inativa ou encerrada";
+    const x = excecao.get(`${m.id}|${e.id}`);
+    if (x === "EXCLUIR") return "exceção: nunca gerar";
+    if (!empresaNoFiltro(m, e, folha.has(e.id), x)) {
+      if (m.aplica_regimes?.length && !m.aplica_regimes.includes(e.tax_regime ?? "")) return `regime ${REGIMES.find((r) => r.valor === e.tax_regime)?.rotulo ?? "não informado"} fora do modelo`;
+      if (m.aplica_pessoa && e.person_type !== m.aplica_pessoa) return `${e.person_type ?? "?"} fora do modelo (${m.aplica_pessoa})`;
+      if (m.aplica_municipios?.length && !m.aplica_municipios.includes(e.municipality_ibge_code ?? ""))
+        return `município ${e.municipality_name ?? "não informado"} fora do modelo`;
+      if (m.aplica_folha === true) return "sem folha nos últimos 3 meses";
+      if (m.aplica_folha === false) return "tem folha (modelo é só para quem não tem)";
+      return "fora do filtro do modelo";
+    }
+    return null;
+  };
+
+  const candidatos = existentes
+    .map((t) => {
+      const m = modeloPorId.get(t.modelo_id);
+      const e = empresaPorId.get(t.company_id);
+      if (!m || !e) return null;
+      const motivo = esperada(m, e);
+      return motivo ? { t, m, e, motivo } : null;
+    })
+    .filter(Boolean) as { t: (typeof existentes)[number]; m: Modelo; e: EmpresaTarefa; motivo: string }[];
+
+  // Quem já mexeu: etapas feitas e eventos de pessoas.
+  const feitas = new Map<string, number>();
+  const mexidas = new Set<string>();
+  const ids = candidatos.map((c) => c.t.id);
+  for (let i = 0; i < ids.length; i += 200) {
+    const bloco = ids.slice(i, i + 200);
+    const [{ data: et }, { data: ev }] = await Promise.all([
+      db.from("tarefa_etapas").select("tarefa_id").in("tarefa_id", bloco).not("concluida_em", "is", null),
+      db.from("tarefa_eventos").select("tarefa_id").in("tarefa_id", bloco).not("user_id", "is", null),
+    ]);
+    for (const r of et ?? []) feitas.set(r.tarefa_id as string, (feitas.get(r.tarefa_id as string) ?? 0) + 1);
+    for (const r of ev ?? []) mexidas.add(r.tarefa_id as string);
+  }
+
+  const remover: TarefaParaRemover[] = candidatos
+    .map(({ t, m, e, motivo }) => {
+      const etapasFeitas = feitas.get(t.id) ?? 0;
+      const mexidaPorAlguem = mexidas.has(t.id);
+      return {
+        id: t.id,
+        modelo: m.nome,
+        empresa: nomeEmpresa(e),
+        status: t.status,
+        motivo,
+        etapasFeitas,
+        mexidaPorAlguem,
+        sugerida: t.status === "A_FAZER" && !etapasFeitas && !mexidaPorAlguem,
+      };
+    })
+    .sort((a, b) => a.modelo.localeCompare(b.modelo) || a.empresa.localeCompare(b.empresa));
+
+  // O que falta (o que "Gerar" criaria).
+  const ja = new Set(existentes.map((t) => `${t.modelo_id}|${t.company_id}`));
+  const criar: { modelo: string; empresa: string }[] = [];
+  for (const m of modelos) {
+    if (!m.ativo || !modeloGeraNaCompetencia(m, competencia)) continue;
+    for (const e of empresas) {
+      if (ja.has(`${m.id}|${e.id}`) || esperada(m, e)) continue;
+      criar.push({ modelo: m.nome, empresa: nomeEmpresa(e) });
+    }
+  }
+  criar.sort((a, b) => a.modelo.localeCompare(b.modelo) || a.empresa.localeCompare(b.empresa));
+  return { competencia, remover, criar };
 }
