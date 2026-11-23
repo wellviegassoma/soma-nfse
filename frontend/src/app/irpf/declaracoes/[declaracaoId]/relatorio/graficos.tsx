@@ -22,7 +22,7 @@ export function GraficoEvolucao({
 }: {
   serie: { anoCalendario: number; patrimonio: number; rendaTotal: number }[];
 }) {
-  const L = 640, A = 230, ml = 16, mr = 16, mt = 28, mb = 34;
+  const L = 640, A = 190, ml = 16, mr = 16, mt = 24, mb = 30;
   const max = Math.max(1, ...serie.map((s) => Math.max(s.patrimonio, s.rendaTotal)));
   const n = serie.length;
   const slot = (L - ml - mr) / n;

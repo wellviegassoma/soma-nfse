@@ -15,6 +15,8 @@ import { analisar, grupoDoBem, rotuloGrupo } from "@/lib/irpf/analise";
 import { AcoesRelatorio } from "./AcoesRelatorio";
 import { AZUL, DOURADO, VERDE, VERMELHO, Barra, GraficoComposicao, GraficoEvolucao, PontePatrimonial } from "./graficos";
 
+/** Texto seguro para content: "..." do CSS. */
+const cssTexto = (s: string) => s.replace(/["\\\n\r]/g, " ");
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const brl0 = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const dataBr = (iso: string | null | undefined) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—");
@@ -78,11 +80,25 @@ export async function generateMetadata(props: PageProps<"/irpf/declaracoes/[decl
   return { title: x ? `IRPF ${x.d.exercicio} - ${x.c.nome} - SOMA` : "Relatório IRPF" };
 }
 
-function Pagina({ children, numero, total }: { children: React.ReactNode; numero: number; total: number }) {
+function Pagina({
+  children,
+  numero,
+  total,
+  novaFolha = false,
+}: {
+  children: React.ReactNode;
+  numero: number;
+  total: number;
+  novaFolha?: boolean;
+}) {
   return (
-    <section className="pagina relative mx-auto mb-6 w-full max-w-[210mm] bg-white px-[14mm] pb-[8mm] pt-[12mm] text-[12.5px] leading-relaxed text-slate-800 shadow-sm print:mb-0 print:pb-0 print:pt-0 print:shadow-none">
+    <section
+      className={`pagina relative mx-auto mb-6 w-full max-w-[210mm] bg-white px-[14mm] pb-[8mm] pt-[12mm] text-[12.5px] leading-relaxed text-slate-800 shadow-sm print:mb-0 print:px-0 print:pb-4 print:pt-0 print:shadow-none ${
+        novaFolha ? "nova-folha" : ""
+      }`}
+    >
       {children}
-      <footer className="mt-8 flex items-center justify-between border-t border-slate-200 pt-1.5 text-[10px] text-slate-400">
+      <footer className="mt-8 flex items-center justify-between border-t border-slate-200 pt-1.5 text-[10px] text-slate-400 print:hidden">
         <span>SOMA Contabilidade Integrada · Relatório preparado a partir da sua declaração</span>
         <span>
           {numero} / {total}
@@ -106,7 +122,7 @@ function Titulo({ children, sub }: { children: React.ReactNode; sub?: string }) 
 
 function Cabecalho({ nome, exercicio }: { nome: string; exercicio: number }) {
   return (
-    <div className="mb-5 flex items-center justify-between border-b border-slate-200 pb-2 text-[10.5px] text-slate-500">
+    <div className="mb-5 flex items-center justify-between border-b border-slate-200 pb-2 text-[10.5px] text-slate-500 print:hidden">
       <span>
         {nome} · Exercício {exercicio}
       </span>
@@ -162,16 +178,25 @@ export default async function RelatorioPage(props: PageProps<"/irpf/declaracoes/
   return (
     <div className="flex flex-col gap-4 bg-slate-100 print:bg-white">
       <style>{`
-        @page { size: A4; margin: 11mm 0 12mm 0; }
+        @page {
+          size: A4;
+          margin: 15mm 14mm 14mm 14mm;
+          @top-left { content: "${cssTexto(`${c.nome} · IRPF ${d.exercicio}`)}"; font: 8pt sans-serif; color: #94a3b8; }
+          @top-right { content: "SOMA Contabilidade Integrada"; font: 8pt sans-serif; color: #C9A227; }
+          @bottom-left { content: "Relatório preparado pela SOMA a partir da sua declaração"; font: 7.5pt sans-serif; color: #94a3b8; }
+          @bottom-right { content: counter(page) " / " counter(pages); font: 8pt sans-serif; color: #94a3b8; }
+        }
+        @page :first { @top-left { content: none; } @top-right { content: none; } }
         @media print {
           html, body { background: #fff !important; }
-          .pagina { break-after: page; max-width: none !important; }
-          .pagina:last-of-type { break-after: auto; }
-          .capa { margin-top: 0 !important; }
+          .pagina { max-width: none !important; }
+          .nova-folha { break-before: page; }
+          .capa { margin: 0 0 18px 0 !important; border-radius: 14px; padding-left: 10mm !important; padding-right: 10mm !important; }
           * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
         .pagina .evitar-quebra { break-inside: avoid; }
-        .pagina tr { break-inside: avoid; }
+        .pagina tr, .pagina li { break-inside: avoid; }
+        .pagina h2 { break-after: avoid; }
       `}</style>
 
       <div className="mx-auto w-full max-w-[210mm] print:hidden">
@@ -251,19 +276,28 @@ export default async function RelatorioPage(props: PageProps<"/irpf/declaracoes/
         )}
 
         {destaques.length > 0 && (
-          <div className="evitar-quebra">
-            <Titulo>Destaques do seu ano</Titulo>
+          <div>
             <div className="grid gap-2.5">
-              {destaques.map((dq) => (
-                <div
-                  key={dq.titulo}
-                  className="rounded-lg border-l-4 bg-slate-50 px-3.5 py-2.5"
-                  style={{ borderColor: dq.tom === "atencao" ? VERMELHO : dq.tom === "bom" ? VERDE : DOURADO }}
-                >
-                  <div className="text-[12.5px] font-semibold text-slate-900">{dq.titulo}</div>
-                  <div className="text-[12px] text-slate-600">{dq.texto}</div>
-                </div>
-              ))}
+              {destaques.map((dq, i) => {
+                const item = (
+                  <div
+                    className="evitar-quebra rounded-lg border-l-4 bg-slate-50 px-3.5 py-2.5"
+                    style={{ borderColor: dq.tom === "atencao" ? VERMELHO : dq.tom === "bom" ? VERDE : DOURADO }}
+                  >
+                    <div className="text-[12.5px] font-semibold text-slate-900">{dq.titulo}</div>
+                    <div className="text-[12px] text-slate-600">{dq.texto}</div>
+                  </div>
+                );
+                // O título vai junto com o primeiro item para não ficar sozinho no pé da folha.
+                return i === 0 ? (
+                  <div key={dq.titulo} className="evitar-quebra">
+                    <Titulo>Destaques do seu ano</Titulo>
+                    {item}
+                  </div>
+                ) : (
+                  <div key={dq.titulo}>{item}</div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -273,6 +307,7 @@ export default async function RelatorioPage(props: PageProps<"/irpf/declaracoes/
         <>
           {/* ---------------- Página 2: evolução ---------------- */}
           <Pagina numero={2} total={totalPaginas}>
+            <div className="print:mt-6" />
             <Cabecalho nome={c.nome} exercicio={d.exercicio} />
             <Titulo sub="Barras: patrimônio líquido em 31/12 de cada ano (bens menos dívidas). Linha dourada: rendimentos totais do ano.">
               Sua evolução {a.serie.length > 1 ? `nos últimos ${a.serie.length} anos` : "no ano"}
@@ -281,7 +316,7 @@ export default async function RelatorioPage(props: PageProps<"/irpf/declaracoes/
               <GraficoEvolucao serie={a.serie} />
             </div>
             {a.serie.length > 1 && (
-              <table className="evitar-quebra mb-6 w-full text-[11.5px]">
+              <table className="evitar-quebra mb-4 w-full text-[11px]">
                 <thead>
                   <tr className="text-left text-slate-500">
                     <th className="py-1 font-medium">Ano-calendário</th>
@@ -316,7 +351,7 @@ export default async function RelatorioPage(props: PageProps<"/irpf/declaracoes/
               </table>
             )}
 
-            <div className="evitar-quebra mb-6">
+            <div className="evitar-quebra mb-4">
               <Titulo sub="De onde veio (ou para onde foi) a variação do seu patrimônio no ano. A Receita faz esta mesma conta para checar se o crescimento do patrimônio é coerente com a renda declarada.">
                 Conciliação do patrimônio no ano
               </Titulo>
@@ -387,6 +422,7 @@ export default async function RelatorioPage(props: PageProps<"/irpf/declaracoes/
           {/* ---------------- Página 3: rendimentos e deduções ---------------- */}
           <Pagina numero={3} total={totalPaginas}>
             <Cabecalho nome={c.nome} exercicio={d.exercicio} />
+            <div className="mt-2 print:mt-6" />
             <Titulo sub="Confira se todas as fontes que te pagaram no ano estão aqui, com os valores do informe de rendimentos.">
               Suas fontes de renda
             </Titulo>
@@ -409,7 +445,7 @@ export default async function RelatorioPage(props: PageProps<"/irpf/declaracoes/
                 </div>
               )}
             </div>
-            <div className="mb-6 grid grid-cols-3 gap-3 text-[12px]">
+            <div className="evitar-quebra mb-6 grid grid-cols-3 gap-3 text-[12px]">
               {kpi("Tributáveis", brl0(t.rendimentosTributaveis))}
               {kpi("Isentos", brl0(t.rendimentosIsentos), "lucros, dividendos, poupança…")}
               {kpi("Tributação exclusiva", brl0(t.rendimentosExclusivos), "13º, aplicações financeiras…")}
@@ -513,39 +549,70 @@ export default async function RelatorioPage(props: PageProps<"/irpf/declaracoes/
           {/* ---------------- Página 4: bens, dados e aprovação ---------------- */}
           <Pagina numero={4} total={totalPaginas}>
             <Cabecalho nome={c.nome} exercicio={d.exercicio} />
-            <Titulo sub="Valores pelo custo de aquisição, como a lei exige (não pelo valor de mercado).">Seus bens e direitos</Titulo>
-            <table className="mb-4 w-full text-[11px]">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  <th className="py-1 font-medium">Bem</th>
-                  <th className="py-1 text-right font-medium">31/12/{d.exercicio - 2}</th>
-                  <th className="py-1 text-right font-medium">31/12/{d.exercicio - 1}</th>
+            {(() => {
+              const bens = [...r.bens].sort((b1, b2) => b2.valorAtual - b1.valorAtual);
+              const linha = (b: (typeof bens)[number], i: number) => (
+                <tr key={i} className="evitar-quebra border-t border-slate-100 align-top">
+                  <td className="py-1 pr-3">
+                    <span className="mr-1 rounded px-1 text-[9.5px] font-semibold" style={{ background: "#EEF2F7", color: AZUL }}>
+                      {rotuloGrupo(grupoDoBem(b))}
+                    </span>
+                    {resumirTexto(b.descricao, 110)}
+                    {b.valorAnterior === 0 && b.valorAtual > 0 && <span className="ml-1 text-[10px] font-semibold" style={{ color: VERDE }}>novo</span>}
+                    {b.valorAnterior > 0 && b.valorAtual === 0 && <span className="ml-1 text-[10px] font-semibold" style={{ color: VERMELHO }}>baixado</span>}
+                  </td>
+                  <td className="whitespace-nowrap py-1 pl-2 text-right tabular-nums text-slate-500">{brl(b.valorAnterior)}</td>
+                  <td className="whitespace-nowrap py-1 pl-2 text-right tabular-nums">{brl(b.valorAtual)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {[...r.bens]
-                  .sort((b1, b2) => b2.valorAtual - b1.valorAtual)
-                  .map((b, i) => (
-                    <tr key={i} className="evitar-quebra border-t border-slate-100 align-top">
-                      <td className="py-1 pr-3">
-                        <span className="mr-1 rounded px-1 text-[9.5px] font-semibold" style={{ background: "#EEF2F7", color: AZUL }}>
-                          {rotuloGrupo(grupoDoBem(b))}
-                        </span>
-                        {resumirTexto(b.descricao, 110)}
-                        {b.valorAnterior === 0 && b.valorAtual > 0 && <span className="ml-1 text-[10px] font-semibold" style={{ color: VERDE }}>novo</span>}
-                        {b.valorAnterior > 0 && b.valorAtual === 0 && <span className="ml-1 text-[10px] font-semibold" style={{ color: VERMELHO }}>baixado</span>}
-                      </td>
-                      <td className="whitespace-nowrap py-1 pl-2 text-right tabular-nums text-slate-500">{brl(b.valorAnterior)}</td>
-                      <td className="whitespace-nowrap py-1 pl-2 text-right tabular-nums">{brl(b.valorAtual)}</td>
-                    </tr>
-                  ))}
+              );
+              // Duas tabelas com as mesmas colunas: a primeira (título + cabeçalho + 2 bens)
+              // não quebra, para o título nunca ficar sozinho no pé da folha.
+              const colunas = (
+                <colgroup>
+                  <col />
+                  <col className="w-[7.5rem]" />
+                  <col className="w-[7.5rem]" />
+                </colgroup>
+              );
+              const total = (
                 <tr className="border-t-2 border-slate-300 font-semibold" style={{ color: AZUL }}>
                   <td className="py-1">Total</td>
                   <td className="whitespace-nowrap py-1 pl-2 text-right tabular-nums">{brl(t.bensAnterior)}</td>
                   <td className="whitespace-nowrap py-1 pl-2 text-right tabular-nums">{brl(t.bensAtual)}</td>
                 </tr>
-              </tbody>
-            </table>
+              );
+              const resto = bens.slice(2);
+              return (
+                <div className="mb-4">
+                  <div className="evitar-quebra">
+                    <Titulo sub="Valores pelo custo de aquisição, como a lei exige (não pelo valor de mercado).">Seus bens e direitos</Titulo>
+                    <table className="w-full table-fixed text-[11px]">
+                      {colunas}
+                      <thead>
+                        <tr className="text-left text-slate-500">
+                          <th className="py-1 font-medium">Bem</th>
+                          <th className="py-1 text-right font-medium">31/12/{d.exercicio - 2}</th>
+                          <th className="py-1 text-right font-medium">31/12/{d.exercicio - 1}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bens.slice(0, 2).map(linha)}
+                        {resto.length === 0 && total}
+                      </tbody>
+                    </table>
+                  </div>
+                  {resto.length > 0 && (
+                    <table className="w-full table-fixed text-[11px]">
+                      {colunas}
+                      <tbody>
+                        {resto.map((b, i) => linha(b, i + 2))}
+                        {total}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              );
+            })()}
             {r.dividas.length > 0 && (
               <>
                 <Titulo>Dívidas e ônus</Titulo>
