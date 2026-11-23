@@ -77,6 +77,12 @@ export default async function RelatorioPage(props: PageProps<"/irpf/declaracoes/
           <Logo />
         </header>
 
+        {r.parcial && (
+          <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 print:hidden">
+            Este resumo veio só do recibo em PDF: rendimentos por fonte, deduções e bens não aparecem. Importe o PDF da declaração
+            ou o .DEC antes de mandar ao cliente.
+          </div>
+        )}
         <div className="mb-6 grid grid-cols-3 gap-3">
           <div className="rounded-lg border border-neutral-300 p-3">
             <div className="text-xs text-neutral-500">Resultado</div>

@@ -178,6 +178,14 @@ export default async function DeclaracaoPage(props: PageProps<"/irpf/declaracoes
                 </Card>
               </div>
 
+              {(resumo.parcial || (resumo.origem && resumo.origem !== "DEC")) && (
+                <Card className="p-3 text-xs text-foreground/60">
+                  {resumo.parcial
+                    ? "Resumo lido só do recibo em PDF: tem os totais, o número e a data de entrega, mas não os rendimentos por fonte, as deduções nem os bens. Envie o PDF da declaração ou o .DEC para completar."
+                    : "Resumo lido do PDF da declaração. O .DEC, se houver, é mais completo (traz também a conta de restituição e o título de eleitor)."}
+                </Card>
+              )}
+
               {alerta && (
                 <Card className="border-warning/40 bg-warning-soft p-4 text-sm text-warning">
                   <b>Atenção — variação patrimonial:</b> o patrimônio líquido cresceu {formatarMoeda(alerta.excesso)} a mais

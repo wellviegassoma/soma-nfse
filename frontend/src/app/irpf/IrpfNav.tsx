@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 const TABS = [
   { href: "/irpf", label: "Declarações", exact: true },
   { href: "/irpf/contribuintes", label: "Contribuintes" },
+  { href: "/irpf/financeiro", label: "Financeiro" },
   { href: "/irpf/importar", label: "Importar .DEC" },
 ];
 

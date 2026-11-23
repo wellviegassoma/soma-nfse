@@ -7,14 +7,28 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { formatarMoeda } from "@/lib/formatters";
-import { lerDec, decodificarArquivo, type ResumoDeclaracao } from "@/lib/irpf/dec-parser";
-import { importarDeclaracaoAction } from "@/lib/actions/irpf";
+import { lerDec, decodificarArquivo } from "@/lib/irpf/dec-parser";
+import { importarDeclaracaoAction, importarPdfAction, type ResultadoImportacao } from "@/lib/actions/irpf";
+
+type Linha = {
+  nome: string;
+  exercicio: number;
+  completa: boolean;
+  retificadora: boolean;
+  resultado: "SEM_SALDO" | "PAGAR" | "RESTITUIR";
+  valor: number;
+  transmitida: boolean;
+  parcial: boolean;
+};
 
 type Item = {
   chave: string;
-  dec: File;
-  rec: File | null;
-  resumo: ResumoDeclaracao | null;
+  tipo: "DEC" | "PDF";
+  dec?: File;
+  rec?: File | null;
+  pdfs?: File[];
+  linha: Linha | null; // .DEC: lido no navegador; PDF: preenchido depois de importar
+  cpf: string | null;
   erro: string | null;
   estado: "PRONTO" | "ENVIANDO" | "CRIADA" | "ATUALIZADA" | "MANTIDA" | "REPETIDA" | "ERRO";
   mensagem?: string;
@@ -30,40 +44,94 @@ const ESTADO_LABEL: Record<Item["estado"], string> = {
   ERRO: "Erro",
 };
 
-function base(nome: string) {
+const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+function baseDec(nome: string) {
   return nome.replace(/\.(dec|rec)$/i, "").toUpperCase();
 }
 
+/** PDF do programa do IRPF (declaração ou recibo)? Boletos de DARF e outros ficam de fora. */
+function pdfDoIrpf(nome: string) {
+  const n = semAcento(nome).toUpperCase();
+  return n.endsWith(".PDF") && !/DARF/.test(n) && /IMAGEM-(DECLARACAO|RECIBO)|DECLARACAO|RECIBO/.test(n);
+}
+
+/** Chave que junta "…-imagem-declaracao.pdf" com "…-imagem-recibo.pdf" (e "X - DECLARAÇÃO - 2026" com "X - RECIBO - 2026"). */
+function basePdf(nome: string) {
+  return semAcento(nome)
+    .toUpperCase()
+    .replace(/\.PDF$/, "")
+    .replace(/IMAGEM-(DECLARACAO|RECIBO)/, "#")
+    .replace(/\b(DECLARACAO|RECIBO)\b/, "#")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function prepararItens(files: File[]): Promise<Item[]> {
-  const recs = new Map<string, File>();
-  for (const f of files) if (/\.rec$/i.test(f.name)) recs.set(base(f.name), f);
-  const decs = files.filter((f) => /\.dec$/i.test(f.name));
-  const vistos = new Set<string>();
   const itens: Item[] = [];
-  for (const dec of decs) {
-    const chave = `${base(dec.name)}|${dec.size}`;
+
+  // .DEC/.REC — lidos aqui mesmo para a prévia.
+  const recs = new Map<string, File>();
+  for (const f of files) if (/\.rec$/i.test(f.name)) recs.set(baseDec(f.name), f);
+  const vistos = new Set<string>();
+  for (const dec of files.filter((f) => /\.dec$/i.test(f.name))) {
+    const chave = `${baseDec(dec.name)}|${dec.size}`;
     if (vistos.has(chave)) continue; // mesma declaração em "gravadas" e "transmitidas"
     vistos.add(chave);
-    const rec = recs.get(base(dec.name)) ?? null;
+    const rec = recs.get(baseDec(dec.name)) ?? null;
     try {
-      const textoDec = decodificarArquivo(await dec.arrayBuffer());
-      const textoRec = rec ? decodificarArquivo(await rec.arrayBuffer()) : null;
-      itens.push({ chave, dec, rec, resumo: lerDec(textoDec, textoRec), erro: null, estado: "PRONTO" });
+      const r = lerDec(decodificarArquivo(await dec.arrayBuffer()), rec ? decodificarArquivo(await rec.arrayBuffer()) : null);
+      itens.push({
+        chave,
+        tipo: "DEC",
+        dec,
+        rec,
+        cpf: r.cpf,
+        linha: {
+          nome: r.nome,
+          exercicio: r.exercicio,
+          completa: r.completa,
+          retificadora: r.retificadora,
+          resultado: r.resultado,
+          valor: r.resultado === "PAGAR" ? r.totais.impostoPagar : r.totais.impostoRestituir,
+          transmitida: !!r.transmissao,
+          parcial: false,
+        },
+        erro: null,
+        estado: "PRONTO",
+      });
     } catch (e) {
-      itens.push({ chave, dec, rec, resumo: null, erro: e instanceof Error ? e.message : "Arquivo inválido", estado: "ERRO" });
+      itens.push({ chave, tipo: "DEC", dec, rec, cpf: null, linha: null, erro: e instanceof Error ? e.message : "Arquivo inválido", estado: "ERRO" });
     }
   }
-  return itens.sort((a, b) =>
-    (a.resumo?.nome ?? "~").localeCompare(b.resumo?.nome ?? "~") || (a.resumo?.exercicio ?? 0) - (b.resumo?.exercicio ?? 0),
+
+  // PDFs — agrupados por nome; lidos no servidor ao importar.
+  const grupos = new Map<string, File[]>();
+  const vistosPdf = new Set<string>();
+  for (const f of files.filter((x) => pdfDoIrpf(x.name))) {
+    const id = `${f.name}|${f.size}`;
+    if (vistosPdf.has(id)) continue;
+    vistosPdf.add(id);
+    const k = basePdf(f.name);
+    grupos.set(k, [...(grupos.get(k) ?? []), f].slice(0, 2));
+  }
+  for (const [k, pdfs] of grupos) {
+    itens.push({ chave: `PDF|${k}`, tipo: "PDF", pdfs, cpf: null, linha: null, erro: null, estado: "PRONTO" });
+  }
+
+  return itens.sort(
+    (a, b) =>
+      (a.linha?.nome ?? a.pdfs?.[0]?.name ?? "~").localeCompare(b.linha?.nome ?? b.pdfs?.[0]?.name ?? "~") ||
+      (a.linha?.exercicio ?? 0) - (b.linha?.exercicio ?? 0),
   );
 }
 
-async function enviarArquivo(file: File, ext: "DEC" | "REC") {
+async function enviarArquivo(file: File, ext: "DEC" | "REC" | "pdf") {
   // Pathname sem CPF nem nome: só um id aleatório.
   const blob = await upload(`irpf/importacao/${crypto.randomUUID()}.${ext}`, file, {
     access: "private",
     handleUploadUrl: "/api/irpf/upload",
-    contentType: "text/plain",
+    contentType: ext === "pdf" ? "application/pdf" : "text/plain",
   });
   return blob.pathname;
 }
@@ -86,8 +154,19 @@ export function ImportarDeclaracoes() {
     setItens((prev) => prev.map((i) => (i.chave === chave ? { ...i, ...patch } : i)));
   }
 
+  async function importarItem(item: Item): Promise<ResultadoImportacao> {
+    if (item.tipo === "DEC") {
+      const decPathname = await enviarArquivo(item.dec!, "DEC");
+      const recPathname = item.rec ? await enviarArquivo(item.rec, "REC") : null;
+      return importarDeclaracaoAction({ decPathname, decNome: item.dec!.name, recPathname, recNome: item.rec?.name ?? null });
+    }
+    const arquivos = [];
+    for (const f of item.pdfs!) arquivos.push({ pathname: await enviarArquivo(f, "pdf"), nome: f.name });
+    return importarPdfAction({ arquivos });
+  }
+
   async function importar() {
-    const fila = itens.filter((i) => i.resumo && i.estado === "PRONTO");
+    const fila = itens.filter((i) => !i.erro && i.estado === "PRONTO");
     if (!fila.length) return;
     setEnviando(true);
     let n = 0;
@@ -97,16 +176,16 @@ export function ImportarDeclaracoes() {
         if (!item) return;
         atualizar(item.chave, { estado: "ENVIANDO" });
         try {
-          const decPathname = await enviarArquivo(item.dec, "DEC");
-          const recPathname = item.rec ? await enviarArquivo(item.rec, "REC") : null;
-          const r = await importarDeclaracaoAction({
-            decPathname,
-            decNome: item.dec.name,
-            recPathname,
-            recNome: item.rec?.name ?? null,
-          });
+          const r = await importarItem(item);
           if ("error" in r) atualizar(item.chave, { estado: "ERRO", mensagem: r.error });
-          else atualizar(item.chave, { estado: r.acao, mensagem: r.contribuinteNovo ? "novo contribuinte" : undefined });
+          else
+            atualizar(item.chave, {
+              estado: r.acao,
+              linha: item.linha ?? r.resumo,
+              mensagem: [r.contribuinteNovo ? "novo contribuinte" : null, r.resumo.parcial ? "só o recibo (sem detalhes)" : null]
+                .filter(Boolean)
+                .join(" · ") || undefined,
+            });
         } catch (e) {
           atualizar(item.chave, { estado: "ERRO", mensagem: e instanceof Error ? e.message : "Falha no envio" });
         }
@@ -119,35 +198,41 @@ export function ImportarDeclaracoes() {
   }
 
   const resumo = useMemo(() => {
-    const validos = itens.filter((i) => i.resumo);
+    const validos = itens.filter((i) => !i.erro);
     const porEx = new Map<number, number>();
-    for (const i of validos) porEx.set(i.resumo!.exercicio, (porEx.get(i.resumo!.exercicio) ?? 0) + 1);
+    for (const i of validos) if (i.linha) porEx.set(i.linha.exercicio, (porEx.get(i.linha.exercicio) ?? 0) + 1);
     const cont = (e: Item["estado"]) => itens.filter((i) => i.estado === e).length;
     return {
-      validos: validos.length,
-      invalidos: itens.filter((i) => !i.resumo).length,
-      pessoas: new Set(validos.map((i) => i.resumo!.cpf)).size,
+      dec: validos.filter((i) => i.tipo === "DEC").length,
+      pdf: validos.filter((i) => i.tipo === "PDF").length,
+      invalidos: itens.filter((i) => i.erro).length,
+      pessoas: new Set(validos.filter((i) => i.cpf).map((i) => i.cpf)).size,
       porEx: [...porEx.entries()].sort((a, b) => a[0] - b[0]),
-      prontos: cont("PRONTO"),
+      prontos: itens.filter((i) => !i.erro && i.estado === "PRONTO").length,
       criadas: cont("CRIADA"),
       atualizadas: cont("ATUALIZADA"),
       mantidas: cont("MANTIDA"),
       repetidas: cont("REPETIDA"),
-      erros: itens.filter((i) => i.estado === "ERRO" && i.resumo).length,
-      novos: itens.filter((i) => i.mensagem === "novo contribuinte").length,
+      erros: itens.filter((i) => i.estado === "ERRO" && !i.erro).length,
+      novos: itens.filter((i) => i.mensagem?.includes("novo contribuinte")).length,
     };
   }, [itens]);
 
-  const total = itens.filter((i) => i.resumo).length;
+  const total = resumo.dec + resumo.pdf;
   const acabou = !enviando && feito > 0 && resumo.prontos === 0;
 
   return (
     <div className="flex flex-col gap-4">
       <Card className="flex flex-col gap-3 p-5">
         <p className="text-sm text-foreground/70">
-          Escolha a pasta com as declarações (ex.: <code className="text-xs">C:\Arquivos de Programas RFB\IRPF2026\transmitidas</code>) ou
-          selecione os arquivos. O sistema lê cada <b>.DEC</b> (e o <b>.REC</b> com o mesmo nome, quando houver), cadastra o
-          contribuinte pelo CPF e guarda a declaração do exercício. Pode importar a mesma pasta de novo: nada se duplica.
+          Escolha a pasta com as declarações ou selecione os arquivos. Aceita o <b>.DEC</b> (com o <b>.REC</b> de mesmo nome) e
+          também os <b>PDFs</b> que o programa do IRPF gera — a declaração e o recibo de entrega (ex.: pasta{" "}
+          <code className="text-xs">Desktop\IRPF 2026\DECLARAÇOES E RECIBOS</code>). O sistema cadastra o contribuinte pelo CPF e
+          guarda a declaração do exercício. Pode importar a mesma pasta de novo: nada se duplica.
+        </p>
+        <p className="text-xs text-foreground/50">
+          Quando há .DEC e PDF da mesma entrega, vale o .DEC (é mais completo). Só o recibo em PDF traz os totais, o número e a
+          data de entrega, sem bens nem deduções.
         </p>
         <div className="flex flex-wrap gap-3">
           <label className="inline-flex h-10 cursor-pointer items-center rounded-lg bg-brand px-4 text-sm font-medium text-brand-foreground hover:bg-brand-hover">
@@ -167,7 +252,7 @@ export function ImportarDeclaracoes() {
               type="file"
               className="hidden"
               multiple
-              accept=".DEC,.REC,.dec,.rec"
+              accept=".DEC,.REC,.dec,.rec,.pdf,.PDF"
               disabled={enviando}
               onChange={(e) => selecionar(e.target.files)}
             />
@@ -179,8 +264,18 @@ export function ImportarDeclaracoes() {
       {itens.length > 0 && (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div className="text-sm text-foreground/70">
-            <b>{resumo.validos}</b> declaração(ões) de <b>{resumo.pessoas}</b> pessoa(s)
-            {resumo.porEx.length > 0 && <> · {resumo.porEx.map(([ex, n]) => `${ex}: ${n}`).join(" · ")}</>}
+            {resumo.dec > 0 && (
+              <>
+                <b>{resumo.dec}</b> .DEC de <b>{resumo.pessoas}</b> pessoa(s)
+                {resumo.porEx.length > 0 && <> ({resumo.porEx.map(([ex, n]) => `${ex}: ${n}`).join(" · ")})</>}
+              </>
+            )}
+            {resumo.dec > 0 && resumo.pdf > 0 && " · "}
+            {resumo.pdf > 0 && (
+              <>
+                <b>{resumo.pdf}</b> declaração(ões) em PDF
+              </>
+            )}
             {resumo.invalidos > 0 && <span className="text-danger"> · {resumo.invalidos} arquivo(s) inválido(s)</span>}
           </div>
           {acabou ? (
@@ -220,28 +315,33 @@ export function ImportarDeclaracoes() {
                 {itens.map((i) => (
                   <tr key={i.chave}>
                     <td className="px-4 py-2">
-                      {i.resumo ? i.resumo.nome : <span className="text-foreground/50">{i.dec.name}</span>}
-                    </td>
-                    <td className="px-3 py-2">{i.resumo?.exercicio ?? "—"}</td>
-                    <td className="px-3 py-2 text-foreground/70">
-                      {i.resumo ? (
-                        <>
-                          {i.resumo.completa ? "Completa" : "Simplificada"}
-                          {i.resumo.retificadora ? " · retif." : ""}
-                          {!i.resumo.transmissao && " · não transmitida"}
-                        </>
+                      {i.linha ? (
+                        i.linha.nome
                       ) : (
-                        "—"
+                        <span className="text-foreground/50">
+                          {i.tipo === "PDF" ? i.pdfs!.map((f) => f.name).join(" + ") : i.dec?.name}
+                        </span>
                       )}
+                    </td>
+                    <td className="px-3 py-2">{i.linha?.exercicio ?? "—"}</td>
+                    <td className="px-3 py-2 text-foreground/70">
+                      <span className="mr-1 rounded bg-surface-muted px-1 text-[10px] font-semibold text-foreground/55">{i.tipo}</span>
+                      {i.linha ? (
+                        <>
+                          {i.linha.completa ? "Completa" : "Simplificada"}
+                          {i.linha.retificadora ? " · retif." : ""}
+                          {!i.linha.transmitida && " · não transmitida"}
+                        </>
+                      ) : i.tipo === "PDF" ? (
+                        <span className="text-xs text-foreground/45">lido ao importar</span>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2">
-                      {i.resumo?.resultado === "PAGAR" && (
-                        <span className="text-danger">Pagar {formatarMoeda(i.resumo.totais.impostoPagar)}</span>
+                      {i.linha?.resultado === "PAGAR" && <span className="text-danger">Pagar {formatarMoeda(i.linha.valor)}</span>}
+                      {i.linha?.resultado === "RESTITUIR" && (
+                        <span className="text-success">Restituir {formatarMoeda(i.linha.valor)}</span>
                       )}
-                      {i.resumo?.resultado === "RESTITUIR" && (
-                        <span className="text-success">Restituir {formatarMoeda(i.resumo.totais.impostoRestituir)}</span>
-                      )}
-                      {i.resumo?.resultado === "SEM_SALDO" && <span className="text-foreground/50">Sem saldo</span>}
+                      {i.linha?.resultado === "SEM_SALDO" && <span className="text-foreground/50">Sem saldo</span>}
                     </td>
                     <td className="px-3 py-2 text-xs">
                       {i.erro ? (

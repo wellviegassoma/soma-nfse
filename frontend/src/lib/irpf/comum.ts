@@ -60,6 +60,15 @@ export const HONORARIO_LABEL: Record<HonorarioStatus, string> = {
   ISENTO: "Isento / incluso",
 };
 
+export const FORMAS_PAGAMENTO = ["Pix", "Boleto", "Transferência", "Dinheiro", "Cartão"] as const;
+
+/** Valor reajustado, arredondado para cima no múltiplo pedido (0 = centavos). */
+export function valorReajustado(base: number, percentual: number, arredondar: number): number {
+  const v = base * (1 + percentual / 100);
+  if (!arredondar) return Math.round(v * 100) / 100;
+  return Math.ceil(v / arredondar - 1e-9) * arredondar;
+}
+
 export const CHECKLIST_STATUS = ["PENDENTE", "RECEBIDO", "NAO_SE_APLICA"] as const;
 export type ChecklistStatus = (typeof CHECKLIST_STATUS)[number];
 

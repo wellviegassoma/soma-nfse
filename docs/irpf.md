@@ -208,3 +208,14 @@ RLS só para equipe com permissão `irpf`. CPF nunca aparece em log nem em URL.
 - Exportar Excel: `/api/irpf/planilha/contribuintes` e `/api/irpf/planilha/declaracoes?ex=`.
   A de declarações traz o ID e a coluna "Honorário novo (preencher)" para reajuste em lote:
   o Wellington devolve a planilha e o honorário é atualizado pelo ID.
+
+## Ajustes de 24/11/2026
+
+- Importação de PDF (`lib/irpf/pdf-parser.ts` + `pdf-linhas.ts`): declaração e recibo gerados
+  pelo programa do IRPF, lidos pelas posições do texto (pdf.js do próprio pdf-parse). Conferido
+  contra o .DEC em 117 declarações de 2026 (116 iguais; 1 PDF de versão anterior) e 117 recibos.
+  Declaração em PDF que não bate com o recibo é recusada. O .DEC prevalece sobre o PDF da mesma
+  entrega; só o recibo gera resumo parcial (`parcial: true`).
+- Aba Financeiro (`/irpf/financeiro`): totais, por responsável, lista de cobrança editável
+  (valor, situação, forma, vencimento, pago em) e reajuste anual em lote (% sobre o ano anterior,
+  arredondamento, valor padrão). Migration `fase_ci_irpf_financeiro`.

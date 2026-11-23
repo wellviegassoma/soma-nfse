@@ -123,6 +123,10 @@ export type ResumoDeclaracao = {
   dividas: Divida[];
   transmissao: { data: string; hora: string } | null; // do .REC
   cadastro: CadastroDeclarante;
+  /** De onde veio o resumo (ausente = .DEC, nos gravados antes de existir o PDF). */
+  origem?: "DEC" | "DECLARACAO_PDF" | "RECIBO_PDF";
+  /** Só totais (veio do recibo): sem bens, fontes nem deduções detalhadas. */
+  parcial?: boolean;
 };
 
 export class DecInvalidoError extends Error {}
@@ -339,7 +343,7 @@ export function lerDec(textoDec: string, textoRec?: string | null): ResumoDeclar
     exercicio: int(ir, 9, 12),
     anoCalendario: int(ir, 13, 16),
     cpf: txt(ir, 22, 32),
-    nome: txt(ir, 40, 99) || txt(r16, 14, 73),
+    nome: (txt(ir, 40, 99) || txt(r16, 14, 73)).replace(/\s+/g, " "),
     uf: vazioParaNull(txt(ir, 100, 101)),
     nascimento: dataDDMMAAAA(txt(ir, 113, 120)),
     email: vazioParaNull(txt(r16, 236, 325).toLowerCase()),
@@ -359,5 +363,6 @@ export function lerDec(textoDec: string, textoRec?: string | null): ResumoDeclar
     dividas,
     transmissao,
     cadastro,
+    origem: "DEC",
   };
 }

@@ -6,12 +6,22 @@ import { createClient } from "@/lib/supabase/server";
 import { requireIrpfAccess, requireUser } from "@/lib/auth";
 import { buscarTudoPaginado } from "@/lib/supabase/paginacao";
 import { lerDec, decodificarArquivo, DecInvalidoError, type ResumoDeclaracao } from "@/lib/irpf/dec-parser";
+import { linhasDoPdf } from "@/lib/irpf/pdf-linhas";
+import {
+  PdfIrpfInvalidoError,
+  juntarDeclaracaoRecibo,
+  lerDeclaracaoPdf,
+  lerReciboPdf,
+  resumoDoRecibo,
+  type ReciboPdf,
+} from "@/lib/irpf/pdf-parser";
 import {
   CHECKLIST_STATUS,
   HONORARIO_STATUS,
   STATUS_DECLARACAO,
   camposCadastro,
   resumoParaGravar,
+  valorReajustado,
   sugerirChecklist,
   type ChecklistStatus,
   type HonorarioStatus,
@@ -47,12 +57,16 @@ function chaveTransmissao(r: Pick<ResumoGravado, "transmissao"> | null): string 
 /**
  * A versão nova substitui a gravada? Regra: transmitida ganha de não
  * transmitida; entre transmitidas, a mais recente; entre não transmitidas,
- * a que chegou por último (é o trabalho em andamento).
+ * a que chegou por último (é o trabalho em andamento). Um resumo só de
+ * recibo nunca substitui um completo, e um PDF da mesma entrega não
+ * substitui o lido do .DEC (o .DEC é mais completo).
  */
 function substitui(atual: ResumoGravado | null, nova: ResumoDeclaracao): boolean {
   if (!atual) return true;
   const a = chaveTransmissao(atual);
   const n = chaveTransmissao(nova);
+  if (nova.parcial && !atual.parcial) return false;
+  if (a && n && a === n && (atual.origem ?? "DEC") === "DEC" && nova.origem !== "DEC") return false;
   if (a && !n) return nova.retificadora; // retificadora em preparação
   if (!a && n) return true;
   if (a && n) return n >= a;
@@ -65,8 +79,26 @@ export type ResultadoImportacao =
       declaracaoId: string;
       contribuinteNovo: boolean;
       acao: "CRIADA" | "ATUALIZADA" | "MANTIDA" | "REPETIDA";
+      resumo: {
+        nome: string;
+        exercicio: number;
+        completa: boolean;
+        retificadora: boolean;
+        resultado: ResumoDeclaracao["resultado"];
+        valor: number;
+        parcial: boolean;
+        transmitida: boolean;
+      };
     }
   | Erro;
+
+type ArquivoImportado = {
+  tipo: "DEC" | "REC" | "DOCUMENTO";
+  pathname: string;
+  nome: string;
+  tamanho: number;
+  descricao?: string;
+};
 
 /**
  * Registra um .DEC (e o .REC, se veio junto) já enviado ao Blob privado:
@@ -80,26 +112,101 @@ export async function importarDeclaracaoAction(input: {
   recNome?: string | null;
 }): Promise<ResultadoImportacao> {
   await requireIrpfAccess();
-  const user = await requireUser();
   if (!pathnameValido(input.decPathname)) return { error: "Arquivo inválido." };
   if (input.recPathname && !pathnameValido(input.recPathname)) return { error: "Recibo inválido." };
 
   let resumo: ResumoDeclaracao;
-  let tamDec = 0;
-  let tamRec: number | null = null;
+  const arquivos: ArquivoImportado[] = [];
   try {
     const dec = await lerBlobTexto(input.decPathname);
-    tamDec = dec.tamanho;
+    arquivos.push({ tipo: "DEC", pathname: input.decPathname, nome: input.decNome, tamanho: dec.tamanho });
     const rec = input.recPathname ? await lerBlobTexto(input.recPathname) : null;
-    tamRec = rec?.tamanho ?? null;
+    if (rec && input.recPathname) {
+      arquivos.push({ tipo: "REC", pathname: input.recPathname, nome: input.recNome || "recibo.REC", tamanho: rec.tamanho });
+    }
     resumo = lerDec(dec.texto, rec?.texto ?? null);
   } catch (e) {
     await del([input.decPathname, ...(input.recPathname ? [input.recPathname] : [])]).catch(() => {});
     if (e instanceof DecInvalidoError) return { error: e.message };
     return { error: e instanceof Error ? e.message : "Falha ao ler o arquivo." };
   }
+  return gravarImportacao(resumo, arquivos);
+}
 
+/**
+ * Importa a declaração e/ou o recibo em PDF (os PDFs que o programa do IRPF
+ * gera). O tipo de cada PDF é reconhecido pelo conteúdo. Só o recibo dá um
+ * resumo parcial (totais, número e data de entrega).
+ */
+export async function importarPdfAction(input: {
+  arquivos: { pathname: string; nome: string }[];
+}): Promise<ResultadoImportacao> {
+  await requireIrpfAccess();
+  const lista = input.arquivos.slice(0, 2);
+  if (!lista.length || lista.some((a) => !pathnameValido(a.pathname))) return { error: "Arquivo inválido." };
+  const apagar = () => del(lista.map((a) => a.pathname)).catch(() => {});
+
+  let declaracao: ResumoDeclaracao | null = null;
+  let recibo: ReciboPdf | null = null;
+  const arquivos: ArquivoImportado[] = [];
+  try {
+    for (const a of lista) {
+      const blob = await get(a.pathname, { access: "private" });
+      if (!blob || blob.statusCode !== 200) throw new Error("Arquivo não encontrado no Blob.");
+      const bytes = new Uint8Array(await new Response(blob.stream).arrayBuffer());
+      const linhas = await linhasDoPdf(bytes);
+      const ehRecibo = linhas.some((l) => /RECIBO DE ENTREGA DA DECLARA/i.test(l.texto));
+      if (ehRecibo) recibo = lerReciboPdf(linhas);
+      else declaracao = lerDeclaracaoPdf(linhas);
+      arquivos.push({
+        tipo: "DOCUMENTO",
+        pathname: a.pathname,
+        nome: a.nome,
+        tamanho: bytes.byteLength,
+        descricao: ehRecibo ? "Recibo de entrega (PDF)" : "Declaração (PDF)",
+      });
+    }
+  } catch (e) {
+    await apagar();
+    if (e instanceof PdfIrpfInvalidoError) return { error: e.message };
+    console.error("[irpf] falha ao ler PDF:", e instanceof Error ? e.message : e);
+    return { error: "Não consegui ler o PDF (arquivo vazio, protegido ou corrompido)." };
+  }
+
+  let resumo: ResumoDeclaracao;
+  try {
+    if (declaracao && recibo) resumo = juntarDeclaracaoRecibo(declaracao, recibo);
+    else if (declaracao) resumo = declaracao;
+    else resumo = resumoDoRecibo(recibo!);
+  } catch (e) {
+    await apagar();
+    return { error: e instanceof Error ? e.message : "PDFs incompatíveis." };
+  }
+  return gravarImportacao(resumo, arquivos);
+}
+
+async function gravarImportacao(resumo: ResumoDeclaracao, arquivos: ArquivoImportado[]): Promise<ResultadoImportacao> {
+  const user = await requireUser();
   const supabase = await createClient();
+  const principal = arquivos[0];
+  const transmitida = !!(resumo.numeroRecibo && resumo.transmissao);
+  const resumoCurto = {
+    nome: resumo.nome,
+    exercicio: resumo.exercicio,
+    completa: resumo.completa,
+    retificadora: resumo.retificadora,
+    resultado: resumo.resultado,
+    valor: resumo.resultado === "PAGAR" ? resumo.totais.impostoPagar : resumo.totais.impostoRestituir,
+    parcial: !!resumo.parcial,
+    transmitida,
+  };
+
+  // Cadastro vindo do PDF é parcial (sem banco, título…): só preenche o que leu.
+  const cadastro = resumo.parcial
+    ? {}
+    : resumo.origem === "DEC"
+      ? camposCadastro(resumo)
+      : Object.fromEntries(Object.entries(camposCadastro(resumo)).filter(([, v]) => v !== null && v !== false));
 
   // Contribuinte pelo CPF (cria ou completa e-mail/telefone/nascimento).
   const { data: existente, error: e1 } = await supabase
@@ -115,7 +222,7 @@ export async function importarDeclaracaoAction(input: {
     const completar: Record<string, unknown> = {};
     // Cadastro (endereço, banco, ocupação…) acompanha a declaração mais recente.
     if (!existente.cadastro_exercicio || resumo.exercicio >= existente.cadastro_exercicio) {
-      Object.assign(completar, camposCadastro(resumo));
+      Object.assign(completar, cadastro);
     }
     if (!existente.email && resumo.email) completar.email = resumo.email;
     if (!existente.telefone && resumo.telefone) completar.telefone = resumo.telefone;
@@ -124,6 +231,7 @@ export async function importarDeclaracaoAction(input: {
       await supabase.from("irpf_contribuintes").update(completar).eq("id", contribuinteId);
     }
   } else {
+    if (!resumo.nome) return { error: "O PDF não traz o nome do contribuinte." };
     const { data: novo, error } = await supabase
       .from("irpf_contribuintes")
       .insert({
@@ -132,7 +240,7 @@ export async function importarDeclaracaoAction(input: {
         nascimento: resumo.nascimento,
         email: resumo.email,
         telefone: resumo.telefone,
-        ...camposCadastro(resumo),
+        ...cadastro,
       })
       .select("id")
       .single();
@@ -152,23 +260,22 @@ export async function importarDeclaracaoAction(input: {
 
   let declaracaoId = decl?.id as string | undefined;
 
-  // Mesmo arquivo já importado? (nome + tamanho) — não duplica.
+  // Mesmo arquivo já importado? (nome + tamanho do principal) — não duplica.
   if (declaracaoId) {
     const { data: repetido } = await supabase
       .from("irpf_arquivos")
       .select("id")
       .eq("declaracao_id", declaracaoId)
-      .eq("tipo", "DEC")
-      .eq("nome_arquivo", input.decNome)
-      .eq("tamanho", tamDec)
+      .eq("tipo", principal.tipo)
+      .eq("nome_arquivo", principal.nome)
+      .eq("tamanho", principal.tamanho)
       .limit(1);
     if (repetido?.length) {
-      await del([input.decPathname, ...(input.recPathname ? [input.recPathname] : [])]).catch(() => {});
-      return { ok: true, declaracaoId, contribuinteNovo, acao: "REPETIDA" };
+      await del(arquivos.map((a) => a.pathname)).catch(() => {});
+      return { ok: true, declaracaoId, contribuinteNovo, acao: "REPETIDA", resumo: resumoCurto };
     }
   }
 
-  const transmitida = !!(resumo.numeroRecibo && resumo.transmissao);
   const camposResumo = {
     completa: resumo.completa,
     retificadora: resumo.retificadora,
@@ -221,44 +328,32 @@ export async function importarDeclaracaoAction(input: {
     acao = "MANTIDA";
   }
 
-  const arquivos = [
-    {
+  const { error: e3 } = await supabase.from("irpf_arquivos").insert(
+    arquivos.map((a) => ({
       declaracao_id: declaracaoId,
-      tipo: "DEC",
-      blob_pathname: input.decPathname,
-      nome_arquivo: input.decNome,
-      tamanho: tamDec,
+      tipo: a.tipo,
+      blob_pathname: a.pathname,
+      nome_arquivo: a.nome,
+      tamanho: a.tamanho,
       retificadora: resumo.retificadora,
+      descricao: a.descricao ?? null,
       uploaded_by: user.id,
-    },
-    ...(input.recPathname
-      ? [
-          {
-            declaracao_id: declaracaoId,
-            tipo: "REC",
-            blob_pathname: input.recPathname,
-            nome_arquivo: input.recNome || "recibo.REC",
-            tamanho: tamRec,
-            retificadora: resumo.retificadora,
-            uploaded_by: user.id,
-          },
-        ]
-      : []),
-  ];
-  const { error: e3 } = await supabase.from("irpf_arquivos").insert(arquivos);
+    })),
+  );
   if (e3) return { error: e3.message };
 
+  const fonte = resumo.origem === "DEC" ? "" : resumo.parcial ? " (recibo em PDF)" : " (PDF)";
   await supabase.from("irpf_eventos").insert({
     declaracao_id: declaracaoId,
     user_id: user.id,
     tipo: "IMPORTACAO",
-    comentario: `${resumo.retificadora ? "Retificadora" : "Original"} ${transmitida ? "transmitida" : "gravada"} — ${
+    comentario: `${resumo.retificadora ? "Retificadora" : "Original"} ${transmitida ? "transmitida" : "gravada"}${fonte} — ${
       acao === "MANTIDA" ? "arquivo guardado; o resumo continua o da versão mais recente" : "resumo atualizado"
     }`,
   });
 
   revalidar(declaracaoId);
-  return { ok: true, declaracaoId, contribuinteNovo, acao };
+  return { ok: true, declaracaoId, contribuinteNovo, acao, resumo: resumoCurto };
 }
 
 // ------------------------------------------------------------- declaração
@@ -657,4 +752,133 @@ export async function enviarDocumentoContribuinteAction(input: {
   if ("error" in r) return r;
   revalidatePath(`/irpf/contribuintes/${input.contribuinteId}`);
   return { ok: true, declaracaoId: decl.id };
+}
+
+// ------------------------------------------------------------- financeiro
+
+/** Salva o honorário de uma declaração (valor, situação, vencimento, pagamento). */
+export async function salvarHonorarioAction(input: {
+  id: string;
+  valor: number | null;
+  status: HonorarioStatus;
+  vencimento: string | null; // AAAA-MM-DD
+  pagoEm: string | null;
+  forma: string | null;
+}): Promise<{ ok: true; pagoEm: string | null } | Erro> {
+  await requireIrpfAccess();
+  const user = await requireUser();
+  if (!HONORARIO_STATUS.includes(input.status)) return { error: "Situação inválida." };
+  if (input.valor !== null && (!Number.isFinite(input.valor) || input.valor < 0)) return { error: "Valor inválido." };
+  const data = (d: string | null) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null);
+  const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const pagoEm = input.status === "PAGO" ? data(input.pagoEm) ?? hoje : null;
+
+  const supabase = await createClient();
+  const { data: antes } = await supabase
+    .from("irpf_declaracoes")
+    .select("honorario_valor, honorario_status")
+    .eq("id", input.id)
+    .maybeSingle();
+  if (!antes) return { error: "Declaração não encontrada." };
+  const { error } = await supabase
+    .from("irpf_declaracoes")
+    .update({
+      honorario_valor: input.valor,
+      honorario_status: input.status,
+      honorario_vencimento: data(input.vencimento),
+      honorario_pago_em: pagoEm,
+      honorario_forma: input.forma?.trim() || null,
+    })
+    .eq("id", input.id);
+  if (error) return { error: error.message };
+
+  const eventos = [];
+  const valorAntes = antes.honorario_valor === null ? null : Number(antes.honorario_valor);
+  if (valorAntes !== input.valor) {
+    eventos.push({ tipo: "HONORARIO", de: valorAntes === null ? null : String(valorAntes), para: input.valor === null ? null : String(input.valor) });
+  }
+  if (antes.honorario_status !== input.status) {
+    eventos.push({ tipo: "HONORARIO", de: antes.honorario_status, para: input.status });
+  }
+  if (eventos.length) {
+    await supabase.from("irpf_eventos").insert(eventos.map((e) => ({ ...e, declaracao_id: input.id, user_id: user.id })));
+  }
+  revalidar(input.id);
+  return { ok: true, pagoEm };
+}
+
+/**
+ * Reajuste anual em lote: honorário do exercício = honorário do exercício
+ * anterior + percentual (arredondado). Quem não tem histórico pode receber um
+ * valor padrão. Por padrão só preenche quem ainda está sem valor.
+ */
+export async function aplicarReajusteAction(input: {
+  exercicio: number;
+  percentual: number;
+  arredondar: number;
+  valorPadrao: number | null;
+  sobrescrever: boolean;
+}): Promise<{ ok: true; alteradas: number } | Erro> {
+  await requireIrpfAccess();
+  const user = await requireUser();
+  if (!Number.isFinite(input.percentual) || input.percentual < -50 || input.percentual > 200) return { error: "Percentual inválido." };
+  if (![0, 1, 5, 10, 50].includes(input.arredondar)) return { error: "Arredondamento inválido." };
+  if (input.valorPadrao !== null && (!Number.isFinite(input.valorPadrao) || input.valorPadrao < 0)) return { error: "Valor padrão inválido." };
+  const supabase = await createClient();
+
+  const atuais = await buscarTudoPaginado<{ id: string; contribuinte_id: string; honorario_valor: number | null; status: string }>(
+    (from, to) =>
+      supabase
+        .from("irpf_declaracoes")
+        .select("id, contribuinte_id, honorario_valor, status")
+        .eq("exercicio", input.exercicio)
+        .order("id")
+        .range(from, to),
+  );
+  const anteriores = await buscarTudoPaginado<{ contribuinte_id: string; honorario_valor: number | null }>((from, to) =>
+    supabase
+      .from("irpf_declaracoes")
+      .select("contribuinte_id, honorario_valor")
+      .eq("exercicio", input.exercicio - 1)
+      .order("id")
+      .range(from, to),
+  );
+  const base = new Map(anteriores.filter((a) => a.honorario_valor !== null).map((a) => [a.contribuinte_id, Number(a.honorario_valor)]));
+
+  const mudancas: { id: string; de: number | null; para: number }[] = [];
+  for (const d of atuais) {
+    if (d.status === "NAO_FARA") continue;
+    if (!input.sobrescrever && d.honorario_valor !== null) continue;
+    const b = base.get(d.contribuinte_id);
+    const novo = b !== undefined ? valorReajustado(b, input.percentual, input.arredondar) : input.valorPadrao;
+    if (novo === null || novo === undefined) continue;
+    const de = d.honorario_valor === null ? null : Number(d.honorario_valor);
+    if (de !== novo) mudancas.push({ id: d.id, de, para: novo });
+  }
+  // Um update por valor distinto (poucos valores na prática).
+  const porValor = new Map<number, string[]>();
+  for (const m of mudancas) porValor.set(m.para, [...(porValor.get(m.para) ?? []), m.id]);
+  for (const [valor, ids] of porValor) {
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await supabase.from("irpf_declaracoes").update({ honorario_valor: valor }).in("id", ids.slice(i, i + 200));
+      if (error) return { error: error.message };
+    }
+  }
+  if (mudancas.length) {
+    const comentario = `Reajuste em lote: ${input.percentual}% sobre ${input.exercicio - 1}`;
+    for (let i = 0; i < mudancas.length; i += 500) {
+      await supabase.from("irpf_eventos").insert(
+        mudancas.slice(i, i + 500).map((m) => ({
+          declaracao_id: m.id,
+          user_id: user.id,
+          tipo: "HONORARIO",
+          de: m.de === null ? null : String(m.de),
+          para: String(m.para),
+          comentario,
+        })),
+      );
+    }
+  }
+  revalidar();
+  return { ok: true, alteradas: mudancas.length };
 }
