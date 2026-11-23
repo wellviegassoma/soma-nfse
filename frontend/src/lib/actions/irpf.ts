@@ -574,6 +574,14 @@ export async function excluirArquivoAction(input: { declaracaoId: string; arquiv
 
 // ------------------------------------------------------------- exercício
 
+/** Honorário herdado do ano anterior: mesmo valor, a cobrar; isento continua isento. */
+function honorarioHerdado(anterior: { honorario_valor: number | null; honorario_status: string } | null | undefined) {
+  if (!anterior) return {};
+  if (anterior.honorario_status === "ISENTO") return { honorario_valor: anterior.honorario_valor, honorario_status: "ISENTO" };
+  if (anterior.honorario_valor === null) return {};
+  return { honorario_valor: Number(anterior.honorario_valor), honorario_status: "A_COBRAR" };
+}
+
 /**
  * Abre o exercício: cria a declaração (Não iniciada) de cada contribuinte
  * ativo que ainda não tem, com o responsável do ano anterior e o checklist
@@ -593,10 +601,12 @@ export async function abrirExercicioAction(exercicio: number): Promise<{ ok: tru
     exercicio: number;
     responsavel_id: string | null;
     resumo: ResumoGravado | null;
+    honorario_valor: number | null;
+    honorario_status: string;
   }>((from, to) =>
     supabase
       .from("irpf_declaracoes")
-      .select("id, contribuinte_id, exercicio, responsavel_id, resumo")
+      .select("id, contribuinte_id, exercicio, responsavel_id, resumo, honorario_valor, honorario_status")
       .lte("exercicio", exercicio)
       .order("id")
       .range(from, to),
@@ -622,6 +632,7 @@ export async function abrirExercicioAction(exercicio: number): Promise<{ ok: tru
           exercicio,
           status: "NAO_INICIADA",
           responsavel_id: c.responsavel_id ?? ultimaPorContribuinte.get(c.id)?.responsavel_id ?? null,
+          ...honorarioHerdado(ultimaPorContribuinte.get(c.id)),
         })),
       )
       .select("id, contribuinte_id");
@@ -711,6 +722,14 @@ export async function criarDeclaracaoAction(input: {
     .select("responsavel_id")
     .eq("id", input.contribuinteId)
     .maybeSingle();
+  const { data: anterior } = await supabase
+    .from("irpf_declaracoes")
+    .select("honorario_valor, honorario_status")
+    .eq("contribuinte_id", input.contribuinteId)
+    .lt("exercicio", input.exercicio)
+    .order("exercicio", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   const { data, error } = await supabase
     .from("irpf_declaracoes")
     .insert({
@@ -718,6 +737,7 @@ export async function criarDeclaracaoAction(input: {
       exercicio: input.exercicio,
       status: "NAO_INICIADA",
       responsavel_id: c?.responsavel_id ?? null,
+      ...honorarioHerdado(anterior),
     })
     .select("id")
     .single();
