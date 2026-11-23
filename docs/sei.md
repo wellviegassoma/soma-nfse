@@ -1,14 +1,16 @@
 # Módulo SEI (Legalização) — acompanhamento de processos do SEI Petrópolis
 
-Status: **Fase 1 implementada e carga inicial feita em 23/11/2026** (rodando contra o servidor
-local; ainda não publicado em produção). Resultado: 80 processos, 857 documentos (799 baixados),
-69 vinculados automaticamente (56 por CNPJ/CPF do requerimento, 7 pelo interessado, 5 pela IM,
-1 manual), 11 sem cliente. Pendências da carga:
-- 55 documentos internos da Vigilância em 14 processos seguem sem link mesmo com a página
-  renderizada — provável acesso externo só "para disponibilização de documentos" (sem acompanhamento
-  integral). Confirmar abrindo um deles no SEI (ex.: PMP.035166/2025).
-- 2 anexos acima de 100 MB (limite do token de upload) em PMP.000927/2026.
+Status: **Fase 1 em produção desde 23/11/2026** (commits fcc5086 e 4bed646; migrations fase_ck e
+fase_cl aplicadas). Situação após a carga: 80 processos, 858 documentos — 803 baixados e 55
+marcados "sem acesso no SEI" (`sem_acesso_em`), 0 pendentes; 69 vinculados automaticamente
+(56 por CNPJ/CPF do requerimento, 7 pelo interessado, 5 pela IM, 1 manual), 11 sem cliente.
+Rodada de conferência em produção terminou OK, sem erros, e já trouxe 1 andamento novo.
+Pendências:
+- Os 55 "sem acesso" estão em 14 processos onde o SEI não monta o link nem com a página
+  renderizada — provável acesso externo só "para disponibilização de documentos". Confirmar
+  abrindo um deles no SEI (ex.: PMP.035166/2025); se for isso, pedir acesso integral.
 - 9 dos 11 sem cliente têm CNPJ/CPF lido, mas a empresa não está em `companies`.
+- Anexos até 500 MB sobem num PUT só (testado com 2 PDFs de ~104 MB).
 
 Aprendizados da implementação (valem para manutenção da extensão `extensao-sei/`):
 - Acessar o SEI **de dentro da aba do SEI** (`chrome.scripting`); da página da extensão o cookie
