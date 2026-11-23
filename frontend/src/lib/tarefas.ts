@@ -66,6 +66,14 @@ export async function carregarEmpresas(db: Db): Promise<EmpresaTarefa[]> {
   );
 }
 
+// Contas com permissão global que não são pessoas da equipe (pedido de
+// 23/11/2026): a caixa compartilhada contato@ e as contas de teste do QA
+// (@example.com). Continuam funcionando; só não aparecem como responsável.
+function contaForaDaEquipe(email: string | null): boolean {
+  const e = (email ?? "").toLowerCase();
+  return e.endsWith("@example.com") || e.startsWith("contato@");
+}
+
 /** Equipe SOMA (quem tem permissão global), para escolher responsável. */
 export async function listarEquipe(): Promise<{ id: string; nome: string }[]> {
   const admin = createAdminClient();
@@ -74,7 +82,7 @@ export async function listarEquipe(): Promise<{ id: string; nome: string }[]> {
   if (!ids.length) return [];
   const { data: perfis } = await admin.from("profiles").select("id, full_name, email, ativo").in("id", ids);
   return (perfis ?? [])
-    .filter((p) => p.ativo !== false)
+    .filter((p) => p.ativo !== false && !contaForaDaEquipe(p.email as string | null))
     .map((p) => ({ id: p.id as string, nome: (p.full_name || p.email || p.id) as string }))
     .sort((a, b) => a.nome.localeCompare(b.nome));
 }
