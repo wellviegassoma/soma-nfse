@@ -17,10 +17,12 @@ import {
   marcarEntregueAction,
   previaMensagensAction,
   revisarSerenaAction,
-  salvarRevisoresAction,
+  aceitarMotivoSerenaAction,
+  conferirPrefeituraUmaAction,
   type MensagemPrevia,
 } from "@/lib/actions/serena";
 import { rotuloCompetencia, somarMeses } from "@/lib/tarefas-comum";
+import { buscarAgora } from "@/lib/actions/fechamento";
 import type { EstadoEtapa, LinhaSerena } from "@/lib/serena";
 import type { ResumoRotina } from "@/lib/serena-rotina";
 import { BuscarTodasButton } from "../fechamento/BuscarTodasButton";
@@ -45,8 +47,6 @@ type Filtro = "acao" | "serena" | "concluida" | "todas";
 export function SerenaPainel({
   competencia,
   linhas,
-  equipe,
-  revisores,
   ultimaRotina,
 }: {
   competencia: string;
@@ -64,7 +64,6 @@ export function SerenaPainel({
   const [pendente, iniciar] = useTransition();
   const [previa, setPrevia] = useState<{ tipo: "GUIA" | "COBRANCA"; mensagens: MensagemPrevia[] } | null>(null);
   const [zipBaixado, setZipBaixado] = useState<string[] | null>(null);
-  const [rev, setRev] = useState<string[]>(revisores);
   const [limiteRevisao, setLimiteRevisao] = useState("");
 
   const conta = (f: Filtro) => (f === "todas" ? linhas.length : linhas.filter((l) => l.situacao === f).length);
@@ -289,6 +288,98 @@ export function SerenaPainel({
     });
   };
 
+  // ---------------------------------------------- ações de uma empresa só
+  // (clique na etapa ou no motivo — sempre com confirmação).
+  const rodar = (fn: () => Promise<{ ok: true; mensagem?: string } | { error: string } | string | null>, ok: string) =>
+    iniciar(async () => {
+      const r = await fn();
+      if (typeof r === "string") setMsg({ erro: r });
+      else if (r && "error" in r) setMsg({ erro: r.error });
+      else setMsg({ ok: (r && "mensagem" in r && r.mensagem) || ok });
+      router.refresh();
+    });
+
+  const aceitarMotivo = (l: LinhaSerena, m: { codigo: string; texto: string; nivel: string }) => {
+    if (m.nivel === "BLOQUEADO") return setMsg({ erro: "Bloqueio de declaração não dá para pular — sem isso o PGDAS-D não pode ser montado. Resolva o cadastro." });
+    const just = window.prompt(`Aceitar e seguir — ${l.nome}\n\n${m.texto}\n\nJustificativa (fica registrada):`, m.codigo.startsWith("PREFEITURA") ? "Erro da prefeitura — fechar com base nas notas do portal." : "");
+    if (just === null) return;
+    rodar(() => aceitarMotivoSerenaAction({ companyId: l.id, competencia, codigo: m.codigo, justificativa: just.trim() || null }), "Motivo aceito.");
+  };
+
+  const acaoEtapa = (l: LinhaSerena, chave: string) => {
+    const nome = l.nome;
+    if (chave === "notas") {
+      if (!window.confirm(`Buscar agora as notas de ${nome} (${rotuloCompetencia(competencia)})?`)) return;
+      const fd = new FormData();
+      fd.set("companyId", l.id);
+      fd.set("competencia", competencia);
+      return rodar(async () => {
+        const r = await buscarAgora(undefined, fd);
+        return r?.error ?? { ok: true as const, mensagem: "Notas buscadas." };
+      }, "Notas buscadas.");
+    }
+    if (chave === "prefeitura") {
+      if (l.municipio !== "Petrópolis") return setMsg({ erro: "No Rio o Simples vem da NFS-e Nacional — clique em Notas para buscar de novo." });
+      if (!window.confirm(`Conferir agora o faturamento de ${nome} com a Prefeitura de Petrópolis? (só consulta)`)) return;
+      return rodar(() => conferirPrefeituraUmaAction({ companyId: l.id, competencia }), "Conferido.");
+    }
+    if (chave === "calculo" || chave === "conferencia") {
+      if (l.aprovada) return setMsg({ ok: `${nome}: já liberada para transmitir.` });
+      if (l.conferencia === "BLOQUEADO") return setMsg({ erro: `${nome}: bloqueada — ${l.recado}` });
+      if (l.serena?.ia_decisao === "APROVAR" && l.serena.ia_assinatura === l.assinatura) {
+        if (!window.confirm(`Aprovar ${nome}, que a Serena recomendou?`)) return;
+        return rodar(() => aprovarRecomendacoesAction({ competencia, itens: [{ companyId: l.id, assinatura: l.assinatura }] }), "Aprovada.");
+      }
+      return setMsg({ erro: `${nome}: aceite os motivos (abaixo do recado) para liberar.` });
+    }
+    if (chave === "pgdas") {
+      if (l.declarada) return setMsg({ ok: `${nome}: PGDAS-D já transmitido.` });
+      if (!l.aprovada) return setMsg({ erro: `${nome}: aprove (ou aceite os motivos) antes de transmitir.` });
+      if (!window.confirm(`Transmitir de verdade o PGDAS-D de ${nome} (${rotuloCompetencia(competencia)}) — ${brl(l.das)}? Só se corrige depois com retificadora.`)) return;
+      return rodar(async () => {
+        const r = await fetch(`/admin/empresas/${l.id}/integra-contador/simples/declarar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ competencia, indicadorTransmissao: true, retificadora: false }),
+        });
+        const corpo = await r.json().catch(() => null);
+        if (r.ok && corpo?.resultado?.idDeclaracao) return { ok: true as const, mensagem: "PGDAS-D transmitido." };
+        return corpo?.jaDeclarada ? "Já havia declaração nessa competência." : (corpo?.error ?? `HTTP ${r.status}`);
+      }, "PGDAS-D transmitido.");
+    }
+    if (chave === "das") {
+      if (l.das <= 0) return setMsg({ ok: `${nome}: sem DAS neste mês.` });
+      if (!l.declarada) return setMsg({ erro: `${nome}: transmita o PGDAS-D antes do DAS.` });
+      if (l.serena?.das_gerado_em) return setMsg({ ok: `${nome}: DAS já salvo.` });
+      if (!window.confirm(`Gerar e salvar o DAS de ${nome}? (consulta cobrada do Integra Contador, uma vez)`)) return;
+      return rodar(() => gerarDasSerenaAction({ companyId: l.id, competencia }), "DAS salvo.");
+    }
+    if (chave === "entrega") {
+      if (!l.serena?.das_gerado_em) return setMsg({ erro: `${nome}: gere o DAS antes.` });
+      return iniciar(async () => {
+        const r = await dasSalvoBase64Action({ companyId: l.id, competencia });
+        if ("error" in r) return setMsg({ erro: r.error });
+        const a = document.createElement("a");
+        a.href = `data:application/pdf;base64,${r.base64}`;
+        a.download = `${nome.replace(/[\\/:*?"<>|]/g, "")} - DAS ${competencia}.pdf`;
+        a.click();
+        if (!l.serena?.entregue_em && window.confirm(`PDF baixado. Marcar ${nome} como entregue no eContador?`)) {
+          const m = await marcarEntregueAction({ competencia, companyIds: [l.id] });
+          setMsg("error" in m ? { erro: m.error } : { ok: m.mensagem });
+          router.refresh();
+        }
+      });
+    }
+    if (chave === "pagamento") {
+      if (!l.serena?.entregue_em || l.das <= 0) return setMsg({ erro: `${nome}: nada a verificar ainda.` });
+      if (!window.confirm(`Verificar o pagamento do DAS de ${nome}? (consulta cobrada)`)) return;
+      return rodar(async () => {
+        const r = await fetch(`/admin/empresas/${l.id}/integra-contador/pagamentos?competencia=${competencia}`, { cache: "no-store" });
+        return r.ok ? { ok: true as const, mensagem: "Pagamento verificado." } : `HTTP ${r.status}`;
+      }, "Pagamento verificado.");
+    }
+  };
+
   const btn = "rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium hover:bg-surface-muted disabled:opacity-40";
   const btnP = "rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-brand-foreground disabled:opacity-40";
 
@@ -427,29 +518,6 @@ export function SerenaPainel({
         {(progresso || msg) && (
           <div className={cn("text-sm", msg?.erro ? "text-danger" : "text-foreground/70")}>{progresso ?? msg?.erro ?? msg?.ok}</div>
         )}
-        <details className="text-xs text-foreground/60">
-          <summary className="cursor-pointer">Quem recebe os casos que a Serena não aprova</summary>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {equipe.map((u) => (
-              <label key={u.id} className="flex items-center gap-1">
-                <input type="checkbox" checked={rev.includes(u.id)} onChange={(e) => setRev(e.target.checked ? [...rev, u.id] : rev.filter((x) => x !== u.id))} />
-                {u.nome}
-              </label>
-            ))}
-            <button
-              type="button"
-              className={btn}
-              disabled={pendente}
-              onClick={() => iniciar(async () => {
-                const r = await salvarRevisoresAction(rev);
-                setMsg("error" in r ? { erro: r.error } : { ok: r.mensagem });
-              })}
-            >
-              Salvar
-            </button>
-            <span>(revezam entre os marcados; vira tarefa em Tarefas)</span>
-          </div>
-        </details>
       </Card>
 
       {/* Filtros */}
@@ -496,12 +564,18 @@ export function SerenaPainel({
             <div className="flex min-w-0 flex-1 items-start overflow-x-auto">
               {l.etapas.map((e, i) => (
                 <div key={e.chave} className="flex min-w-[88px] flex-1 items-start">
-                  <div className="flex flex-1 flex-col items-center text-center">
+                  <button
+                    type="button"
+                    disabled={pendente}
+                    onClick={() => acaoEtapa(l, e.chave)}
+                    title={`Clique para executar: ${e.nome}`}
+                    className="flex flex-1 flex-col items-center rounded-lg text-center hover:bg-surface-muted disabled:opacity-60"
+                  >
                     <div className="text-[10px] text-foreground/50">{e.nome}</div>
                     <div className={cn("mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-bold", COR[e.estado])}>{ICONE[e.estado]}</div>
                     <div className="mt-0.5 text-[11px] font-medium leading-tight">{e.titulo}</div>
                     {e.detalhe && <div className="text-[10px] leading-tight text-foreground/50">{e.detalhe}</div>}
-                  </div>
+                  </button>
                   {i < l.etapas.length - 1 && <div className={cn("mt-[22px] h-0.5 w-3 shrink-0", e.estado === "ok" ? "bg-emerald-400" : "bg-border")} />}
                 </div>
               ))}
@@ -534,6 +608,26 @@ export function SerenaPainel({
                   </ul>
                 )}
               </div>
+              {l.motivos.length > 0 && !l.aprovada && (
+                <ul className="mt-1 flex flex-col gap-0.5 text-[11px]">
+                  {l.motivos.map((m) => (
+                    <li key={m.codigo} className="flex items-start gap-1">
+                      <span className={cn("shrink-0 rounded px-1", m.nivel === "BLOQUEADO" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800")}>{m.nivel === "BLOQUEADO" ? "bloqueio" : "revisar"}</span>
+                      <span className="flex-1 text-foreground/70">{m.texto}</span>
+                      {m.nivel !== "BLOQUEADO" && (
+                        <button type="button" disabled={pendente} onClick={() => aceitarMotivo(l, m)} className="shrink-0 rounded border border-border px-1 font-medium text-brand hover:bg-surface-muted">
+                          aceitar
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {l.motivosAceitos.length > 0 && (
+                <div className="mt-1 text-[10px] text-foreground/50">
+                  Aceito pela equipe: {l.motivosAceitos.map((m) => `${m.codigo}${m.justificativa ? ` (${m.justificativa})` : ""}`).join("; ")}
+                </div>
+              )}
               <div className="mt-1 flex gap-3 text-[11px]">
                 <Link href={`/admin/fechamento/simples?competencia=${competencia}`} className="text-brand underline">
                   Central do Simples

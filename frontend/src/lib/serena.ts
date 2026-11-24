@@ -42,7 +42,11 @@ export type SerenaFechamento = {
   entregue_em: string | null;
   mensagem_guia_em: string | null;
   mensagem_cobranca_em: string | null;
+  motivos_aceitos: MotivoAceito[] | null;
 };
+
+/** Motivo da conferência que a equipe aceitou ("aceitar e seguir"). */
+export type MotivoAceito = { codigo: string; justificativa: string | null; por: string | null; em: string };
 
 export type LinhaSerena = {
   id: string;
@@ -55,6 +59,7 @@ export type LinhaSerena = {
   fatorR: number | null;
   conferencia: "OK" | "REVISAR" | "BLOQUEADO";
   motivos: { nivel: string; codigo: string; texto: string }[];
+  motivosAceitos: { codigo: string; texto: string; justificativa: string | null }[];
   aprovada: boolean; // conferência aprovada (ou OK) = liberada para transmitir
   assinatura: string;
   declarada: boolean;
@@ -365,7 +370,7 @@ function montarLinha(p: {
         : iaAtual?.ia_decisao === "APROVAR"
           ? "Serena aprovou"
           : iaAtual?.ia_decisao === "ESCALAR"
-            ? "Com a equipe"
+            ? "Precisa de você"
             : "Revisar",
     detalhe: calc.conferencia.motivos.length ? `${calc.conferencia.motivos.length} motivo(s)` : undefined,
   });
@@ -403,13 +408,14 @@ function montarLinha(p: {
   // Onde parou + recado da Serena
   let situacao: LinhaSerena["situacao"] = "serena";
   let recado: string;
-  const primeiroMotivo = calc.conferencia.motivos[0]?.texto;
+  const aceitos = new Map((serena?.motivos_aceitos ?? []).map((a) => [a.codigo, a]));
+  const primeiroMotivo = calc.conferencia.motivos.find((m) => !aceitos.has(m.codigo))?.texto;
   if (conf === "BLOQUEADO") {
     situacao = "acao";
     recado = `Bloqueada: ${calc.bloqueios[0] ?? primeiroMotivo ?? "ver Central do Simples"}`;
   } else if (!p.aprovada && iaAtual?.ia_decisao === "ESCALAR") {
     situacao = "acao";
-    recado = `Precisa da equipe: ${iaAtual.ia_diagnostico ?? iaAtual.ia_pergunta ?? iaAtual.ia_justificativa ?? ""}`;
+    recado = `Precisa de você: ${iaAtual.ia_diagnostico ?? iaAtual.ia_pergunta ?? iaAtual.ia_justificativa ?? ""}`;
   } else if (!p.aprovada && iaAtual?.ia_decisao === "APROVAR") {
     situacao = "acao";
     recado = `Serena recomenda aprovar: ${iaAtual.ia_justificativa ?? ""} — falta a aprovação final.`;
@@ -443,7 +449,10 @@ function montarLinha(p: {
     anexo: calc.anexo,
     fatorR: calc.fatorR,
     conferencia: conf,
-    motivos: calc.conferencia.motivos,
+    motivos: calc.conferencia.motivos.filter((m) => !aceitos.has(m.codigo)),
+    motivosAceitos: calc.conferencia.motivos
+      .filter((m) => aceitos.has(m.codigo))
+      .map((m) => ({ codigo: m.codigo, texto: m.texto, justificativa: aceitos.get(m.codigo)?.justificativa ?? null })),
     aprovada: p.aprovada,
     assinatura: calc.assinatura,
     declarada: p.declarada,

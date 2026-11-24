@@ -16,7 +16,7 @@ import {
 } from "@/lib/faturamento";
 import { calcularLucroPresumido, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
 import { IBGE_PETROPOLIS, IBGE_RIO, somarMeses } from "@/lib/tarefas-comum";
-import { filiaisPorMatriz, ordemCnpj, raizCnpj, type EstadoEtapa, type Etapa, type FilialSimples } from "@/lib/serena";
+import { filiaisPorMatriz, ordemCnpj, raizCnpj, type EstadoEtapa, type Etapa, type FilialSimples, type MotivoAceito } from "@/lib/serena";
 import { chaveDescricao, NATUREZAS_SEM_EQUIPARACAO, regraEquiparacao, type SugestaoEquiparacao } from "@/lib/equiparacao";
 
 type Db = SupabaseClient;
@@ -60,6 +60,7 @@ export type NewtonFechamento = {
   mensagem_cobranca_em: string | null;
   pago: boolean | null;
   pagamento_verificado_em: string | null;
+  motivos_aceitos: MotivoAceito[] | null;
 };
 
 export type Motivo = { nivel: "BLOQUEADO" | "REVISAR"; codigo: string; texto: string };
@@ -111,6 +112,7 @@ export type LinhaNewton = {
   equiparacao: EquiparacaoNewton | null;
   conferencia: "OK" | "REVISAR" | "BLOQUEADO";
   motivos: Motivo[];
+  motivosAceitos: (Motivo & { justificativa: string | null })[];
   assinatura: string;
   aprovada: boolean;
   mitEncerrado: boolean;
@@ -364,10 +366,14 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
     const calc = calcularNewton(e, competencia, dados);
     const prefeitura = prefPor.get(e.id) ?? null;
     const equiparacao = equiparacaoDe(e);
-    const motivos = conferirNewton({ e, calc, competencia, prefeitura, filiais: minhas, equiparacao });
+    const newton = newtonPor.get(e.id) ?? null;
+    // "Aceitar e seguir": motivo aceito pela equipe sai da conferência.
+    const aceitos = new Map((newton?.motivos_aceitos ?? []).map((a) => [a.codigo, a]));
+    const todos = conferirNewton({ e, calc, competencia, prefeitura, filiais: minhas, equiparacao });
+    const motivos = todos.filter((m) => !aceitos.has(m.codigo));
+    const motivosAceitos = todos.filter((m) => aceitos.has(m.codigo)).map((m) => ({ ...m, justificativa: aceitos.get(m.codigo)?.justificativa ?? null }));
     const conferencia = motivos.some((m) => m.nivel === "BLOQUEADO") ? "BLOQUEADO" : motivos.length ? "REVISAR" : "OK";
     const assinatura = assinaturaNewton(calc, motivos);
-    const newton = newtonPor.get(e.id) ?? null;
     const aprovada = conferencia === "OK" || (conferencia === "REVISAR" && newton?.aprovado_assinatura === assinatura);
     return montarLinha({
       e,
@@ -377,6 +383,7 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
       prefeitura,
       conferencia,
       motivos,
+      motivosAceitos,
       assinatura,
       aprovada,
       mitEncerrado: mitPor.has(e.id),
@@ -406,6 +413,7 @@ function montarLinha(p: {
   prefeitura: { valor: number | null; erro: string | null } | null;
   conferencia: LinhaNewton["conferencia"];
   motivos: Motivo[];
+  motivosAceitos: LinhaNewton["motivosAceitos"];
   assinatura: string;
   aprovada: boolean;
   mitEncerrado: boolean;
@@ -460,7 +468,7 @@ function montarLinha(p: {
   } else if (!p.aprovada) {
     if (iaAtual && newton!.ia_decisao === "ESCALAR") {
       situacao = "acao";
-      recado = `Passei para a equipe: ${newton!.ia_pergunta ?? newton!.ia_diagnostico ?? "ver motivos"}`;
+      recado = `Precisa de você: ${newton!.ia_pergunta ?? newton!.ia_diagnostico ?? "ver motivos"}`;
     } else if (iaAtual && newton!.ia_decisao === "APROVAR") {
       situacao = "acao";
       recado = `Revisei e recomendo aprovar: ${newton!.ia_justificativa ?? ""}`;
@@ -498,6 +506,7 @@ function montarLinha(p: {
     equiparacao: p.equiparacao,
     conferencia: p.conferencia,
     motivos: p.motivos,
+    motivosAceitos: p.motivosAceitos,
     assinatura: p.assinatura,
     aprovada: p.aprovada,
     mitEncerrado: p.mitEncerrado,

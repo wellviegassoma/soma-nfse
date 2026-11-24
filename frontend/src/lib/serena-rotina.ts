@@ -149,7 +149,7 @@ export async function rodarRotinaSerena(
     resumo.faltamRevisar = candidatas.length - agora.length;
     for (let i = 0; i < agora.length; i += 4) {
       const res = await revisarComIa(db, competencia, agora.slice(i, i + 4).map((l) => l.id));
-      await escalarParaRevisores(db, competencia, res);
+      // Sem tarefa em Tarefas (pedido do Wellington, 24/11): o caso fica na tela, em "Precisa de ação".
       for (const r of res) {
         resumo.revisadas++;
         resumo.custoUsd += r.custoUsd ?? 0;

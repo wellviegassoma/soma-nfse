@@ -8,7 +8,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff, requireUser } from "@/lib/auth";
 import { revisarComIa } from "@/lib/serena-revisor";
 import { aprovarConferenciaSimplesLote } from "@/lib/actions/conferencia-simples";
-import { conferirPetropolis, escalarParaRevisores } from "@/lib/serena-rotina";
+import { conferirPetropolis } from "@/lib/serena-rotina";
+import { carregarEsteira } from "@/lib/serena";
 import { IBGE_PETROPOLIS } from "@/lib/tarefas-comum";
 import { enviarTexto, servicoDoContato } from "@/lib/digisac/client";
 import { listarEquipe } from "@/lib/tarefas";
@@ -76,7 +77,6 @@ export async function revisarSerenaAction(input: { competencia: string; companyI
       }
     }
     const res = await revisarComIa(supabase, input.competencia, ids);
-    await escalarParaRevisores(supabase, input.competencia, res);
     revalidar();
     return {
       ok: true,
@@ -374,4 +374,51 @@ export async function guiasEmitidasBase64Action(companyId: string): Promise<{ co
     out.push({ competencia: g.competencia as string, base64: Buffer.from(await new Response(blob.stream).arrayBuffer()).toString("base64") });
   }
   return out;
+}
+
+// ------------------------------------------ aceitar e seguir / por empresa
+
+/**
+ * "Aceitar e seguir": a equipe passa por cima de um motivo da conferência
+ * (ex.: erro de login na prefeitura → fechar com as notas do portal), com
+ * justificativa. Quando não sobra motivo de revisão, a empresa é aprovada
+ * (mesma aprovação da Central do Simples). Bloqueio de declaração não passa.
+ */
+export async function aceitarMotivoSerenaAction(input: { companyId: string; competencia: string; codigo: string; justificativa: string | null }): Promise<Resultado> {
+  await requireSomaStaff();
+  const user = await requireUser();
+  if (!COMPETENCIA.test(input.competencia)) return { error: "Competência inválida." };
+  const supabase = await createClient();
+  const linha = (await carregarEsteira(supabase, input.competencia)).find((l) => l.id === input.companyId);
+  if (!linha) return { error: "Empresa fora da carteira da Serena." };
+  const motivo = linha.motivos.find((m) => m.codigo === input.codigo);
+  if (!motivo) return { error: "Esse motivo já não está pendente." };
+  if (motivo.nivel === "BLOQUEADO") return { error: "Bloqueio de declaração não dá para pular — sem isso o PGDAS-D não pode ser montado. Resolva o cadastro." };
+  const { data: atual } = await supabase.from("serena_fechamentos").select("motivos_aceitos").eq("company_id", input.companyId).eq("competencia", input.competencia).maybeSingle();
+  const lista = [...(((atual?.motivos_aceitos as unknown[]) ?? []) as { codigo: string }[]).filter((a) => a.codigo !== input.codigo), { codigo: input.codigo, justificativa: input.justificativa, por: user.email ?? user.id, em: new Date().toISOString() }];
+  const { error } = await supabase
+    .from("serena_fechamentos")
+    .upsert({ company_id: input.companyId, competencia: input.competencia, motivos_aceitos: lista, atualizado_em: new Date().toISOString() }, { onConflict: "company_id,competencia" });
+  if (error) return { error: error.message };
+  const restantes = linha.motivos.filter((m) => m.codigo !== input.codigo);
+  if (!restantes.length && linha.conferencia === "REVISAR" && !linha.aprovada) {
+    const obs = `Aceito na tela da Serena por ${user.email ?? "equipe"}: ${lista.map((a) => `${a.codigo}${"justificativa" in a && a.justificativa ? ` (${a.justificativa})` : ""}`).join("; ")}`;
+    const r = await aprovarConferenciaSimplesLote(input.competencia, [{ companyId: input.companyId, assinatura: linha.assinatura }], obs.slice(0, 900));
+    if (r.erroGeral || r.recusadas.length) return { error: r.erroGeral ?? r.recusadas[0].erro };
+    revalidar();
+    return { ok: true, mensagem: "Motivo aceito — empresa liberada para transmitir." };
+  }
+  revalidar();
+  return { ok: true, mensagem: `Motivo aceito${restantes.length ? `; faltam ${restantes.length}` : ""}.` };
+}
+
+/** Confere uma empresa com a Prefeitura de Petrópolis agora (só consulta). */
+export async function conferirPrefeituraUmaAction(input: { companyId: string; competencia: string }): Promise<Resultado> {
+  await requireSomaStaff();
+  const user = await requireUser();
+  const supabase = await createClient();
+  const ok = await conferirPetropolis(supabase, input.companyId, input.competencia, user.id).catch(() => false);
+  revalidar();
+  revalidatePath("/admin/newton");
+  return ok ? { ok: true, mensagem: "Conferido com a prefeitura." } : { error: "A prefeitura não respondeu ou recusou o acesso — veja o erro na etapa; se não tiver jeito, use 'aceitar' no motivo." };
 }

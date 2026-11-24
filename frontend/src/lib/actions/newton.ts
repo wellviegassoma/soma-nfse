@@ -13,7 +13,6 @@ import { chaveDescricao } from "@/lib/equiparacao";
 import { requireSomaStaff, requireUser } from "@/lib/auth";
 import { carregarEsteiraNewton } from "@/lib/newton";
 import { revisarComIaNewton } from "@/lib/newton-revisor";
-import { escalarNewton } from "@/lib/newton-rotina";
 import { conferirPetropolis } from "@/lib/serena-rotina";
 import { consultarPagamentosFederais } from "@/lib/pagamentos-federais";
 import { acharPdfBase64, ehDas } from "@/lib/pagamentos-federais-core";
@@ -70,7 +69,6 @@ export async function revisarNewtonAction(input: { competencia: string; companyI
       if (e.municipality_ibge_code === "3303906" && !ja.has(e.id as string)) await conferirPetropolis(supabase, e.id as string, input.competencia, user.id).catch(() => null);
     }
     const res = await revisarComIaNewton(supabase, input.competencia, ids);
-    await escalarNewton(supabase, input.competencia, res);
     revalidar();
     return {
       ok: true,
@@ -312,4 +310,27 @@ export async function aplicarEquiparacaoAction(input: {
   revalidatePath(`/admin/empresas/${input.companyId}/fechamento`);
   revalidatePath(`/admin/empresas/${input.companyId}/impostos`);
   return { ok: true, mensagem: `${ok} nota(s) atualizada(s); ${linhas.length} decisão(ões) guardada(s) para os próximos meses.` };
+}
+
+// ------------------------------------------ aceitar e seguir
+
+/**
+ * "Aceitar e seguir": a equipe passa por cima de um motivo da conferência do
+ * Newton (ex.: erro de login na prefeitura → fechar com as notas do portal),
+ * com justificativa. Motivo aceito sai da conferência daquela competência.
+ */
+export async function aceitarMotivoNewtonAction(input: { companyId: string; competencia: string; codigo: string; justificativa: string | null }): Promise<Resultado> {
+  await requireSomaStaff();
+  const user = await requireUser();
+  if (!COMPETENCIA.test(input.competencia)) return { error: "Competência inválida." };
+  const supabase = await createClient();
+  const { data: atual } = await supabase.from("newton_fechamentos").select("motivos_aceitos").eq("company_id", input.companyId).eq("competencia", input.competencia).maybeSingle();
+  const lista = [
+    ...(((atual?.motivos_aceitos as unknown[]) ?? []) as { codigo: string }[]).filter((a) => a.codigo !== input.codigo),
+    { codigo: input.codigo, justificativa: input.justificativa, por: user.email ?? user.id, em: new Date().toISOString() },
+  ];
+  const { error } = await upsertFechamento(supabase, input.companyId, input.competencia, { motivos_aceitos: lista });
+  if (error) return { error: error.message };
+  revalidar();
+  return { ok: true, mensagem: "Motivo aceito." };
 }

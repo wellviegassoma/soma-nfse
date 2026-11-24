@@ -16,11 +16,13 @@ import {
   marcarEntregueNewtonAction,
   previaMensagensNewtonAction,
   revisarNewtonAction,
-  salvarRevisoresNewtonAction,
+  aceitarMotivoNewtonAction,
   verificarPagamentoNewtonAction,
   type MensagemPreviaNewton,
 } from "@/lib/actions/newton";
 import { rotuloCompetencia, somarMeses } from "@/lib/tarefas-comum";
+import { conferirPrefeituraUmaAction } from "@/lib/actions/serena";
+import { buscarAgora } from "@/lib/actions/fechamento";
 import type { EstadoEtapa } from "@/lib/serena";
 import type { LinhaNewton } from "@/lib/newton";
 import type { ResumoRotinaNewton } from "@/lib/newton-rotina";
@@ -45,8 +47,6 @@ type Filtro = "acao" | "newton" | "concluida" | "todas";
 export function NewtonPainel({
   competencia,
   linhas,
-  equipe,
-  revisores,
   ultimaRotina,
   somenteLeitura = false,
 }: {
@@ -68,7 +68,6 @@ export function NewtonPainel({
   const pendente = emAndamento || somenteLeitura;
   const [previa, setPrevia] = useState<{ tipo: "GUIA" | "COBRANCA"; mensagens: MensagemPreviaNewton[] } | null>(null);
   const [zipBaixado, setZipBaixado] = useState<string[] | null>(null);
-  const [rev, setRev] = useState<string[]>(revisores);
   const [limiteRevisao, setLimiteRevisao] = useState("");
   const [equip, setEquip] = useState<{ l: LinhaNewton; escolha: Record<string, boolean>; duvida: "" | "SIM" | "NAO" } | null>(null);
   const abrirEquiparacao = (l: LinhaNewton) => {
@@ -294,6 +293,102 @@ export function NewtonPainel({
     });
   };
 
+  // ---------------------------------------------- ações de uma empresa só
+  // (clique na etapa ou no motivo — sempre com confirmação).
+  const rodar = (fn: () => Promise<{ ok: true; mensagem?: string } | { error: string } | string | null>, ok: string) =>
+    iniciar(async () => {
+      const r = await fn();
+      if (typeof r === "string") setMsg({ erro: r });
+      else if (r && "error" in r) setMsg({ erro: r.error });
+      else setMsg({ ok: (r && "mensagem" in r && r.mensagem) || ok });
+      router.refresh();
+    });
+
+  const aceitarMotivo = (l: LinhaNewton, m: { codigo: string; texto: string }) => {
+    const just = window.prompt(`Aceitar e seguir — ${l.nome}\n\n${m.texto}\n\nJustificativa (fica registrada):`, m.codigo.startsWith("PREFEITURA") ? "Erro da prefeitura — fechar com base nas notas do portal." : "");
+    if (just === null) return;
+    rodar(() => aceitarMotivoNewtonAction({ companyId: l.id, competencia, codigo: m.codigo, justificativa: just.trim() || null }), "Motivo aceito.");
+  };
+
+  const acaoEtapa = (l: LinhaNewton, chave: string) => {
+    const nome = l.nome;
+    const travado = somenteLeitura && ["mit", "dctfweb", "darf", "entrega", "pagamento"].includes(chave);
+    if (travado) return setMsg({ erro: "Competência anterior ao Newton: só consulta." });
+    if (chave === "notas") {
+      if (!window.confirm(`Buscar agora as notas de ${nome} (${rotuloCompetencia(competencia)})?`)) return;
+      const fd = new FormData();
+      fd.set("companyId", l.id);
+      fd.set("competencia", competencia);
+      return rodar(async () => {
+        const r = await buscarAgora(undefined, fd);
+        return r?.error ?? { ok: true as const, mensagem: "Notas buscadas." };
+      }, "Notas buscadas.");
+    }
+    if (chave === "prefeitura") {
+      if (l.municipio !== "Petrópolis") return setMsg({ erro: "No Rio a conferência do ISS é na Central ISS Rio." });
+      if (!window.confirm(`Conferir agora o faturamento de ${nome} com a Prefeitura de Petrópolis? (só consulta)`)) return;
+      return rodar(() => conferirPrefeituraUmaAction({ companyId: l.id, competencia }), "Conferido.");
+    }
+    if (chave === "conferencia" || chave === "calculo") {
+      if (l.aprovada) return setMsg({ ok: `${nome}: cálculo já liberado.` });
+      if (l.conferencia === "BLOQUEADO") return setMsg({ erro: `${nome}: tem bloqueio — use "aceitar" no motivo, abaixo do recado.` });
+      return aprovar([l], nome);
+    }
+    if (chave === "mit") {
+      if (l.mitEncerrado) return setMsg({ ok: `${nome}: MIT já encerrado.` });
+      if (!l.aprovada) return setMsg({ erro: `${nome}: aprove o cálculo (ou aceite os motivos) antes do MIT.` });
+      if (!window.confirm(`Encerrar oficialmente o MIT de ${nome} (${rotuloCompetencia(competencia)}) — ${brl(l.calc.total)}? É transmissão de verdade.`)) return;
+      return rodar(async () => {
+        const r = await fetch(`/admin/empresas/${l.id}/integra-contador/mit/declarar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ competencia, transmissaoImediata: false }),
+        });
+        const corpo = await r.json().catch(() => null);
+        return r.ok && corpo?.protocoloEncerramento ? { ok: true as const, mensagem: "MIT encerrado." } : (corpo?.error ?? `HTTP ${r.status}`);
+      }, "MIT encerrado.");
+    }
+    if (chave === "dctfweb") {
+      if (l.newton?.dctfweb_transmitida_em) return setMsg({ ok: `${nome}: DCTFWeb já transmitida.` });
+      if (!l.mitEncerrado) return setMsg({ erro: `${nome}: encerre o MIT antes da DCTFWeb.` });
+      if (!window.confirm(`Transmitir a DCTFWeb de ${nome} (${rotuloCompetencia(competencia)})? Junta o MIT e a folha do eSocial — confirme que o DP já fechou a folha.`)) return;
+      return rodar(async () => {
+        const r = await fetch(`/admin/empresas/${l.id}/integra-contador/dctfweb/transmitir/${ano}/${mes}`, { method: "POST" });
+        const corpo = await r.json().catch(() => null);
+        if (!r.ok) return corpo?.error ?? `HTTP ${r.status}`;
+        return marcarDctfwebNewtonAction({ companyId: l.id, competencia });
+      }, "DCTFWeb transmitida.");
+    }
+    if (chave === "darf") {
+      if (l.calc.total <= 0.009) return setMsg({ ok: `${nome}: sem DARF neste mês.` });
+      if (!l.newton?.dctfweb_transmitida_em) return setMsg({ erro: `${nome}: transmita a DCTFWeb antes do DARF.` });
+      if (l.newton.darf_gerado_em) return setMsg({ ok: `${nome}: DARF já salvo.` });
+      if (!window.confirm(`Gerar e salvar o DARF de ${nome}? (consulta cobrada do Integra Contador, uma vez)`)) return;
+      return rodar(() => gerarDarfNewtonAction({ companyId: l.id, competencia }), "DARF salvo.");
+    }
+    if (chave === "entrega") {
+      if (!l.newton?.darf_gerado_em) return setMsg({ erro: `${nome}: gere o DARF antes.` });
+      return iniciar(async () => {
+        const r = await darfSalvoBase64Action({ companyId: l.id, competencia });
+        if ("error" in r) return setMsg({ erro: r.error });
+        const a = document.createElement("a");
+        a.href = `data:application/pdf;base64,${r.base64}`;
+        a.download = `${nome.replace(/[\\/:*?"<>|]/g, "")} - DARF ${competencia}.pdf`;
+        a.click();
+        if (!l.newton?.entregue_em && window.confirm(`PDF baixado. Marcar ${nome} como entregue no eContador?`)) {
+          const m = await marcarEntregueNewtonAction({ competencia, companyIds: [l.id] });
+          setMsg("error" in m ? { erro: m.error } : { ok: m.mensagem });
+          router.refresh();
+        }
+      });
+    }
+    if (chave === "pagamento") {
+      if (!l.newton?.entregue_em || l.calc.total <= 0.009) return setMsg({ erro: `${nome}: nada a verificar ainda.` });
+      if (!window.confirm(`Verificar o pagamento do DARF de ${nome}? (consulta cobrada)`)) return;
+      return rodar(() => verificarPagamentoNewtonAction({ companyId: l.id, competencia }), "Pagamento verificado.");
+    }
+  };
+
   const btn = "rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium hover:bg-surface-muted disabled:opacity-40";
   const btnP = "rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-brand-foreground disabled:opacity-40";
   const passo = (n: number) => <span className="text-xs text-foreground/50">{n}.</span>;
@@ -442,31 +537,6 @@ export function NewtonPainel({
           .
         </div>
         {(progresso || msg) && <div className={cn("text-sm", msg?.erro ? "text-danger" : "text-foreground/70")}>{progresso ?? msg?.erro ?? msg?.ok}</div>}
-        <details className="text-xs text-foreground/60">
-          <summary className="cursor-pointer">Quem recebe os casos que o Newton não aprova</summary>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {equipe.map((u) => (
-              <label key={u.id} className="flex items-center gap-1">
-                <input type="checkbox" checked={rev.includes(u.id)} onChange={(e) => setRev(e.target.checked ? [...rev, u.id] : rev.filter((x) => x !== u.id))} />
-                {u.nome}
-              </label>
-            ))}
-            <button
-              type="button"
-              className={btn}
-              disabled={pendente}
-              onClick={() =>
-                iniciar(async () => {
-                  const r = await salvarRevisoresNewtonAction(rev);
-                  setMsg("error" in r ? { erro: r.error } : { ok: r.mensagem });
-                })
-              }
-            >
-              Salvar
-            </button>
-            <span>(revezam entre os marcados; vira tarefa em Tarefas)</span>
-          </div>
-        </details>
       </Card>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -520,12 +590,18 @@ export function NewtonPainel({
               <div className="flex min-w-0 flex-1 items-start overflow-x-auto">
                 {l.etapas.map((e, i) => (
                   <div key={e.chave} className="flex min-w-[84px] flex-1 items-start">
-                    <div className="flex flex-1 flex-col items-center text-center">
+                    <button
+                      type="button"
+                      disabled={emAndamento}
+                      onClick={() => acaoEtapa(l, e.chave)}
+                      title={`Clique para executar: ${e.nome}`}
+                      className="flex flex-1 flex-col items-center rounded-lg text-center hover:bg-surface-muted disabled:opacity-60"
+                    >
                       <div className="text-[10px] text-foreground/50">{e.nome}</div>
                       <div className={cn("mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-bold", COR[e.estado])}>{ICONE[e.estado]}</div>
                       <div className="mt-0.5 text-[11px] font-medium leading-tight">{e.titulo}</div>
                       {e.detalhe && <div className="text-[10px] leading-tight text-foreground/50">{e.detalhe}</div>}
-                    </div>
+                    </button>
                     {i < l.etapas.length - 1 && <div className={cn("mt-[22px] h-0.5 w-3 shrink-0", e.estado === "ok" ? "bg-emerald-400" : "bg-border")} />}
                   </div>
                 ))}
@@ -558,6 +634,24 @@ export function NewtonPainel({
                     </ul>
                   )}
                 </div>
+                {l.motivos.length > 0 && !l.aprovada && (
+                  <ul className="mt-1 flex flex-col gap-0.5 text-[11px]">
+                    {l.motivos.map((m) => (
+                      <li key={m.codigo} className="flex items-start gap-1">
+                        <span className={cn("shrink-0 rounded px-1", m.nivel === "BLOQUEADO" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800")}>{m.nivel === "BLOQUEADO" ? "bloqueio" : "revisar"}</span>
+                        <span className="flex-1 text-foreground/70">{m.texto}</span>
+                        <button type="button" disabled={emAndamento} onClick={() => aceitarMotivo(l, m)} className="shrink-0 rounded border border-border px-1 font-medium text-brand hover:bg-surface-muted">
+                          aceitar
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {l.motivosAceitos.length > 0 && (
+                  <div className="mt-1 text-[10px] text-foreground/50">
+                    Aceito pela equipe: {l.motivosAceitos.map((m) => `${m.codigo}${m.justificativa ? ` (${m.justificativa})` : ""}`).join("; ")}
+                  </div>
+                )}
                 {l.equiparacao && (
                   <div className={cn("mt-1 rounded-lg px-2.5 py-1 text-[11px]", l.equiparacao.naturezaImpede ? "bg-rose-50 text-rose-900" : l.equiparacao.pendentes ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-900")}>
                     Equiparação no trimestre:{" "}
