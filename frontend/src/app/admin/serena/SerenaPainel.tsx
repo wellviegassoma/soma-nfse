@@ -24,6 +24,7 @@ import { rotuloCompetencia, somarMeses } from "@/lib/tarefas-comum";
 import type { EstadoEtapa, LinhaSerena } from "@/lib/serena";
 import type { ResumoRotina } from "@/lib/serena-rotina";
 import { BuscarTodasButton } from "../fechamento/BuscarTodasButton";
+import { SerenaAvatar } from "./SerenaAvatar";
 import { ConferirPrefeituraLoteButton } from "../fechamento/simples/ConferirPrefeituraLoteButton";
 import { EnviarSimplesLoteButton } from "../fechamento/simples/EnviarSimplesLoteButton";
 
@@ -291,7 +292,13 @@ export function SerenaPainel({
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Serena · Simples Nacional</h1>
+          <div className="flex items-center gap-3">
+            <SerenaAvatar tamanho={52} />
+            <div>
+              <h1 className="text-xl font-semibold text-foreground">Serena · Simples Nacional</h1>
+              <div className="text-xs text-foreground/50">Analista fiscal (IA) da SOMA</div>
+            </div>
+          </div>
           <p className="text-sm text-foreground/60">
             Carteira de IA: todas as empresas do Simples de Petrópolis e do Rio ({linhas.length}). Casos que a Serena não resolve vão para a equipe do Fiscal.
           </p>
@@ -502,7 +509,10 @@ export function SerenaPainel({
                   l.situacao === "acao" ? "bg-amber-50 text-amber-900" : l.situacao === "concluida" ? "bg-emerald-50 text-emerald-900" : "bg-violet-50 text-violet-900",
                 )}
               >
-                <span className="font-semibold">Serena:</span> {l.recado}
+                <span className="inline-flex items-center gap-1 align-middle font-semibold">
+                  <SerenaAvatar tamanho={16} selo={false} /> Serena:
+                </span>{" "}
+                {l.recado}
                 {l.serena?.ia_acoes && l.serena.ia_acoes.length > 0 && l.serena.ia_assinatura === l.assinatura && !l.aprovada && (
                   <ul className="mt-1 flex flex-col gap-0.5">
                     {l.serena.ia_acoes.map((a, i) => (

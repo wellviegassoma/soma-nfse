@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { cn } from "@/lib/cn";
+import { SerenaAvatar } from "./SerenaAvatar";
 import {
   aplicarPropostaAction,
   descartarPropostaAction,
@@ -50,32 +51,31 @@ export function SerenaChat() {
 
   return (
     <>
+      {!aberto && (
       <button
         type="button"
-        onClick={() => setAberto(!aberto)}
+        onClick={() => setAberto(true)}
         title="Falar com a Serena"
         aria-label="Falar com a Serena"
         className={cn(
-          "fixed right-5 bottom-5 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition hover:scale-105",
-          aberto ? "bg-foreground text-background" : "bg-gradient-to-br from-violet-600 to-fuchsia-500 text-white",
+          "fixed right-5 bottom-5 z-40 flex h-16 w-16 items-center justify-center rounded-full shadow-xl ring-4 ring-white transition hover:scale-105",
+          aberto ? "bg-foreground text-background" : "bg-transparent",
         )}
       >
         {aberto ? (
           <span className="text-2xl leading-none">×</span>
         ) : (
-          <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-            <path d="M12 3l1.6 3.9L17.5 8.5l-3.9 1.6L12 14l-1.6-3.9L6.5 8.5l3.9-1.6L12 3z" fill="currentColor" stroke="none" />
-            <path d="M5 15.5l.8 1.9 1.9.8-1.9.8L5 21l-.8-1.9-1.9-.8 1.9-.8.8-1.9zM18.5 14l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6.6-1.4z" fill="currentColor" stroke="none" />
-          </svg>
+          <SerenaAvatar tamanho={64} />
         )}
       </button>
+      )}
       {aberto && (
         <aside className="fixed top-0 right-0 bottom-0 z-30 flex w-full flex-col border-l border-border bg-background shadow-2xl sm:w-[460px]">
           <div className="flex items-center gap-3 border-b border-border bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-3 text-white">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-sm font-bold">S</div>
+            <SerenaAvatar tamanho={44} selo={false} className="rounded-full ring-2 ring-white/70" />
             <div className="flex-1">
               <div className="text-sm font-semibold">Serena</div>
-              <div className="text-[11px] text-white/80">Analista de IA do Simples · Petrópolis e Rio</div>
+              <div className="text-[11px] text-white/80">Analista fiscal (IA) · Simples Nacional · Petrópolis e Rio</div>
             </div>
             <button type="button" onClick={() => setAberto(false)} className="rounded px-2 text-xl leading-none" aria-label="Fechar">
               ×
@@ -115,8 +115,12 @@ function Conversa({ historico }: { historico: MensagemSerena[] }) {
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (
           <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <SerenaAvatar tamanho={56} />
+              <div className="text-sm font-semibold">Serena</div>
+            </div>
             <p className="text-sm text-foreground/70">
-              Oi! Sou a Serena. Posso explicar onde cada empresa parou, rodar a conferência com a prefeitura, auditar a apuração e preparar
+              Oi! Sou a Serena, a analista fiscal de IA da SOMA. Posso explicar onde cada empresa parou, rodar a conferência com a prefeitura, auditar a apuração e preparar
               correções para você confirmar. Transmitir PGDAS e mandar mensagem a cliente continuam nos botões da tela.
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -144,6 +148,8 @@ function Conversa({ historico }: { historico: MensagemSerena[] }) {
                     </span>
                   ))}
               {texto && (
+                <div className={cn("flex max-w-full items-end gap-2", m.role === "user" ? "flex-row-reverse" : "")}>
+                {m.role === "assistant" && <SerenaAvatar tamanho={28} selo={false} />}
                 <div
                   className={cn(
                     "max-w-[92%] rounded-2xl px-3.5 py-2 text-sm",
@@ -151,6 +157,7 @@ function Conversa({ historico }: { historico: MensagemSerena[] }) {
                   )}
                 >
                   {m.role === "assistant" ? <Markdown texto={texto} /> : <span className="whitespace-pre-wrap">{texto}</span>}
+                </div>
                 </div>
               )}
               {doHistorico.map((p) => (
@@ -162,7 +169,11 @@ function Conversa({ historico }: { historico: MensagemSerena[] }) {
             </div>
           );
         })}
-        {ocupada && <div className="text-xs text-foreground/50">Serena está pensando…</div>}
+        {ocupada && (
+          <div className="flex items-center gap-2 text-xs text-foreground/50">
+            <SerenaAvatar tamanho={22} selo={false} /> Serena está pensando…
+          </div>
+        )}
         {error && <div className="text-xs text-danger">Não consegui responder agora. Tente de novo.</div>}
         <div ref={fim} />
       </div>
