@@ -11,10 +11,11 @@ import {
   buscarFaturamentoMensalLote,
   competenciasTrimestre,
   somarFaturamento,
+  somarFaturamentoIssRetido,
   somarFaturamentoPorEquiparacao,
   somarRetencoes,
 } from "@/lib/faturamento";
-import { calcularLucroPresumido, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
+import { calcularLucroPresumido, resolverIssMensal, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
 import { IBGE_PETROPOLIS, IBGE_RIO, somarMeses } from "@/lib/tarefas-comum";
 import { filiaisPorMatriz, ordemCnpj, raizCnpj, type EstadoEtapa, type Etapa, type FilialSimples, type MotivoAceito } from "@/lib/serena";
 import { chaveDescricao, NATUREZAS_SEM_EQUIPARACAO, regraEquiparacao, type SugestaoEquiparacao } from "@/lib/equiparacao";
@@ -33,11 +34,14 @@ export type EmpresaNewton = {
   irpj_csll_apuracao_mensal: boolean;
   equiparacao_hospitalar: boolean;
   iss_tipo: string | null;
+  iss_aliquota_padrao: number | null;
+  iss_valor_fixo_profissional: number | null;
+  iss_quantidade_profissionais: number | null;
   ultima_sincronizacao_status: string | null;
   ultima_sincronizacao_erro: string | null;
 };
 const COLUNAS =
-  "id, legal_name, trade_name, codigo_cliente, cnpj, municipality_ibge_code, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_tipo, ultima_sincronizacao_status, ultima_sincronizacao_erro";
+  "id, legal_name, trade_name, codigo_cliente, cnpj, municipality_ibge_code, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_tipo, iss_aliquota_padrao, iss_valor_fixo_profissional, iss_quantidade_profissionais, ultima_sincronizacao_status, ultima_sincronizacao_erro";
 
 export type NewtonFechamento = {
   ia_decisao: "APROVAR" | "ESCALAR" | null;
@@ -76,8 +80,12 @@ const ROTULO_CENTRAL: Record<string, string> = {
   sem_guia: "Sem guia na prefeitura",
   cadastro: "Conferir cadastro",
   erro: "Erro",
+  paga: "Guia paga",
 };
-const CENTRAL_OK = new Set(["ok", "falta_emitir", "sem_movimento"]);
+// "paga": a guia do mês está paga na Central e o valor bate com o ISS da SOMA
+// (vale mesmo quando a consulta não acha mais a guia — já quitada, ou emitida
+// por fora do sistema).
+const CENTRAL_OK = new Set(["ok", "falta_emitir", "sem_movimento", "paga"]);
 
 /**
  * Petrópolis tem duas conferências: a de faturamento (conferencia_prefeitura)
@@ -398,11 +406,18 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
     db.from("newton_fechamentos").select("*").eq("competencia", competencia).in("company_id", ids),
     db.from("pedido_nota_vinculos").select("company_id").in("company_id", ids),
   ]);
-  const { data: centrais } = await db
-    .from("iss_conferencias")
-    .select("company_id, municipio, status, mensagem, conferido_em")
-    .eq("competencia", competencia)
-    .in("company_id", ids);
+  const [{ data: centrais }, { data: pagamentosIss }] = await Promise.all([
+    db.from("iss_conferencias").select("company_id, municipio, status, mensagem, conferido_em").eq("competencia", competencia).in("company_id", ids),
+    db.from("iss_pagamentos").select("company_id, status, dados, verificado_em").eq("competencia", competencia).in("company_id", ids),
+  ]);
+  const pagoPor = new Map(
+    (pagamentosIss ?? [])
+      .filter((p) => p.status === "paga")
+      .map((p) => {
+        const pagas = (((p.dados as { pagas?: { valor: number | null; pago_em?: string | null; quitada_em?: string | null }[] } | null)?.pagas) ?? []);
+        return [p.company_id as string, { valor: pagas.reduce((t, g) => t + Number(g.valor ?? 0), 0), em: pagas[0]?.pago_em ?? pagas[0]?.quitada_em ?? null, verificadoEm: p.verificado_em as string }];
+      }),
+  );
   const centralPor = new Map(
     (centrais ?? []).map((c) => [c.company_id as string, { status: c.status as string, mensagem: (c.mensagem as string | null) ?? null, conferidoEm: c.conferido_em as string }]),
   );
@@ -420,7 +435,29 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
     const newton = newtonPor.get(e.id) ?? null;
     // "Aceitar e seguir": motivo aceito pela equipe sai da conferência.
     const aceitos = new Map((newton?.motivos_aceitos ?? []).map((a) => [a.codigo, a]));
-    const central = centralPor.get(e.id) ?? null;
+    // Guia do ISS paga com valor que bate com o ISS da SOMA (mesma conta da
+    // Central: percentual ou fixo por profissional, menos o retido; tolera
+    // juros/multa de até 20%) = conferido, mesmo que a consulta da prefeitura
+    // não ache mais a guia (ex.: Chrisorto 10/2026, "sem guia" mas paga).
+    const issSoma = resolverIssMensal({
+      issTipo: e.iss_tipo as never,
+      aliquotaIss: e.iss_aliquota_padrao == null ? null : Number(e.iss_aliquota_padrao),
+      valorFixoProfissional: e.iss_valor_fixo_profissional == null ? null : Number(e.iss_valor_fixo_profissional),
+      quantidadeProfissionais: e.iss_quantidade_profissionais == null ? null : Number(e.iss_quantidade_profissionais),
+      receitaMes: calc.receitaMes,
+      receitaIssRetido: somarFaturamentoIssRetido(dados.notas, [competencia]),
+    });
+    const pago = pagoPor.get(e.id);
+    const pagoBate = !!pago && pago.valor > 0 && (issSoma == null || (pago.valor >= issSoma - 1 && pago.valor <= issSoma * 1.2 + 1));
+    const centralBruta = centralPor.get(e.id) ?? null;
+    const central =
+      pagoBate && (!centralBruta || !CENTRAL_OK.has(centralBruta.status))
+        ? {
+            status: "paga",
+            mensagem: `paga ${brl(pago!.valor)}${pago!.em ? ` em ${String(pago!.em).slice(0, 10).split("-").reverse().join("/")}` : ""}${issSoma != null ? ` (ISS SOMA ${brl(issSoma)})` : ""}`,
+            conferidoEm: pago!.verificadoEm,
+          }
+        : centralBruta;
     const todos = conferirNewton({ e, calc, competencia, prefeitura, filiais: minhas, equiparacao, central });
     const motivos = todos.filter((m) => !aceitos.has(m.codigo));
     const motivosAceitos = todos.filter((m) => aceitos.has(m.codigo)).map((m) => ({ ...m, justificativa: aceitos.get(m.codigo)?.justificativa ?? null }));
@@ -487,7 +524,14 @@ function montarLinha(p: {
     const c = p.central;
     const onde = municipio === "Rio de Janeiro" ? "Central ISS Rio" : "Central ISS Petrópolis";
     if (!c) add("prefeitura", "Prefeitura", "pendente", "Não conferido", onde);
-    else add("prefeitura", "Prefeitura", CENTRAL_OK.has(c.status) ? "ok" : c.status === "sem_guia" ? "pendente" : "problema", ROTULO_CENTRAL[c.status] ?? c.status, `${onde} · ${dataCentral(c.conferidoEm)}`);
+    else
+      add(
+        "prefeitura",
+        "Prefeitura",
+        CENTRAL_OK.has(c.status) ? "ok" : c.status === "sem_guia" ? "pendente" : "problema",
+        ROTULO_CENTRAL[c.status] ?? c.status,
+        c.status === "paga" ? `${onde} · ${c.mensagem ?? ""}` : `${onde} · ${dataCentral(c.conferidoEm)}`,
+      );
   } else if (municipio === "Petrópolis") {
     if (!p.prefeitura) add("prefeitura", "Prefeitura", "pendente", "Não conferido");
     else if (p.prefeitura.erro) add("prefeitura", "Prefeitura", "problema", "Erro na consulta", p.prefeitura.erro.slice(0, 60));
