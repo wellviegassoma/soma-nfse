@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { carregarEsteiraNewton, type LinhaNewton } from "@/lib/newton";
 import { rodarRotinaNewton } from "@/lib/newton-rotina";
+import { notasParaAnalise } from "@/lib/analista-notas";
 
 type Db = SupabaseClient;
 
@@ -107,6 +108,33 @@ export function ferramentasNewton(db: Db, competenciaPadrao: string) {
         const achadas = l.filter((x) => semAcento(x.nome).includes(q));
         if (!achadas.length) return { erro: "Nenhuma empresa da carteira do Newton com esse nome." };
         return { empresas: achadas.slice(0, 3).map(resumoLinha) };
+      },
+    }),
+
+    notasDaEmpresa: tool({
+      description:
+        "Notas fiscais emitidas pela empresa na competência (inclui filiais): número, data, valor, descrição, código do serviço, tomador (PJ/PF), ISS retido, IRRF e PIS/COFINS/CSLL retidos, cancelada, e — se a empresa tem equiparação hospitalar — a marcação e a sugestão do Newton por nota. Traz também o resumo por código de serviço. Use para analisar nota a nota. 'filtro' busca por número, texto da descrição ou tomador.",
+      inputSchema: z.object({ busca: z.string().min(2).describe("Nome ou código da empresa"), competencia: COMP, filtro: z.string().optional() }),
+      execute: async ({ busca, competencia, filtro }) => {
+        const comp = competencia ?? competenciaPadrao;
+        const l = await esteira(comp);
+        const q = semAcento(busca);
+        const x = l.find((y) => semAcento(y.nome).includes(q));
+        if (!x) return { erro: "Nenhuma empresa da carteira do Newton com esse nome." };
+        const r = await notasParaAnalise(db, [x.id, ...x.filiais.map((f) => f.id)], comp, filtro);
+        const sug = new Map((x.equiparacao?.notas ?? []).map((n) => [n.id, n]));
+        return {
+          empresa: x.nome,
+          id: x.id,
+          competencia: comp,
+          totalNotas: r.total,
+          mostradas: r.notas.length,
+          resumoPorCodigo: r.porCodigo,
+          notas: r.notas.map((n) => {
+            const s = sug.get(n.id);
+            return { ...n, id: undefined, sugestaoEquiparacao: s ? `${s.sugestao === "SIM" ? "entra" : s.sugestao === "NAO" ? "não entra" : "dúvida"} (${s.motivo})` : undefined };
+          }),
+        };
       },
     }),
 

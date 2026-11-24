@@ -12,6 +12,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { carregarEsteira, carteiraSerena, type LinhaSerena } from "@/lib/serena";
 import { rodarRotinaSerena } from "@/lib/serena-rotina";
+import { notasParaAnalise } from "@/lib/analista-notas";
 import { carregarDadosSimplesLote } from "@/lib/simples-linha";
 import { ATIVIDADES_SIMPLES_NACIONAL, buscarAtividade } from "@/lib/simples-nacional-atividades";
 import { sugerirAtividade } from "@/lib/lc116-sugestao-atividade";
@@ -168,6 +169,36 @@ export function ferramentasSerena(db: Db, userId: string, competenciaPadrao: str
         const achadas = l.filter((x) => semAcento(x.nome).includes(q));
         if (!achadas.length) return { erro: "Nenhuma empresa da carteira da Serena com esse nome." };
         return { empresas: achadas.slice(0, 3).map(resumoLinha) };
+      },
+    }),
+
+    notasDaEmpresa: tool({
+      description:
+        "Notas fiscais emitidas pela empresa na competência: número, data, valor, descrição, código do serviço, tomador (PJ/PF), ISS retido, IRRF e PIS/COFINS/CSLL retidos, exportação, cancelada, e a atividade do Simples cadastrada para cada código de serviço. Traz também o resumo por código. Use para analisar nota a nota. 'filtro' busca por número, texto da descrição ou tomador.",
+      inputSchema: z.object({ busca: z.string().min(2).describe("Nome ou código da empresa"), competencia: COMP, filtro: z.string().optional() }),
+      execute: async ({ busca, competencia, filtro }) => {
+        const comp = competencia ?? competenciaPadrao;
+        const l = await esteira(comp);
+        const q = semAcento(busca);
+        const x = l.find((y) => semAcento(y.nome).includes(q));
+        if (!x) return { erro: "Nenhuma empresa da carteira da Serena com esse nome." };
+        const r = await notasParaAnalise(db, [x.id], comp, filtro);
+        const { data: servicos } = await db.from("services").select("name, national_tax_code, atividade_simples_nacional").eq("company_id", x.id);
+        const atividadePor = new Map<string, string>();
+        for (const s of servicos ?? []) {
+          const a = s.atividade_simples_nacional ? buscarAtividade(s.atividade_simples_nacional as string) : null;
+          if (s.national_tax_code && !atividadePor.has(s.national_tax_code as string))
+            atividadePor.set(s.national_tax_code as string, a ? `${a.descricao.slice(0, 60)} (${a.tratamento})` : "sem atividade no cadastro do serviço");
+        }
+        return {
+          empresa: x.nome,
+          id: x.id,
+          competencia: comp,
+          totalNotas: r.total,
+          mostradas: r.notas.length,
+          resumoPorCodigo: r.porCodigo.map((g) => ({ ...g, atividadeDoSimples: g.codigo ? (atividadePor.get(g.codigo) ?? "código sem serviço cadastrado (atividade pela regra do sistema)") : "sem código" })),
+          notas: r.notas.map((n) => ({ ...n, id: undefined, equiparacaoMarcada: undefined })),
+        };
       },
     }),
 
