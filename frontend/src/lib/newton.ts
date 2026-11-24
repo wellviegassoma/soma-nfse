@@ -126,8 +126,16 @@ export async function carteiraNewton(db: Db): Promise<EmpresaNewton[]> {
     const { data: extras } = await db.from("companies").select(COLUNAS).in("id", faltam);
     lista.push(...((extras ?? []) as EmpresaNewton[]));
   }
-  // MIT e DCTFWeb são por raiz de CNPJ: filial soma na matriz.
-  const raizesComMatriz = new Set(lista.filter((e) => ordemCnpj(e) === "0001").map((e) => raizCnpj(e)));
+  // MIT e DCTFWeb são por raiz de CNPJ: filial soma na matriz. Filial cuja
+  // matriz é de outra cidade (ex.: 223 Rio, matriz 222 em São Paulo) sai da
+  // carteira — quem declara é a matriz.
+  const { data: matrizesLp } = await db
+    .from("companies")
+    .select("cnpj")
+    .eq("tax_regime", "LUCRO_PRESUMIDO")
+    .eq("ativa", true)
+    .not("cnpj", "is", null);
+  const raizesComMatriz = new Set(((matrizesLp ?? []) as { cnpj: string | null }[]).filter((e) => ordemCnpj(e) === "0001").map((e) => raizCnpj(e)));
   return lista.filter((e) => ordemCnpj(e) === "0001" || !raizesComMatriz.has(raizCnpj(e)));
 }
 
