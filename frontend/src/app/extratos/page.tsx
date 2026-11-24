@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { BuscaRapidaEmpresa } from "@/components/BuscaRapidaEmpresa";
-import { mesCorrenteBrasilia } from "@/lib/competencia";
+import { mesAnteriorBrasilia } from "@/lib/competencia";
 
 export const metadata = { title: "Extratos — Visão geral" };
 
@@ -19,7 +19,8 @@ type EmpresaComContas = {
 export default async function ExtratosPage(props: PageProps<"/extratos">) {
   const searchParams = await props.searchParams;
   const q = typeof searchParams.q === "string" ? searchParams.q.trim() : "";
-  const competenciaAtual = mesCorrenteBrasilia();
+  // O extrato cobrado é o do mês que terminou (o do mês corrente ainda não fechou).
+  const competenciaAtual = mesAnteriorBrasilia();
 
   const supabase = await createClient();
   const { data } = await supabase
@@ -65,12 +66,17 @@ export default async function ExtratosPage(props: PageProps<"/extratos">) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">Extratos</h1>
-        <p className="text-sm text-foreground/60">
-          Contas bancárias cadastradas e controle de entrega de extrato da competência atual
-          ({competenciaAtual.split("-").reverse().join("/")}).
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Extratos</h1>
+          <p className="text-sm text-foreground/60">
+            Contas bancárias cadastradas e controle de entrega de extrato da competência
+            {" "}{competenciaAtual.split("-").reverse().join("/")}.
+          </p>
+        </div>
+        <Link href="/extratos/cobranca">
+          <Button variant="primary">Cobrar extratos pelo WhatsApp</Button>
+        </Link>
       </div>
 
       <BuscaRapidaEmpresa
@@ -89,18 +95,18 @@ export default async function ExtratosPage(props: PageProps<"/extratos">) {
           <div className="mt-1 text-lg font-semibold text-foreground">{comConta.length}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-xs text-foreground/50">Com extrato pendente este mês</div>
+          <div className="text-xs text-foreground/50">Com extrato pendente</div>
           <div className="mt-1 text-lg font-semibold text-warning">{resumoPorEmpresa.length}</div>
         </Card>
       </div>
 
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
-          Extrato pendente este mês
+          Extrato pendente
         </div>
         {resumoPorEmpresa.length === 0 ? (
           <div className="p-6 text-center text-sm text-foreground/50">
-            Todas as contas já entregaram o extrato deste mês.
+            Todas as contas já entregaram o extrato do mês.
           </div>
         ) : (
           <div className="divide-y divide-border">
