@@ -15,6 +15,8 @@ type Tab = { href: string; label: string; exact?: boolean };
 const TAB_VISAO_GERAL: Tab = { href: "/admin", label: "Visão geral", exact: true };
 // Rotina do mês da equipe (docs/tarefas.md).
 const TAB_TAREFAS: Tab = { href: "/admin/tarefas", label: "Tarefas" };
+// Carteira de IA do Simples (docs/simples-operacao-automatica.md).
+const TAB_SERENA: Tab = { href: "/admin/serena", label: "Serena" };
 const TAB_EMPRESAS: Tab = { href: "/admin/empresas", label: "Empresas" };
 const TAB_FECHAMENTO: Tab = { href: "/admin/fechamento", label: "Fechamento" };
 // Caixa Postal do e-CAC de toda a carteira (docs: lib/caixa-postal-core.ts).
@@ -96,6 +98,7 @@ export function AdminNav({
   const tabs = [
     TAB_VISAO_GERAL,
     TAB_TAREFAS,
+    TAB_SERENA,
     TAB_EMPRESAS,
     ...(podeEmitirNotas ? [TAB_EMISSAO_NOTAS, TAB_PEDIDOS_NOTA] : []),
     TAB_FECHAMENTO,
