@@ -366,7 +366,7 @@ function Markdown({ texto }: { texto: string }) {
         i++;
       }
       blocos.push(
-        <table key={i} className="my-1 w-full border-collapse text-xs">
+        <table key={blocos.length} className="my-1 w-full border-collapse text-xs">
           <tbody>
             {tab.map((r, k) => (
               <tr key={k} className={k === 0 ? "font-semibold" : ""}>
@@ -386,7 +386,7 @@ function Markdown({ texto }: { texto: string }) {
       const itens: string[] = [];
       while (i < linhas.length && /^\s*[-*] /.test(linhas[i])) itens.push(linhas[i++].replace(/^\s*[-*] /, ""));
       blocos.push(
-        <ul key={i} className="my-1 list-disc space-y-0.5 pl-4">
+        <ul key={blocos.length} className="my-1 list-disc space-y-0.5 pl-4">
           {itens.map((t, k) => (
             <li key={k}>
               <Negrito t={t} />
@@ -400,7 +400,7 @@ function Markdown({ texto }: { texto: string }) {
       const itens: string[] = [];
       while (i < linhas.length && /^\s*\d+[.)] /.test(linhas[i])) itens.push(linhas[i++].replace(/^\s*\d+[.)] /, ""));
       blocos.push(
-        <ol key={i} className="my-1 list-decimal space-y-0.5 pl-4">
+        <ol key={blocos.length} className="my-1 list-decimal space-y-0.5 pl-4">
           {itens.map((t, k) => (
             <li key={k}>
               <Negrito t={t} />
@@ -412,7 +412,7 @@ function Markdown({ texto }: { texto: string }) {
     }
     if (l.trim()) {
       blocos.push(
-        <p key={i} className={cn("my-1", /^#+\s/.test(l) ? "font-semibold" : "")}>
+        <p key={blocos.length} className={cn("my-1", /^#+\s/.test(l) ? "font-semibold" : "")}>
           <Negrito t={l.replace(/^#+\s*/, "")} />
         </p>,
       );
