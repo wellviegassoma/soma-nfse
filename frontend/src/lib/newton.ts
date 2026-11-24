@@ -302,7 +302,7 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
           .eq("direcao", "saida")
           .eq("cancelada", false)
           .gte("competencia", `${mesesTri[0]}-01`)
-          .lt("competencia", `${somarMeses(mesesTri[2], 1)}-01`)
+          .lt("competencia", `${somarMeses(competencia, 1)}-01`) // até o mês que está sendo fechado (não traz mês futuro)
           .order("competencia"),
         db.from("newton_equiparacao_decisoes").select("company_id, chave, hospitalar").in("company_id", comEquiparacao.map((e) => e.id)),
         db.from("newton_equiparacao_empresa").select("company_id, duvida_padrao, natureza_juridica").in("company_id", comEquiparacao.map((e) => e.id)),

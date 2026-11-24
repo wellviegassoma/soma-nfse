@@ -600,7 +600,7 @@ export function NewtonPainel({
           <div className="mt-8 w-full max-w-4xl rounded-xl bg-background p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-1 text-base font-semibold">Equiparação hospitalar — {equip.l.nome}</h2>
             <p className="mb-2 text-xs text-foreground/60">
-              Notas do trimestre com a sugestão do Newton (regra + o que a equipe já decidiu). Marcado = 8% IRPJ / 12% CSLL. Ao salvar, cada decisão vale para as próximas notas com a mesma descrição.
+              Notas do trimestre até {rotuloCompetencia(competencia)} com a sugestão do Newton (regra + o que a equipe já decidiu). Marcado = 8% IRPJ / 12% CSLL. Ao salvar, cada decisão vale para as próximas notas com a mesma descrição.
             </p>
             {equip.l.equiparacao.naturezaImpede && (
               <div className="mb-2 rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-900">
