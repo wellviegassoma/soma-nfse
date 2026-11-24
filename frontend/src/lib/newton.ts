@@ -79,6 +79,23 @@ const ROTULO_CENTRAL: Record<string, string> = {
 };
 const CENTRAL_OK = new Set(["ok", "falta_emitir", "sem_movimento"]);
 
+/**
+ * Petrópolis tem duas conferências: a de faturamento (conferencia_prefeitura)
+ * e a da Central ISS Petrópolis (iss_conferencias). Central que bate vale
+ * sempre (ex.: login da consulta de faturamento falhou); senão vale a de
+ * faturamento quando confere; sobrando, a Central mostra o problema.
+ */
+function usarCentralPetropolis(
+  prefeitura: { valor: number | null; erro: string | null } | null,
+  central: ConferenciaCentralIss | null,
+  receitaMes: number,
+): boolean {
+  if (!central) return false;
+  if (CENTRAL_OK.has(central.status)) return true;
+  const faturamentoConfere = !!prefeitura && !prefeitura.erro && Math.abs((prefeitura.valor ?? 0) - receitaMes) <= 1;
+  return !faturamentoConfere;
+}
+
 export type CalculoNewton = {
   receitaMes: number;
   receitaTrimestre: number;
@@ -273,8 +290,9 @@ export function conferirNewton(p: {
     if (!central) revisar("PREFEITURA_NAO_CONFERIDA", "ISS do Rio ainda não conferido na Central ISS Rio (faturamento × Nota Carioca).");
     else if (!CENTRAL_OK.has(central.status))
       revisar("PREFEITURA_DIVERGE", `Central ISS Rio: ${ROTULO_CENTRAL[central.status] ?? central.status}${central.mensagem ? ` — ${central.mensagem.slice(0, 120)}` : ""}.`);
-  } else if (e.municipality_ibge_code === IBGE_PETROPOLIS && !p.prefeitura && central) {
-    // Petrópolis conferido só pela Central ISS Petrópolis (guia do ISS).
+  } else if (e.municipality_ibge_code === IBGE_PETROPOLIS && central && usarCentralPetropolis(p.prefeitura, central, calc.receitaMes)) {
+    // Petrópolis: a Central ISS Petrópolis (guia do ISS) vale quando bate, ou
+    // quando a conferência de faturamento não existe / deu erro / diverge.
     if (!CENTRAL_OK.has(central.status))
       revisar("PREFEITURA_DIVERGE", `Central ISS Petrópolis: ${ROTULO_CENTRAL[central.status] ?? central.status}${central.mensagem ? ` — ${central.mensagem.slice(0, 120)}` : ""}.`);
   } else if (e.municipality_ibge_code === IBGE_PETROPOLIS) {
@@ -465,7 +483,7 @@ function montarLinha(p: {
   add("notas", "Notas", erroBusca ? "problema" : "ok", erroBusca ? "Erro na busca" : calc.receitaMes ? "Buscadas" : "Sem notas", erroBusca ? (e.ultima_sincronizacao_erro ?? "").slice(0, 60) : brl(calc.receitaMes));
 
   const dataCentral = (iso: string) => new Date(iso).toLocaleDateString("pt-BR");
-  if (municipio === "Rio de Janeiro" || (municipio === "Petrópolis" && !p.prefeitura && p.central)) {
+  if (municipio === "Rio de Janeiro" || (municipio === "Petrópolis" && usarCentralPetropolis(p.prefeitura, p.central, calc.receitaMes))) {
     const c = p.central;
     const onde = municipio === "Rio de Janeiro" ? "Central ISS Rio" : "Central ISS Petrópolis";
     if (!c) add("prefeitura", "Prefeitura", "pendente", "Não conferido", onde);
