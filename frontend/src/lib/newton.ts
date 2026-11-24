@@ -1,0 +1,393 @@
+import "server-only";
+
+// Newton — analista fiscal de IA do Lucro Presumido (Petrópolis e Rio).
+// Mesmo desenho da Serena (lib/serena.ts): monta o retrato do mês de cada
+// empresa a partir das tabelas existentes (notas, conferência com a
+// prefeitura, cálculo do Presumido, MIT/DCTFWeb, DARF, entrega, pagamento).
+// Nada aqui transmite ou paga — só monta o retrato.
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  buscarFaturamentoMensalLote,
+  competenciasTrimestre,
+  somarFaturamento,
+  somarFaturamentoPorEquiparacao,
+  somarRetencoes,
+} from "@/lib/faturamento";
+import { calcularLucroPresumido, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
+import { IBGE_PETROPOLIS, IBGE_RIO, somarMeses } from "@/lib/tarefas-comum";
+import { filiaisPorMatriz, ordemCnpj, raizCnpj, type EstadoEtapa, type Etapa, type FilialSimples } from "@/lib/serena";
+
+type Db = SupabaseClient;
+
+export const NEWTON_MUNICIPIOS = [IBGE_PETROPOLIS, IBGE_RIO];
+
+export type EmpresaNewton = {
+  id: string;
+  legal_name: string;
+  trade_name: string | null;
+  codigo_cliente: string | null;
+  cnpj: string | null;
+  municipality_ibge_code: string | null;
+  irpj_csll_apuracao_mensal: boolean;
+  equiparacao_hospitalar: boolean;
+  ultima_sincronizacao_status: string | null;
+  ultima_sincronizacao_erro: string | null;
+};
+const COLUNAS =
+  "id, legal_name, trade_name, codigo_cliente, cnpj, municipality_ibge_code, irpj_csll_apuracao_mensal, equiparacao_hospitalar, ultima_sincronizacao_status, ultima_sincronizacao_erro";
+
+export type NewtonFechamento = {
+  ia_decisao: "APROVAR" | "ESCALAR" | null;
+  ia_justificativa: string | null;
+  ia_pergunta: string | null;
+  ia_diagnostico: string | null;
+  ia_acoes: { acao: string; onde: string }[] | null;
+  ia_assinatura: string | null;
+  ia_em: string | null;
+  escalado_para: string | null;
+  tarefa_id: string | null;
+  aprovado_assinatura: string | null;
+  aprovado_em: string | null;
+  dctfweb_transmitida_em: string | null;
+  darf_blob_pathname: string | null;
+  darf_valor: number | null;
+  darf_gerado_em: string | null;
+  entregue_em: string | null;
+  mensagem_guia_em: string | null;
+  mensagem_cobranca_em: string | null;
+  pago: boolean | null;
+  pagamento_verificado_em: string | null;
+};
+
+export type Motivo = { nivel: "BLOQUEADO" | "REVISAR"; codigo: string; texto: string };
+
+export type CalculoNewton = {
+  receitaMes: number;
+  receitaTrimestre: number;
+  receitaHospitalarTrimestre: number;
+  receitaHospitalarMes: number;
+  fechaTrimestre: boolean; // mês em que IRPJ/CSLL vencem (3º mês do trimestre ou apuração mensal)
+  retencaoMes: { irrf: number; contribuicoesSociais: number };
+  retencaoTrimestre: { irrf: number; contribuicoesSociais: number };
+  bruto: { irpj: number; irpjAdicional: number; csll: number; pis: number; cofins: number };
+  devido: { irpj: number; csll: number; pis: number; cofins: number };
+  total: number;
+  mediaReceita3m: number | null;
+};
+
+export type LinhaNewton = {
+  id: string;
+  nome: string;
+  municipio: "Petrópolis" | "Rio de Janeiro" | "Outro";
+  calc: CalculoNewton;
+  filiais: FilialSimples[];
+  conferencia: "OK" | "REVISAR" | "BLOQUEADO";
+  motivos: Motivo[];
+  assinatura: string;
+  aprovada: boolean;
+  mitEncerrado: boolean;
+  newton: NewtonFechamento | null;
+  temGrupoDigisac: boolean;
+  etapas: Etapa[];
+  situacao: "acao" | "newton" | "concluida";
+  recado: string;
+};
+
+function brl(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+export function nomeEmpresaNewton(e: { codigo_cliente: string | null; trade_name: string | null; legal_name: string }) {
+  const nome = e.trade_name || e.legal_name;
+  return e.codigo_cliente ? `${e.codigo_cliente} · ${nome}` : nome;
+}
+
+/** Carteira: Lucro Presumido ativas de Petrópolis/Rio ± exceções; filial entra na matriz. */
+export async function carteiraNewton(db: Db): Promise<EmpresaNewton[]> {
+  const [{ data: base, error }, { data: excecoes }] = await Promise.all([
+    db
+      .from("companies")
+      .select(COLUNAS)
+      .eq("tax_regime", "LUCRO_PRESUMIDO")
+      .eq("ativa", true)
+      .not("cnpj", "is", null)
+      .in("municipality_ibge_code", NEWTON_MUNICIPIOS)
+      .order("legal_name"),
+    db.from("newton_excecoes").select("company_id, tipo"),
+  ]);
+  if (error) throw new Error(error.message);
+  const excluir = new Set((excecoes ?? []).filter((x) => x.tipo === "EXCLUIR").map((x) => x.company_id as string));
+  const incluir = (excecoes ?? []).filter((x) => x.tipo === "INCLUIR").map((x) => x.company_id as string);
+  const lista = ((base ?? []) as EmpresaNewton[]).filter((e) => !excluir.has(e.id));
+  const ja = new Set(lista.map((e) => e.id));
+  const faltam = incluir.filter((id) => !ja.has(id));
+  if (faltam.length) {
+    const { data: extras } = await db.from("companies").select(COLUNAS).in("id", faltam);
+    lista.push(...((extras ?? []) as EmpresaNewton[]));
+  }
+  // MIT e DCTFWeb são por raiz de CNPJ: filial soma na matriz.
+  const raizesComMatriz = new Set(lista.filter((e) => ordemCnpj(e) === "0001").map((e) => raizCnpj(e)));
+  return lista.filter((e) => ordemCnpj(e) === "0001" || !raizesComMatriz.has(raizCnpj(e)));
+}
+
+type Fat = Awaited<ReturnType<typeof buscarFaturamentoMensalLote>> extends Map<string, infer V> ? V : never;
+
+/** Notas e retenções da empresa toda (matriz + filiais). */
+export function somarFiliais(matriz: Fat | undefined, filiais: (Fat | undefined)[]): Fat {
+  const todas = [matriz, ...filiais].filter((x): x is Fat => x != null);
+  return { notas: todas.flatMap((x) => x.notas), retencoes: todas.flatMap((x) => x.retencoes) } as Fat;
+}
+
+/** Cálculo do mês pelo motor do Presumido (mesmo da Central MIT e da declaração do MIT). */
+export function calcularNewton(e: Pick<EmpresaNewton, "irpj_csll_apuracao_mensal">, competencia: string, fat: Fat): CalculoNewton {
+  const { notas, retencoes } = fat;
+  const meses = competenciasTrimestre(competencia);
+  const fechaTrimestre = e.irpj_csll_apuracao_mensal || competencia === meses[2];
+  const m = somarFaturamentoPorEquiparacao(notas, [competencia]);
+  const t = somarFaturamentoPorEquiparacao(notas, meses);
+  const r = calcularLucroPresumido({
+    receitaMesGeral: m.geral,
+    receitaMesHospitalar: m.hospitalar,
+    receitaTrimestreGeral: t.geral,
+    receitaTrimestreHospitalar: t.hospitalar,
+    ehUltimoMesDoTrimestre: competencia === meses[2],
+    apuracaoMensal: e.irpj_csll_apuracao_mensal,
+    issMensal: null,
+  });
+  const retencaoMes = somarRetencoes(retencoes, [competencia]);
+  const retencaoTrimestre = somarRetencoes(retencoes, meses);
+  const devido = valoresDevidosNoPeriodoMit(r, retencaoMes, retencaoTrimestre);
+  const ant = [1, 2, 3].map((k) => somarFaturamento(notas, [somarMeses(competencia, -k)]));
+  const comReceita = ant.filter((v) => v > 0);
+  return {
+    receitaMes: somarFaturamento(notas, [competencia]),
+    receitaTrimestre: t.geral + t.hospitalar,
+    receitaHospitalarTrimestre: t.hospitalar,
+    receitaHospitalarMes: m.hospitalar,
+    fechaTrimestre,
+    retencaoMes,
+    retencaoTrimestre,
+    bruto: { irpj: r.irpj, irpjAdicional: r.irpjAdicional, csll: r.csll, pis: r.pis, cofins: r.cofins },
+    devido,
+    total: devido.irpj + devido.csll + devido.pis + devido.cofins,
+    mediaReceita3m: comReceita.length ? comReceita.reduce((a, b) => a + b, 0) / comReceita.length : null,
+  };
+}
+
+/** Conferência determinística do Newton (a IA só olha o que cair em REVISAR). */
+export function conferirNewton(p: {
+  e: EmpresaNewton;
+  calc: CalculoNewton;
+  competencia: string;
+  prefeitura: { valor: number | null; erro: string | null } | null;
+  filiais: FilialSimples[];
+}): Motivo[] {
+  const { e, calc } = p;
+  const motivos: Motivo[] = [];
+  const bloquear = (codigo: string, texto: string) => motivos.push({ nivel: "BLOQUEADO", codigo, texto });
+  const revisar = (codigo: string, texto: string) => motivos.push({ nivel: "REVISAR", codigo, texto });
+
+  if (p.e.ultima_sincronizacao_status === "erro") revisar("NOTAS_ERRO", "A última busca de notas deu erro — refazer antes de fechar.");
+  if (calc.receitaMes <= 0) revisar("SEM_RECEITA", "Nenhuma receita na competência — confirmar se é sem movimento ou se faltou buscar notas.");
+
+  // Equiparação hospitalar: a empresa está marcada, mas nenhuma nota do
+  // trimestre está — o motor calcularia tudo a 32% (prova de out/2026:
+  // equipe declarava 8%/12% de cabeça). Bloqueia no mês do IRPJ/CSLL.
+  if (e.equiparacao_hospitalar && calc.receitaTrimestre > 0 && calc.receitaHospitalarTrimestre <= 0) {
+    const texto =
+      "Empresa marcada para equiparação hospitalar, mas nenhuma nota do trimestre está marcada — marque nota a nota (8%/12%) antes do IRPJ/CSLL, senão o cálculo vai a 32%.";
+    if (calc.fechaTrimestre) bloquear("EQUIPARACAO_SEM_MARCACAO", texto);
+    else revisar("EQUIPARACAO_SEM_MARCACAO", texto);
+  }
+
+  if (calc.mediaReceita3m && calc.receitaMes > 0) {
+    const r = calc.receitaMes / calc.mediaReceita3m;
+    if (r < 0.4) revisar("VARIACAO_BAIXA", `Receita do mês (${brl(calc.receitaMes)}) é ${Math.round(r * 100)}% da média dos 3 meses anteriores — conferir se faltam notas.`);
+    if (r > 2.5) revisar("VARIACAO_ALTA", `Receita do mês (${brl(calc.receitaMes)}) é ${r.toFixed(1)}× a média dos 3 meses anteriores — conferir nota duplicada ou de outra competência.`);
+  }
+
+  if (e.municipality_ibge_code === IBGE_PETROPOLIS) {
+    if (!p.prefeitura) revisar("PREFEITURA_NAO_CONFERIDA", "Faturamento ainda não conferido com a Prefeitura de Petrópolis.");
+    else if (p.prefeitura.erro) revisar("PREFEITURA_ERRO", `Consulta à prefeitura deu erro: ${p.prefeitura.erro.slice(0, 80)}`);
+    else if (Math.abs((p.prefeitura.valor ?? 0) - calc.receitaMes) > 1)
+      revisar("PREFEITURA_DIVERGE", `Prefeitura ${brl(p.prefeitura.valor ?? 0)} × notas ${brl(calc.receitaMes)}.`);
+  }
+
+  // Retenção maior que o tributo: sobra crédito — o MIT zera, mas o saldo
+  // precisa de PER/DCOMP ou compensação; a equipe decide.
+  const pisRet = calc.retencaoMes.contribuicoesSociais * (0.0065 / 0.0465);
+  const cofinsRet = calc.retencaoMes.contribuicoesSociais * (0.03 / 0.0465);
+  if (pisRet > calc.bruto.pis + 0.01 || cofinsRet > calc.bruto.cofins + 0.01)
+    revisar("RETENCAO_MAIOR", "Retenção de PIS/COFINS maior que o devido no mês — sobra crédito para compensar.");
+  if (calc.fechaTrimestre && calc.retencaoTrimestre.irrf > calc.bruto.irpj + 0.01)
+    revisar("RETENCAO_MAIOR_IRPJ", "IRRF retido maior que o IRPJ do período — sobra crédito para compensar.");
+
+  return motivos;
+}
+
+function assinaturaNewton(calc: CalculoNewton, motivos: Motivo[]) {
+  const n = (v: number) => v.toFixed(2);
+  return [
+    n(calc.receitaMes),
+    n(calc.receitaTrimestre),
+    n(calc.receitaHospitalarTrimestre),
+    n(calc.devido.irpj),
+    n(calc.devido.csll),
+    n(calc.devido.pis),
+    n(calc.devido.cofins),
+    motivos.map((m) => m.codigo).sort().join("."),
+  ].join("|");
+}
+
+/** Monta a esteira de todas as empresas da carteira na competência. */
+export async function carregarEsteiraNewton(db: Db, competencia: string): Promise<LinhaNewton[]> {
+  const empresas = await carteiraNewton(db);
+  const ids = empresas.map((e) => e.id);
+  if (!ids.length) return [];
+  const filiais = await filiaisPorMatriz(db, empresas, "LUCRO_PRESUMIDO");
+  const idsFiliais = [...filiais.values()].flat().map((f) => f.id);
+  const [fat, { data: pref }, { data: mits }, { data: fechamentos }, { data: vinculos }] = await Promise.all([
+    buscarFaturamentoMensalLote(db, [...ids, ...idsFiliais]),
+    db.from("conferencia_prefeitura").select("company_id, valor_prefeitura, erro").eq("competencia", competencia).in("company_id", ids),
+    db.from("integra_contador_mit_encerramentos").select("company_id, situacao_apuracao, created_at").eq("competencia", competencia).in("company_id", ids),
+    db.from("newton_fechamentos").select("*").eq("competencia", competencia).in("company_id", ids),
+    db.from("pedido_nota_vinculos").select("company_id").in("company_id", ids),
+  ]);
+  const prefPor = new Map((pref ?? []).map((p) => [p.company_id as string, { valor: p.valor_prefeitura == null ? null : Number(p.valor_prefeitura), erro: (p.erro as string | null) ?? null }]));
+  const mitPor = new Set((mits ?? []).filter((m) => m.situacao_apuracao !== "ERRO").map((m) => m.company_id as string));
+  const newtonPor = new Map((fechamentos ?? []).map((f) => [f.company_id as string, f as unknown as NewtonFechamento]));
+  const comGrupo = new Set((vinculos ?? []).map((v) => v.company_id as string));
+
+  return empresas.map((e) => {
+    const minhas = filiais.get(e.id) ?? [];
+    const dados = somarFiliais(fat.get(e.id), minhas.map((f) => fat.get(f.id)));
+    const calc = calcularNewton(e, competencia, dados);
+    const prefeitura = prefPor.get(e.id) ?? null;
+    const motivos = conferirNewton({ e, calc, competencia, prefeitura, filiais: minhas });
+    const conferencia = motivos.some((m) => m.nivel === "BLOQUEADO") ? "BLOQUEADO" : motivos.length ? "REVISAR" : "OK";
+    const assinatura = assinaturaNewton(calc, motivos);
+    const newton = newtonPor.get(e.id) ?? null;
+    const aprovada = conferencia === "OK" || (conferencia === "REVISAR" && newton?.aprovado_assinatura === assinatura);
+    return montarLinha({
+      e,
+      calc,
+      filiais: minhas,
+      prefeitura,
+      conferencia,
+      motivos,
+      assinatura,
+      aprovada,
+      mitEncerrado: mitPor.has(e.id),
+      newton,
+      temGrupo: comGrupo.has(e.id),
+    });
+  });
+}
+
+function montarLinha(p: {
+  e: EmpresaNewton;
+  calc: CalculoNewton;
+  filiais: FilialSimples[];
+  prefeitura: { valor: number | null; erro: string | null } | null;
+  conferencia: LinhaNewton["conferencia"];
+  motivos: Motivo[];
+  assinatura: string;
+  aprovada: boolean;
+  mitEncerrado: boolean;
+  newton: NewtonFechamento | null;
+  temGrupo: boolean;
+}): LinhaNewton {
+  const { e, calc, newton } = p;
+  const municipio = e.municipality_ibge_code === IBGE_PETROPOLIS ? "Petrópolis" : e.municipality_ibge_code === IBGE_RIO ? "Rio de Janeiro" : "Outro";
+  const etapas: Etapa[] = [];
+  const add = (chave: string, nome: string, estado: EstadoEtapa, titulo: string, detalhe?: string) => etapas.push({ chave, nome, estado, titulo, detalhe });
+
+  const erroBusca = e.ultima_sincronizacao_status === "erro";
+  add("notas", "Notas", erroBusca ? "problema" : "ok", erroBusca ? "Erro na busca" : calc.receitaMes ? "Buscadas" : "Sem notas", erroBusca ? (e.ultima_sincronizacao_erro ?? "").slice(0, 60) : brl(calc.receitaMes));
+
+  if (municipio === "Petrópolis") {
+    if (!p.prefeitura) add("prefeitura", "Prefeitura", "pendente", "Não conferido");
+    else if (p.prefeitura.erro) add("prefeitura", "Prefeitura", "problema", "Erro na consulta", p.prefeitura.erro.slice(0, 60));
+    else {
+      const dif = Math.abs((p.prefeitura.valor ?? 0) - calc.receitaMes);
+      add("prefeitura", "Prefeitura", dif <= 1 ? "ok" : "problema", dif <= 1 ? "Confere" : "Diferença", `Prefeitura ${brl(p.prefeitura.valor ?? 0)}`);
+    }
+  } else add("prefeitura", "Prefeitura", "na", "Central ISS Rio", "conferência à parte");
+
+  const bloqueado = p.conferencia === "BLOQUEADO";
+  add(
+    "calculo",
+    "Cálculo",
+    bloqueado ? "problema" : "ok",
+    bloqueado ? "Bloqueado" : "Calculado",
+    `${brl(calc.total)}${calc.fechaTrimestre ? " · c/ IRPJ/CSLL" : " · PIS/COFINS"}`,
+  );
+  add(
+    "conferencia",
+    "Conferência",
+    p.conferencia === "OK" || p.aprovada ? "ok" : p.conferencia === "REVISAR" ? "pendente" : "problema",
+    p.aprovada ? (p.conferencia === "OK" ? "OK" : "Aprovada") : p.conferencia === "REVISAR" ? "Revisar" : "Bloqueada",
+    p.motivos.length ? `${p.motivos.length} motivo(s)` : undefined,
+  );
+  add("mit", "MIT", p.mitEncerrado ? "ok" : "pendente", p.mitEncerrado ? "Encerrado" : "Não encerrado");
+  add("dctfweb", "DCTFWeb", newton?.dctfweb_transmitida_em ? "ok" : "pendente", newton?.dctfweb_transmitida_em ? "Transmitida" : "Não transmitida");
+  const semDarf = calc.total <= 0.009;
+  add("darf", "DARF", semDarf ? "na" : newton?.darf_gerado_em ? "ok" : "pendente", semDarf ? "Sem DARF" : newton?.darf_gerado_em ? "Gerado" : "Não gerado", newton?.darf_valor != null ? brl(Number(newton.darf_valor)) : undefined);
+  add("entrega", "Entrega", newton?.entregue_em ? "ok" : semDarf ? "na" : "pendente", newton?.entregue_em ? "eContador" : "Não entregue");
+  add("pagamento", "Pagamento", semDarf ? "na" : newton?.pago ? "ok" : newton?.pago === false ? "problema" : "pendente", semDarf ? "—" : newton?.pago ? "Pago" : newton?.pago === false ? "Em aberto" : "Não verificado");
+
+  let situacao: LinhaNewton["situacao"] = "newton";
+  let recado: string;
+  const iaAtual = newton?.ia_decisao && newton.ia_assinatura === p.assinatura;
+  if (bloqueado) {
+    situacao = "acao";
+    recado = p.motivos.filter((m) => m.nivel === "BLOQUEADO").map((m) => m.texto).join(" ");
+  } else if (!p.aprovada) {
+    if (iaAtual && newton!.ia_decisao === "ESCALAR") {
+      situacao = "acao";
+      recado = `Passei para a equipe: ${newton!.ia_pergunta ?? newton!.ia_diagnostico ?? "ver motivos"}`;
+    } else if (iaAtual && newton!.ia_decisao === "APROVAR") {
+      situacao = "acao";
+      recado = `Revisei e recomendo aprovar: ${newton!.ia_justificativa ?? ""}`;
+    } else recado = `Aguardando minha revisão: ${p.motivos.map((m) => m.texto).join(" ")}`;
+  } else if (!p.mitEncerrado) {
+    situacao = "acao";
+    recado = calc.total > 0 ? `Pronta para encerrar o MIT (${brl(calc.total)}).` : "Pronta para encerrar o MIT (sem débito no mês).";
+  } else if (!newton?.dctfweb_transmitida_em) {
+    situacao = "acao";
+    recado = "MIT encerrado — falta transmitir a DCTFWeb.";
+  } else if (semDarf) {
+    situacao = "concluida";
+    recado = "Concluída: DCTFWeb transmitida, sem DARF a pagar.";
+  } else if (!newton?.darf_gerado_em) {
+    situacao = "acao";
+    recado = "DCTFWeb transmitida — falta gerar e salvar o DARF.";
+  } else if (!newton?.entregue_em) {
+    situacao = "acao";
+    recado = "DARF salvo — falta entregar no eContador (ZIP).";
+  } else if (!newton.pago) {
+    recado = newton.mensagem_cobranca_em ? "Entregue — cobrança enviada, aguardando pagamento." : "Entregue — aguardando pagamento.";
+  } else {
+    situacao = "concluida";
+    recado = "Concluída: DARF pago.";
+  }
+
+  return {
+    id: e.id,
+    nome: nomeEmpresaNewton(e),
+    municipio,
+    calc,
+    filiais: p.filiais,
+    conferencia: p.conferencia,
+    motivos: p.motivos,
+    assinatura: p.assinatura,
+    aprovada: p.aprovada,
+    mitEncerrado: p.mitEncerrado,
+    newton,
+    temGrupoDigisac: p.temGrupo,
+    etapas,
+    situacao,
+    recado,
+  };
+}

@@ -19,7 +19,7 @@ export type PropostaSerena = {
 
 export type MensagemSerena = { id: string; role: "user" | "assistant"; content: string; criadaEm: string; propostas: PropostaSerena[] };
 
-export async function historicoSerenaAction(): Promise<MensagemSerena[]> {
+export async function historicoSerenaAction(analista: "SERENA" | "NEWTON" = "SERENA"): Promise<MensagemSerena[]> {
   await requireSomaStaff();
   const user = await requireUser();
   const supabase = await createClient();
@@ -27,6 +27,7 @@ export async function historicoSerenaAction(): Promise<MensagemSerena[]> {
     .from("serena_mensagens")
     .select("id, role, content, proposta_ids, created_at")
     .eq("user_id", user.id)
+    .eq("analista", analista)
     .order("created_at", { ascending: false })
     .limit(120);
   const msgs = (data ?? []).reverse();

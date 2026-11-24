@@ -107,20 +107,24 @@ export async function carteiraSerena(db: Db): Promise<EmpresaSimples[]> {
   return lista.filter((e) => ordemCnpj(e) === "0001" || !raizesComMatriz.has(raizCnpj(e)));
 }
 
-const raizCnpj = (e: { cnpj: string | null }) => (e.cnpj ?? "").replace(/\D/g, "").slice(0, 8);
-const ordemCnpj = (e: { cnpj: string | null }) => (e.cnpj ?? "").replace(/\D/g, "").slice(8, 12);
+export const raizCnpj = (e: { cnpj: string | null }) => (e.cnpj ?? "").replace(/\D/g, "").slice(0, 8);
+export const ordemCnpj = (e: { cnpj: string | null }) => (e.cnpj ?? "").replace(/\D/g, "").slice(8, 12);
 
 export type FilialSimples = { id: string; cnpj: string; nome: string };
 
 /** Filiais ativas do Simples de cada matriz da lista (mesma raiz de CNPJ). */
-export async function filiaisPorMatriz(db: Db, matrizes: EmpresaSimples[]): Promise<Map<string, FilialSimples[]>> {
+export async function filiaisPorMatriz(
+  db: Db,
+  matrizes: { id: string; cnpj: string | null }[],
+  regime: "SIMPLES_NACIONAL" | "LUCRO_PRESUMIDO" = "SIMPLES_NACIONAL",
+): Promise<Map<string, FilialSimples[]>> {
   const mapa = new Map<string, FilialSimples[]>();
   const porRaiz = new Map(matrizes.filter((e) => ordemCnpj(e) === "0001").map((e) => [raizCnpj(e), e.id]));
   if (!porRaiz.size) return mapa;
   const { data } = await db
     .from("companies")
     .select("id, cnpj, legal_name, trade_name, codigo_cliente")
-    .eq("tax_regime", "SIMPLES_NACIONAL")
+    .eq("tax_regime", regime)
     .eq("ativa", true)
     .not("cnpj", "is", null);
   for (const f of data ?? []) {

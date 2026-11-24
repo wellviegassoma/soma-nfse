@@ -6,6 +6,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { cn } from "@/lib/cn";
 import { SerenaAvatar } from "./SerenaAvatar";
+import { NewtonAvatar } from "../newton/NewtonAvatar";
 import {
   aplicarPropostaAction,
   descartarPropostaAction,
@@ -25,12 +26,42 @@ const ROTULO_FERRAMENTA: Record<string, string> = {
   servicosSemAtividade: "procurando serviços sem atividade",
   proporClassificacao: "preparando a proposta",
 };
-const SUGESTOES = [
-  "Como está o fechamento deste mês?",
-  "Quais empresas estão bloqueadas e por quê?",
-  "Classifique os serviços sem atividade do Simples",
-  "Confira a prefeitura de quem falta em Petrópolis",
-];
+// O mesmo chat serve aos dois analistas de IA (Serena: Simples; Newton: Presumido).
+type Analista = "SERENA" | "NEWTON";
+const CONFIG = {
+  SERENA: {
+    nome: "Serena",
+    artigo: "a",
+    Avatar: SerenaAvatar,
+    api: "/api/serena/chat",
+    faixa: "from-violet-600 to-fuchsia-500",
+    subtitulo: "Analista fiscal (IA) · Simples Nacional · Petrópolis e Rio",
+    apresentacao:
+      "Oi! Sou a Serena, a analista fiscal de IA da SOMA. Posso explicar onde cada empresa parou, rodar a conferência com a prefeitura, auditar a apuração e preparar correções para você confirmar. Transmitir PGDAS e mandar mensagem a cliente continuam nos botões da tela.",
+    sugestoes: [
+      "Como está o fechamento deste mês?",
+      "Quais empresas estão bloqueadas e por quê?",
+      "Classifique os serviços sem atividade do Simples",
+      "Confira a prefeitura de quem falta em Petrópolis",
+    ],
+  },
+  NEWTON: {
+    nome: "Newton",
+    artigo: "o",
+    Avatar: NewtonAvatar,
+    api: "/api/newton/chat",
+    faixa: "from-sky-600 to-indigo-700",
+    subtitulo: "Analista fiscal (IA) · Lucro Presumido · Petrópolis e Rio",
+    apresentacao:
+      "Oi! Sou o Newton, o analista fiscal de IA da SOMA para o Lucro Presumido. Posso explicar onde cada empresa parou, conferir a prefeitura e auditar a apuração de PIS, COFINS, IRPJ e CSLL. Encerrar o MIT, transmitir a DCTFWeb e mandar mensagem a cliente continuam nos botões da tela.",
+    sugestoes: [
+      "Como está o fechamento deste mês?",
+      "Quais empresas estão bloqueadas e por quê?",
+      "Quem tem equiparação hospitalar sem nota marcada?",
+      "Confira a prefeitura de quem falta em Petrópolis",
+    ],
+  },
+} as const;
 
 function textoDe(m: UIMessage) {
   return m.parts
@@ -39,15 +70,17 @@ function textoDe(m: UIMessage) {
     .join("");
 }
 
-/** Botão flutuante + aba lateral para conversar com a Serena. */
-export function SerenaChat() {
+/** Botão flutuante + aba lateral para conversar com a Serena (ou o Newton). */
+export function SerenaChat({ analista = "SERENA" }: { analista?: Analista } = {}) {
+  const cfg = CONFIG[analista];
+  const Avatar = cfg.Avatar;
   const [aberto, setAberto] = useState(false);
   const [carregado, setCarregado] = useState<MensagemSerena[] | null>(null);
 
   useEffect(() => {
     if (!aberto || carregado) return;
-    historicoSerenaAction().then(setCarregado).catch(() => setCarregado([]));
-  }, [aberto, carregado]);
+    historicoSerenaAction(analista).then(setCarregado).catch(() => setCarregado([]));
+  }, [aberto, carregado, analista]);
 
   return (
     <>
@@ -55,8 +88,8 @@ export function SerenaChat() {
       <button
         type="button"
         onClick={() => setAberto(true)}
-        title="Falar com a Serena"
-        aria-label="Falar com a Serena"
+        title={`Falar com ${cfg.artigo} ${cfg.nome}`}
+        aria-label={`Falar com ${cfg.artigo} ${cfg.nome}`}
         className={cn(
           "fixed right-5 bottom-5 z-40 flex h-16 w-16 items-center justify-center rounded-full shadow-xl ring-4 ring-white transition hover:scale-105",
           aberto ? "bg-foreground text-background" : "bg-transparent",
@@ -65,37 +98,39 @@ export function SerenaChat() {
         {aberto ? (
           <span className="text-2xl leading-none">×</span>
         ) : (
-          <SerenaAvatar tamanho={64} />
+          <Avatar tamanho={64} />
         )}
       </button>
       )}
       {aberto && (
         <aside className="fixed top-0 right-0 bottom-0 z-30 flex w-full flex-col border-l border-border bg-background shadow-2xl sm:w-[460px]">
-          <div className="flex items-center gap-3 border-b border-border bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-3 text-white">
-            <SerenaAvatar tamanho={44} selo={false} className="rounded-full ring-2 ring-white/70" />
+          <div className={cn("flex items-center gap-3 border-b border-border bg-gradient-to-r px-4 py-3 text-white", cfg.faixa)}>
+            <Avatar tamanho={44} selo={false} className="rounded-full ring-2 ring-white/70" />
             <div className="flex-1">
-              <div className="text-sm font-semibold">Serena</div>
-              <div className="text-[11px] text-white/80">Analista fiscal (IA) · Simples Nacional · Petrópolis e Rio</div>
+              <div className="text-sm font-semibold">{cfg.nome}</div>
+              <div className="text-[11px] text-white/80">{cfg.subtitulo}</div>
             </div>
             <button type="button" onClick={() => setAberto(false)} className="rounded px-2 text-xl leading-none" aria-label="Fechar">
               ×
             </button>
           </div>
-          {carregado ? <Conversa historico={carregado} /> : <div className="p-4 text-sm text-foreground/60">Carregando a conversa…</div>}
+          {carregado ? <Conversa historico={carregado} analista={analista} /> : <div className="p-4 text-sm text-foreground/60">Carregando a conversa…</div>}
         </aside>
       )}
     </>
   );
 }
 
-function Conversa({ historico }: { historico: MensagemSerena[] }) {
+function Conversa({ historico, analista }: { historico: MensagemSerena[]; analista: Analista }) {
+  const cfg = CONFIG[analista];
+  const Avatar = cfg.Avatar;
   const [input, setInput] = useState("");
   const fim = useRef<HTMLDivElement>(null);
   const propostasDoHistorico = useMemo(() => new Map(historico.map((m) => [m.id, m.propostas])), [historico]);
   const { messages, sendMessage, status, error } = useChat({
-    id: "serena",
+    id: analista.toLowerCase(),
     messages: historico.map((m) => ({ id: m.id, role: m.role, parts: [{ type: "text", text: m.content }] }) as UIMessage),
-    transport: new DefaultChatTransport({ api: "/api/serena/chat" }),
+    transport: new DefaultChatTransport({ api: cfg.api }),
   });
   const ocupada = status === "streaming" || status === "submitted";
 
@@ -116,15 +151,12 @@ function Conversa({ historico }: { historico: MensagemSerena[] }) {
         {messages.length === 0 && (
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <SerenaAvatar tamanho={56} />
-              <div className="text-sm font-semibold">Serena</div>
+              <Avatar tamanho={56} />
+              <div className="text-sm font-semibold">{cfg.nome}</div>
             </div>
-            <p className="text-sm text-foreground/70">
-              Oi! Sou a Serena, a analista fiscal de IA da SOMA. Posso explicar onde cada empresa parou, rodar a conferência com a prefeitura, auditar a apuração e preparar
-              correções para você confirmar. Transmitir PGDAS e mandar mensagem a cliente continuam nos botões da tela.
-            </p>
+            <p className="text-sm text-foreground/70">{cfg.apresentacao}</p>
             <div className="flex flex-wrap gap-1.5">
-              {SUGESTOES.map((s) => (
+              {cfg.sugestoes.map((s) => (
                 <button key={s} type="button" onClick={() => enviar(s)} className="rounded-full border border-violet-300 bg-violet-50 px-3 py-1 text-xs text-violet-900 hover:bg-violet-100">
                   {s}
                 </button>
@@ -144,12 +176,12 @@ function Conversa({ historico }: { historico: MensagemSerena[] }) {
                   .filter((f) => f.state !== "output-available")
                   .map((f, i) => (
                     <span key={i} className="text-[11px] text-violet-700">
-                      Serena está {ROTULO_FERRAMENTA[f.type.replace("tool-", "")] ?? "trabalhando"}…
+                      {cfg.nome} está {ROTULO_FERRAMENTA[f.type.replace("tool-", "")] ?? "trabalhando"}…
                     </span>
                   ))}
               {texto && (
                 <div className={cn("flex max-w-full items-end gap-2", m.role === "user" ? "flex-row-reverse" : "")}>
-                {m.role === "assistant" && <SerenaAvatar tamanho={28} selo={false} />}
+                {m.role === "assistant" && <Avatar tamanho={28} selo={false} />}
                 <div
                   className={cn(
                     "max-w-[92%] rounded-2xl px-3.5 py-2 text-sm",
@@ -171,7 +203,7 @@ function Conversa({ historico }: { historico: MensagemSerena[] }) {
         })}
         {ocupada && (
           <div className="flex items-center gap-2 text-xs text-foreground/50">
-            <SerenaAvatar tamanho={22} selo={false} /> Serena está pensando…
+            <Avatar tamanho={22} selo={false} /> {cfg.nome} está pensando…
           </div>
         )}
         {error && <div className="text-xs text-danger">Não consegui responder agora. Tente de novo.</div>}
@@ -194,7 +226,7 @@ function Conversa({ historico }: { historico: MensagemSerena[] }) {
             }
           }}
           rows={2}
-          placeholder="Fale com a Serena…"
+          placeholder={`Fale com ${cfg.artigo} ${cfg.nome}…`}
           className="flex-1 resize-none rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-violet-500"
         />
         <button type="submit" disabled={ocupada || !input.trim()} className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40">

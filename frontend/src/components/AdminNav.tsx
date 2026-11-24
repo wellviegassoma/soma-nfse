@@ -17,6 +17,8 @@ const TAB_VISAO_GERAL: Tab = { href: "/admin", label: "Visão geral", exact: tru
 const TAB_TAREFAS: Tab = { href: "/admin/tarefas", label: "Tarefas" };
 // Carteira de IA do Simples (docs/simples-operacao-automatica.md).
 const TAB_SERENA: Tab = { href: "/admin/serena", label: "Serena" };
+// Carteira de IA do Lucro Presumido (Petrópolis + Rio).
+const TAB_NEWTON: Tab = { href: "/admin/newton", label: "Newton" };
 const TAB_EMPRESAS: Tab = { href: "/admin/empresas", label: "Empresas" };
 const TAB_FECHAMENTO: Tab = { href: "/admin/fechamento", label: "Fechamento" };
 // Caixa Postal do e-CAC de toda a carteira (docs: lib/caixa-postal-core.ts).
@@ -99,6 +101,7 @@ export function AdminNav({
     TAB_VISAO_GERAL,
     TAB_TAREFAS,
     TAB_SERENA,
+    TAB_NEWTON,
     TAB_EMPRESAS,
     ...(podeEmitirNotas ? [TAB_EMISSAO_NOTAS, TAB_PEDIDOS_NOTA] : []),
     TAB_FECHAMENTO,

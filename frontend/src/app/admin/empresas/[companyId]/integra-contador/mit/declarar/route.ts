@@ -11,6 +11,7 @@ import {
 import { calcularLucroPresumido, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
 import { montarDeclaracaoMit } from "@/lib/mit-declaracao";
 import { buscarContadorResponsavel } from "@/lib/actions/configuracoes";
+import { filiaisPorMatriz, ordemCnpj } from "@/lib/serena";
 
 const COMPETENCIA_REGEX = /^\d{4}-\d{2}$/;
 
@@ -48,7 +49,10 @@ export async function POST(
     return NextResponse.json({ error: "O MIT aqui só está disponível pra empresas do Lucro Presumido." }, { status: 400 });
   }
 
-  const notas = await buscarFaturamentoMensal(supabase, companyId);
+  // MIT é pela raiz do CNPJ: filial ativa do Presumido soma na matriz
+  // (ex.: Instituto Dela 266 + filial 293 — prova do Newton, out/2026).
+  const filiais = ordemCnpj(company) === "0001" ? [...(await filiaisPorMatriz(supabase, [{ id: companyId, cnpj: company.cnpj }], "LUCRO_PRESUMIDO")).values()].flat() : [];
+  const notas = (await Promise.all([companyId, ...filiais.map((f) => f.id)].map((id) => buscarFaturamentoMensal(supabase, id)))).flat();
   const mesesTrimestre = competenciasTrimestre(competencia);
   const ehUltimoMesDoTrimestre = competencia === mesesTrimestre[2];
   const { hospitalar: receitaMesHospitalar, geral: receitaMesGeral } = somarFaturamentoPorEquiparacao(
@@ -68,7 +72,7 @@ export async function POST(
     issMensal: null,
   });
 
-  const retencoes = await buscarRetencoesMensal(supabase, companyId);
+  const retencoes = (await Promise.all([companyId, ...filiais.map((f) => f.id)].map((id) => buscarRetencoesMensal(supabase, id)))).flat();
   const retencaoMes = somarRetencoes(retencoes, [competencia]);
   const retencaoTrimestre = somarRetencoes(retencoes, mesesTrimestre);
   const valoresDevidos = valoresDevidosNoPeriodoMit(resultado, retencaoMes, retencaoTrimestre);
