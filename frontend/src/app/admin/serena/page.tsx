@@ -4,6 +4,7 @@ import { carregarEsteira } from "@/lib/serena";
 import { listarEquipe } from "@/lib/tarefas";
 import { revisoresSerena } from "@/lib/actions/serena";
 import { SerenaPainel } from "./SerenaPainel";
+import { SerenaChat } from "./SerenaChat";
 import type { ResumoRotina } from "@/lib/serena-rotina";
 
 export const metadata = { title: "Serena — Simples Nacional" };
@@ -27,6 +28,8 @@ export default async function SerenaPage(props: PageProps<"/admin/serena">) {
     supabase.from("serena_config").select("valor").eq("chave", "ultima_rotina").maybeSingle(),
   ]);
   return (
+    <>
+    <SerenaChat />
     <SerenaPainel
       competencia={competencia}
       linhas={linhas}
@@ -34,5 +37,6 @@ export default async function SerenaPage(props: PageProps<"/admin/serena">) {
       revisores={revisores}
       ultimaRotina={(rotina?.valor as ResumoRotina | undefined) ?? null}
     />
+    </>
   );
 }
