@@ -2,7 +2,7 @@
 // chega, um monograma; com public/newton.webp, troca pela foto (mesmo selo da
 // Serena, que deixa claro que é a IA).
 
-const TEM_FOTO = false;
+const TEM_FOTO = true;
 
 export function NewtonAvatar({ tamanho = 40, selo = true, className = "" }: { tamanho?: number; selo?: boolean; className?: string }) {
   return (
