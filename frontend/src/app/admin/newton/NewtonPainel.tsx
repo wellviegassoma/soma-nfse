@@ -325,7 +325,11 @@ export function NewtonPainel({
       }, "Notas buscadas.");
     }
     if (chave === "prefeitura") {
-      if (l.municipio !== "Petrópolis") return setMsg({ erro: "No Rio a conferência do ISS é na Central ISS Rio." });
+      if (l.municipio === "Rio de Janeiro") {
+        if (!window.confirm(`A conferência do ISS do Rio é feita na Central ISS Rio. Abrir a Central em ${rotuloCompetencia(competencia)}?`)) return;
+        return window.open(`/admin/fechamento/iss-rio?competencia=${competencia}`, "_blank");
+      }
+      if (l.municipio !== "Petrópolis") return setMsg({ erro: "Município sem conferência automática." });
       if (!window.confirm(`Conferir agora o faturamento de ${nome} com a Prefeitura de Petrópolis? (só consulta)`)) return;
       return rodar(() => conferirPrefeituraUmaAction({ companyId: l.id, competencia }), "Conferido.");
     }

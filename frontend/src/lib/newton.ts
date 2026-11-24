@@ -65,6 +65,20 @@ export type NewtonFechamento = {
 
 export type Motivo = { nivel: "BLOQUEADO" | "REVISAR"; codigo: string; texto: string };
 
+/** Última conferência das Centrais ISS (Rio: Nota Carioca; Petrópolis: guia do ISS). */
+export type ConferenciaCentralIss = { status: string; mensagem: string | null; conferidoEm: string };
+
+const ROTULO_CENTRAL: Record<string, string> = {
+  ok: "Bate",
+  falta_emitir: "Bate — falta emitir",
+  diferenca: "Diferença",
+  sem_movimento: "Sem movimento",
+  sem_guia: "Sem guia na prefeitura",
+  cadastro: "Conferir cadastro",
+  erro: "Erro",
+};
+const CENTRAL_OK = new Set(["ok", "falta_emitir", "sem_movimento"]);
+
 export type CalculoNewton = {
   receitaMes: number;
   receitaTrimestre: number;
@@ -220,6 +234,7 @@ export function conferirNewton(p: {
   prefeitura: { valor: number | null; erro: string | null } | null;
   filiais: FilialSimples[];
   equiparacao: EquiparacaoNewton | null;
+  central?: ConferenciaCentralIss | null;
 }): Motivo[] {
   const { e, calc } = p;
   const motivos: Motivo[] = [];
@@ -252,7 +267,17 @@ export function conferirNewton(p: {
     if (r > 2.5) revisar("VARIACAO_ALTA", `Receita do mês (${brl(calc.receitaMes)}) é ${r.toFixed(1)}× a média dos 3 meses anteriores — conferir nota duplicada ou de outra competência.`);
   }
 
-  if (e.municipality_ibge_code === IBGE_PETROPOLIS) {
+  const central = p.central ?? null;
+  if (e.municipality_ibge_code === IBGE_RIO) {
+    // Rio: a conferência é a da Central ISS Rio (faturamento SOMA × guia do Nota Carioca).
+    if (!central) revisar("PREFEITURA_NAO_CONFERIDA", "ISS do Rio ainda não conferido na Central ISS Rio (faturamento × Nota Carioca).");
+    else if (!CENTRAL_OK.has(central.status))
+      revisar("PREFEITURA_DIVERGE", `Central ISS Rio: ${ROTULO_CENTRAL[central.status] ?? central.status}${central.mensagem ? ` — ${central.mensagem.slice(0, 120)}` : ""}.`);
+  } else if (e.municipality_ibge_code === IBGE_PETROPOLIS && !p.prefeitura && central) {
+    // Petrópolis conferido só pela Central ISS Petrópolis (guia do ISS).
+    if (!CENTRAL_OK.has(central.status))
+      revisar("PREFEITURA_DIVERGE", `Central ISS Petrópolis: ${ROTULO_CENTRAL[central.status] ?? central.status}${central.mensagem ? ` — ${central.mensagem.slice(0, 120)}` : ""}.`);
+  } else if (e.municipality_ibge_code === IBGE_PETROPOLIS) {
     if (!p.prefeitura) revisar("PREFEITURA_NAO_CONFERIDA", "Faturamento ainda não conferido com a Prefeitura de Petrópolis.");
     else if (p.prefeitura.erro) revisar("PREFEITURA_ERRO", `Consulta à prefeitura deu erro: ${p.prefeitura.erro.slice(0, 80)}`);
     else if (Math.abs((p.prefeitura.valor ?? 0) - calc.receitaMes) > 1)
@@ -355,6 +380,14 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
     db.from("newton_fechamentos").select("*").eq("competencia", competencia).in("company_id", ids),
     db.from("pedido_nota_vinculos").select("company_id").in("company_id", ids),
   ]);
+  const { data: centrais } = await db
+    .from("iss_conferencias")
+    .select("company_id, municipio, status, mensagem, conferido_em")
+    .eq("competencia", competencia)
+    .in("company_id", ids);
+  const centralPor = new Map(
+    (centrais ?? []).map((c) => [c.company_id as string, { status: c.status as string, mensagem: (c.mensagem as string | null) ?? null, conferidoEm: c.conferido_em as string }]),
+  );
   const prefPor = new Map((pref ?? []).map((p) => [p.company_id as string, { valor: p.valor_prefeitura == null ? null : Number(p.valor_prefeitura), erro: (p.erro as string | null) ?? null }]));
   const mitPor = new Set((mits ?? []).filter((m) => m.situacao_apuracao !== "ERRO").map((m) => m.company_id as string));
   const newtonPor = new Map((fechamentos ?? []).map((f) => [f.company_id as string, f as unknown as NewtonFechamento]));
@@ -369,7 +402,8 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
     const newton = newtonPor.get(e.id) ?? null;
     // "Aceitar e seguir": motivo aceito pela equipe sai da conferência.
     const aceitos = new Map((newton?.motivos_aceitos ?? []).map((a) => [a.codigo, a]));
-    const todos = conferirNewton({ e, calc, competencia, prefeitura, filiais: minhas, equiparacao });
+    const central = centralPor.get(e.id) ?? null;
+    const todos = conferirNewton({ e, calc, competencia, prefeitura, filiais: minhas, equiparacao, central });
     const motivos = todos.filter((m) => !aceitos.has(m.codigo));
     const motivosAceitos = todos.filter((m) => aceitos.has(m.codigo)).map((m) => ({ ...m, justificativa: aceitos.get(m.codigo)?.justificativa ?? null }));
     const conferencia = motivos.some((m) => m.nivel === "BLOQUEADO") ? "BLOQUEADO" : motivos.length ? "REVISAR" : "OK";
@@ -381,6 +415,7 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
       filiais: minhas,
       equiparacao,
       prefeitura,
+      central,
       conferencia,
       motivos,
       motivosAceitos,
@@ -411,6 +446,7 @@ function montarLinha(p: {
   filiais: FilialSimples[];
   equiparacao: EquiparacaoNewton | null;
   prefeitura: { valor: number | null; erro: string | null } | null;
+  central: ConferenciaCentralIss | null;
   conferencia: LinhaNewton["conferencia"];
   motivos: Motivo[];
   motivosAceitos: LinhaNewton["motivosAceitos"];
@@ -428,14 +464,20 @@ function montarLinha(p: {
   const erroBusca = e.ultima_sincronizacao_status === "erro";
   add("notas", "Notas", erroBusca ? "problema" : "ok", erroBusca ? "Erro na busca" : calc.receitaMes ? "Buscadas" : "Sem notas", erroBusca ? (e.ultima_sincronizacao_erro ?? "").slice(0, 60) : brl(calc.receitaMes));
 
-  if (municipio === "Petrópolis") {
+  const dataCentral = (iso: string) => new Date(iso).toLocaleDateString("pt-BR");
+  if (municipio === "Rio de Janeiro" || (municipio === "Petrópolis" && !p.prefeitura && p.central)) {
+    const c = p.central;
+    const onde = municipio === "Rio de Janeiro" ? "Central ISS Rio" : "Central ISS Petrópolis";
+    if (!c) add("prefeitura", "Prefeitura", "pendente", "Não conferido", onde);
+    else add("prefeitura", "Prefeitura", CENTRAL_OK.has(c.status) ? "ok" : c.status === "sem_guia" ? "pendente" : "problema", ROTULO_CENTRAL[c.status] ?? c.status, `${onde} · ${dataCentral(c.conferidoEm)}`);
+  } else if (municipio === "Petrópolis") {
     if (!p.prefeitura) add("prefeitura", "Prefeitura", "pendente", "Não conferido");
     else if (p.prefeitura.erro) add("prefeitura", "Prefeitura", "problema", "Erro na consulta", p.prefeitura.erro.slice(0, 60));
     else {
       const dif = Math.abs((p.prefeitura.valor ?? 0) - calc.receitaMes);
       add("prefeitura", "Prefeitura", dif <= 1 ? "ok" : "problema", dif <= 1 ? "Confere" : "Diferença", `Prefeitura ${brl(p.prefeitura.valor ?? 0)}`);
     }
-  } else add("prefeitura", "Prefeitura", "na", "Central ISS Rio", "conferência à parte");
+  } else add("prefeitura", "Prefeitura", "na", "—");
 
   const bloqueado = p.conferencia === "BLOQUEADO";
   add(
