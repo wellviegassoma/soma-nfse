@@ -21,6 +21,7 @@ import {
 import { type FolhaMensal, buscarFolhaMensal, montarFolhaMensal, resolverFatorR, resolverFp12, totalFolhaComEncargos } from "@/lib/folha";
 import { abaterRetencaoDoDas, calcularSimplesNacional } from "@/lib/calculo-impostos";
 import { montarDeclaracaoPgdasD } from "@/lib/pgdas-declaracao";
+import { buscarAtividade } from "@/lib/simples-nacional-atividades";
 import { buscarTudoPaginado, buscarTudoPaginadoParalelo } from "@/lib/supabase/paginacao";
 import {
   assinaturaConferencia,
@@ -245,6 +246,28 @@ export async function calcularSimplesEmpresa(
   }
 
   const receitaMes = somarFaturamento(notasMensais, [competencia]);
+  // Exportação: alíquota pelo RBT12 só do mercado externo (o interno usa o
+  // restante) — mesma regra do PGDAS-D. Só calcula quando há exportação no mês.
+  const receitaExportacao = somarReceitaExportacao(notasPorAtividade, [competencia]);
+  const rbt12Externo =
+    receitaExportacao > 0
+      ? resolverRbt12({
+          competencia,
+          receitaPorMes: (mes) => somarReceitaExportacao(notasPorAtividade, [mes]),
+          mesesComDados,
+          mesesManuais,
+          dataAbertura: company.data_abertura,
+        }).rbt12
+      : undefined;
+  // Atividade sempre no Anexo IV (ex.: advocacia) — tabela própria.
+  const notasAnexoIV = notasPorAtividade.filter(
+    (n) =>
+      !n.cancelada &&
+      n.competencia === competencia &&
+      !n.exportacao &&
+      n.atividadeId != null &&
+      buscarAtividade(n.atividadeId)?.tratamento === "ANEXO_IV_FIXO",
+  );
   const resultado = calcularSimplesNacional({
     receitaMes,
     rbt12,
@@ -252,7 +275,10 @@ export async function calcularSimplesEmpresa(
     sujeitoFatorR: company.sujeito_fator_r,
     fatorRPercentual,
     receitaIssRetido: somarReceitaIssRetido(notasPorAtividade, competencia),
-    receitaExportacao: somarReceitaExportacao(notasPorAtividade, [competencia]),
+    receitaExportacao,
+    rbt12Externo,
+    receitaAnexoIV: notasAnexoIV.reduce((t, n) => t + n.valor, 0),
+    receitaIssRetidoAnexoIV: notasAnexoIV.filter((n) => n.tipoRetencaoIssqn !== 1).reduce((t, n) => t + n.valor, 0),
   });
 
   const retencaoMes = somarRetencoes(retencoes, [competencia]);
@@ -302,7 +328,8 @@ export async function calcularSimplesEmpresa(
     receitaExportacao: resultado.receitaExportacao,
     rbt12,
     rbt12Estimado,
-    anexo: resultado.anexo,
+    // Receita em mais de um anexo (ex.: parte em atividade do Anexo IV): mostra os dois.
+    anexo: resultado.receitaAnexoIV > 0 && resultado.anexo !== "IV" ? `${resultado.anexo} + IV` : resultado.anexo,
     aliquotaEfetiva: resultado.aliquotaEfetiva,
     fatorR: fatorRPercentual,
     retencaoIrrf: retencaoMes.irrf,

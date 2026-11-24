@@ -47,6 +47,8 @@ export type ResultadoSimplesNacional = {
   receitaIssRetido: number;
   // Parte da receita do mês que é exportação de serviço (mercado externo).
   receitaExportacao: number;
+  // Parte da receita do mês tributada no Anexo IV (atividade sempre IV).
+  receitaAnexoIV: number;
   dasTotal: number;
   partilha: {
     irpj: number;
@@ -78,58 +80,99 @@ export function calcularSimplesNacional(params: {
   // Parte de `receitaMes` que é exportação de serviço (mercado externo, LC
   // 123 art. 18 §14): paga só IRPJ, CSLL e CPP — sem PIS, COFINS nem ISS.
   receitaExportacao?: number;
+  // RBT12 só do mercado externo. O PGDAS-D acha a alíquota de cada mercado
+  // pelo RBT12 DAQUELE mercado (extrato traz as duas colunas) — conferido no
+  // extrato da MC GLOBAL 10/2026: exportação na faixa 2 pelo RBT12p externo.
+  // Sem informar, tudo usa `rbt12` (comportamento antigo).
+  rbt12Externo?: number;
+  // Parte (do mercado interno) de `receitaMes` de atividade sempre no Anexo
+  // IV (LC 123 art. 18 §5º-C — ex.: advocacia): tabela própria, sem CPP no
+  // DAS. `receitaIssRetidoAnexoIV` é a parte dela com ISS retido.
+  receitaAnexoIV?: number;
+  receitaIssRetidoAnexoIV?: number;
 }): ResultadoSimplesNacional {
-  const { receitaMes, rbt12, rbt12Estimado, sujeitoFatorR, fatorRPercentual } = params;
+  const { receitaMes, rbt12Estimado, sujeitoFatorR, fatorRPercentual } = params;
   const receitaExportacao = Math.min(Math.max(params.receitaExportacao ?? 0, 0), receitaMes);
+  const receitaInterna = receitaMes - receitaExportacao;
+  const receitaAnexoIV = Math.min(Math.max(params.receitaAnexoIV ?? 0, 0), receitaInterna);
   // Exportação não tem ISS (nem retido): a retenção só vale sobre o mercado interno.
-  const receitaIssRetido = Math.min(Math.max(params.receitaIssRetido ?? 0, 0), receitaMes - receitaExportacao);
+  const receitaIssRetido = Math.min(Math.max(params.receitaIssRetido ?? 0, 0), receitaInterna);
+  const issRetidoIV = Math.min(Math.max(params.receitaIssRetidoAnexoIV ?? 0, 0), receitaAnexoIV, receitaIssRetido);
 
-  const anexo: Anexo = decidirAnexoFatorR(sujeitoFatorR, fatorRPercentual);
+  const rbt12Externo = params.rbt12Externo != null ? Math.min(Math.max(params.rbt12Externo, 0), params.rbt12) : null;
+  const rbt12Interno = rbt12Externo != null ? params.rbt12 - rbt12Externo : params.rbt12;
 
+  const anexoPrincipal: Anexo = decidirAnexoFatorR(sujeitoFatorR, fatorRPercentual);
+  const receitaPrincipal = receitaInterna - receitaAnexoIV;
+
+  const segInterno = calcularSegmento(anexoPrincipal, rbt12Interno, receitaPrincipal, receitaIssRetido - issRetidoIV, false);
+  const segIV = receitaAnexoIV > 0 ? calcularSegmento("IV", rbt12Interno, receitaAnexoIV, issRetidoIV, false) : null;
+  const segExterno =
+    receitaExportacao > 0 ? calcularSegmento(anexoPrincipal, rbt12Externo ?? params.rbt12, receitaExportacao, 0, true) : null;
+
+  const segs = [segInterno, segIV, segExterno].filter((s): s is Segmento => s != null);
+  const partilha = { irpj: 0, csll: 0, cofins: 0, pis: 0, cpp: 0, iss: 0 };
+  for (const s of segs) for (const k of Object.keys(partilha) as (keyof typeof partilha)[]) partilha[k] += s.partilha[k];
+  const dasTotal = segs.reduce((t, s) => t + s.das, 0);
+
+  // Anexo/faixa exibidos: o do segmento de maior receita (só IV ⇒ "IV").
+  const principal = receitaPrincipal > 0 || !segIV ? (receitaPrincipal > 0 || !segExterno ? segInterno : segExterno) : segIV;
+
+  return {
+    anexo: principal.anexo,
+    faixa: principal.faixa,
+    rbt12: params.rbt12,
+    rbt12Estimado,
+    aliquotaNominal: principal.aliquotaNominal,
+    aliquotaEfetiva: principal.aliquotaEfetiva,
+    receitaMes,
+    receitaIssRetido,
+    receitaExportacao,
+    receitaAnexoIV,
+    dasTotal,
+    partilha,
+  };
+}
+
+type Segmento = {
+  anexo: Anexo;
+  faixa: number;
+  aliquotaNominal: number;
+  aliquotaEfetiva: number;
+  das: number;
+  partilha: { irpj: number; csll: number; cofins: number; pis: number; cpp: number; iss: number };
+};
+
+// Uma fatia da receita num anexo, com o RBT12 do seu mercado. Mercado
+// interno: partilha inteira, menos o ISS da parte retida. Exportação: só
+// IRPJ, CSLL e CPP (sem PIS, COFINS e ISS).
+function calcularSegmento(anexo: Anexo, rbt12: number, receita: number, receitaIssRetido: number, exportacao: boolean): Segmento {
   const faixaInfo = faixaPorRbt12(anexo, rbt12);
   // RBT12 zerado (ex.: primeiro mês com faturamento numa empresa que abriu
   // há alguns meses e ainda não tinha receita): a fórmula divide por zero —
   // a Receita usa a alíquota nominal da 1ª faixa. Confirmado na simulação do
   // PGDAS-D (Clínica Aura, 09/2026: DAS = 6% do faturamento).
-  const aliquotaEfetiva =
-    rbt12 > 0 ? (rbt12 * faixaInfo.aliquota - faixaInfo.deduzir) / rbt12 : faixaInfo.aliquota;
-  const dasSemRetencaoIss = receitaMes * aliquotaEfetiva;
-
+  const aliquotaEfetiva = rbt12 > 0 ? (rbt12 * faixaInfo.aliquota - faixaInfo.deduzir) / rbt12 : faixaInfo.aliquota;
+  const das = receita * aliquotaEfetiva;
+  const p = faixaInfo.partilha;
+  if (exportacao) {
+    const partilha = { irpj: das * p.irpj, csll: das * p.csll, cofins: 0, pis: 0, cpp: das * p.cpp, iss: 0 };
+    return { anexo, faixa: faixaInfo.faixa, aliquotaNominal: faixaInfo.aliquota, aliquotaEfetiva, das: partilha.irpj + partilha.csll + partilha.cpp, partilha };
+  }
   const percentualIss =
-    faixaInfo.partilha.iss === 0
+    p.iss === 0
       ? 0 // faixas acima de R$3,6mi: ISS sai do Simples, recolhido à parte do município — fora do escopo aqui
-      : Math.min(Math.max(aliquotaEfetiva * faixaInfo.partilha.iss, ISS_MINIMO), ISS_MAXIMO);
-
-  // Mercado interno paga a partilha inteira; a exportação só IRPJ, CSLL e CPP.
-  const receitaInterna = receitaMes - receitaExportacao;
-  const dasInterno = receitaInterna * aliquotaEfetiva;
+      : Math.min(Math.max(aliquotaEfetiva * p.iss, ISS_MINIMO), ISS_MAXIMO);
   const partilha = {
-    irpj: dasSemRetencaoIss * faixaInfo.partilha.irpj,
-    csll: dasSemRetencaoIss * faixaInfo.partilha.csll,
-    cofins: dasInterno * faixaInfo.partilha.cofins,
-    pis: dasInterno * faixaInfo.partilha.pis,
-    cpp: dasSemRetencaoIss * faixaInfo.partilha.cpp,
-    iss: (receitaInterna - receitaIssRetido) * percentualIss,
+    irpj: das * p.irpj,
+    csll: das * p.csll,
+    cofins: das * p.cofins,
+    pis: das * p.pis,
+    cpp: das * p.cpp,
+    iss: (receita - receitaIssRetido) * percentualIss,
   };
-  // Sem exportação, igual ao cálculo de sempre (DAS cheio menos o ISS retido).
-  const dasTotal =
-    receitaExportacao > 0
-      ? partilha.irpj + partilha.csll + partilha.cofins + partilha.pis + partilha.cpp + partilha.iss
-      : dasSemRetencaoIss - receitaIssRetido * percentualIss;
-
-  return {
-    anexo,
-    faixa: faixaInfo.faixa,
-    rbt12,
-    rbt12Estimado,
-    aliquotaNominal: faixaInfo.aliquota,
-    aliquotaEfetiva,
-    receitaMes,
-    receitaIssRetido,
-    receitaExportacao,
-    dasTotal,
-    partilha,
-  };
+  // DAS cheio menos o ISS da parte retida (igual ao cálculo de sempre).
+  return { anexo, faixa: faixaInfo.faixa, aliquotaNominal: faixaInfo.aliquota, aliquotaEfetiva, das: das - receitaIssRetido * percentualIss, partilha };
 }
 
 export const IRPJ_ALIQUOTA = 0.15;
