@@ -11,6 +11,9 @@ import {
   dasSalvoBase64Action,
   enviarMensagensAction,
   gerarDasSerenaAction,
+  guiasEmitidasBase64Action,
+  salvarGuiaEmitidaAction,
+  salvarLeituraGuiasRioAction,
   marcarEntregueAction,
   previaMensagensAction,
   revisarSerenaAction,
@@ -81,7 +84,9 @@ export function SerenaPainel({
       recomendadas: linhas.filter((l) => !l.aprovada && l.serena?.ia_decisao === "APROVAR" && l.serena.ia_assinatura === l.assinatura),
       transmitir: linhas.filter((l) => l.aprovada && !l.declarada).map((l) => ({ id: l.id, nome: l.nome })),
       gerarDas: linhas.filter((l) => l.declarada && l.das > 0 && !l.serena?.das_gerado_em),
-      zip: linhas.filter((l) => l.serena?.das_gerado_em && !l.serena.entregue_em),
+      zip: linhas.filter((l) => (l.serena?.das_gerado_em && !l.serena.entregue_em) || l.guiasIss.emitidasAEntregar.length > 0),
+      rio: linhas.filter((l) => l.municipio === "Rio de Janeiro"),
+      guiasPendentes: linhas.filter((l) => l.guiasIss.pendentes.length > 0),
       guia: linhas.filter((l) => l.serena?.entregue_em && !l.serena.mensagem_guia_em && l.temGrupoDigisac),
       verificar: linhas.filter((l) => l.serena?.entregue_em && l.das > 0 && !l.pago),
       cobrar: linhas.filter((l) => l.serena?.entregue_em && l.pago === false && !l.serena.mensagem_cobranca_em && l.temGrupoDigisac),
@@ -163,10 +168,19 @@ export function SerenaPainel({
       const zip = new JSZip();
       const ok: string[] = [];
       const erros = await emLote(g.zip, "Montando ZIP", async (l) => {
-        const r = await dasSalvoBase64Action({ companyId: l.id, competencia });
-        if ("error" in r) return `${l.nome}: ${r.error}`;
-        zip.file(`${l.nome.replace(/[\\/:*?"<>|]/g, "")} - DAS ${competencia}.pdf`, r.base64, { base64: true });
-        ok.push(l.id);
+        const nome = l.nome.replace(/[\\/:*?"<>|]/g, "");
+        let algum = false;
+        if (l.serena?.das_gerado_em && !l.serena.entregue_em) {
+          const r = await dasSalvoBase64Action({ companyId: l.id, competencia });
+          if ("error" in r) return `${l.nome}: ${r.error}`;
+          zip.file(`${nome} - DAS ${competencia}.pdf`, r.base64, { base64: true });
+          algum = true;
+        }
+        for (const gi of await guiasEmitidasBase64Action(l.id)) {
+          zip.file(`${nome} - Guia ISS Rio ${gi.competencia}.pdf`, gi.base64, { base64: true });
+          algum = true;
+        }
+        if (algum) ok.push(l.id);
         return null;
       });
       if (ok.length) {
@@ -205,6 +219,55 @@ export function SerenaPainel({
       const r = await enviarMensagensAction({ competencia, tipo: previa.tipo, mensagens: previa.mensagens.map((m) => ({ companyId: m.companyId, texto: m.texto })) });
       setMsg("error" in r ? { erro: r.error } : { ok: r.mensagem });
       setPrevia(null);
+      router.refresh();
+    });
+  };
+
+  // Guias de ISS no Rio (fora do DAS): leitura pelo robô da Nota Carioca (só leitura).
+  const conferirGuiasRio = () => {
+    if (!window.confirm(`Conferir as guias de ISS na Nota Carioca de ${g.rio.length} empresa(s) do Rio? O robô leva de 30 s a 1 min por empresa (sem custo).`)) return;
+    iniciar(async () => {
+      let comPendencia = 0;
+      const erros = await emLote(g.rio, "Lendo a Nota Carioca", async (l) => {
+        try {
+          const r = await fetch(`/admin/fechamento/iss-rio/conferencia/${l.id}?competencia=${competencia}`, { cache: "no-store" });
+          const corpo = await r.json().catch(() => null);
+          const resultado = r.ok && corpo?.linhas ? { linhas: corpo.linhas, pendentes_anteriores: corpo.pendentes_anteriores ?? [] } : { erro: corpo?.error ?? `HTTP ${r.status}` };
+          const s = await salvarLeituraGuiasRioAction({ companyId: l.id, resultado });
+          if (!("erro" in resultado) && "ok" in s && s.mensagem && !s.mensagem.startsWith("0 ")) comPendencia++;
+          return "erro" in resultado ? `${l.nome}: ${resultado.erro}` : null;
+        } catch {
+          return `${l.nome}: sem resposta`;
+        }
+      });
+      setMsg({ ok: `Guias conferidas: ${g.rio.length - erros.length} empresa(s) lidas, ${comPendencia} com guia pendente${erros.length ? `; ${erros.length} sem leitura (ex.: sem certificado)` : ""}.` });
+      router.refresh();
+    });
+  };
+
+  // Emitir na Nota Carioca cria documento oficial — sempre com confirmação.
+  const emitirGuiasRio = () => {
+    const itens = g.guiasPendentes.flatMap((l) => l.guiasIss.pendentes.map((p) => ({ l, p })));
+    const total = itens.reduce((t, i) => t + (i.p.valor ?? 0), 0);
+    if (!window.confirm(`Emitir ${itens.length} guia(s) de ISS na Nota Carioca (${brl(total)}) de ${g.guiasPendentes.length} empresa(s)? A emissão cria o documento oficial na prefeitura.`)) return;
+    iniciar(async () => {
+      const erros = await emLote(itens, "Emitindo guia", async ({ l, p }) => {
+        try {
+          const r = await fetch(`/admin/empresas/${l.id}/impostos/guia-iss?competencia=${p.competencia}&registrar=0`, { cache: "no-store" });
+          if (!r.ok || !r.headers.get("Content-Type")?.startsWith("application/pdf")) {
+            const corpo = await r.json().catch(() => null);
+            return `${l.nome} ${p.competencia}: ${corpo?.error ?? `HTTP ${r.status}`}`;
+          }
+          const buf = new Uint8Array(await r.arrayBuffer());
+          let bin = "";
+          for (let k = 0; k < buf.length; k += 0x8000) bin += String.fromCharCode(...buf.subarray(k, k + 0x8000));
+          const s = await salvarGuiaEmitidaAction({ companyId: l.id, competencia: p.competencia, base64: btoa(bin) });
+          return "error" in s ? `${l.nome} ${p.competencia}: ${s.error}` : null;
+        } catch {
+          return `${l.nome} ${p.competencia}: sem resposta`;
+        }
+      });
+      setMsg(erros.length ? { erro: `${erros.length} com erro: ${erros.slice(0, 3).join("; ")}` } : { ok: "Guias emitidas — vão no próximo ZIP do eContador." });
       router.refresh();
     });
   };
@@ -340,6 +403,16 @@ export function SerenaPainel({
             Cobrança no Digisac ({g.cobrar.length})
           </button>
         </div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
+          <span className="text-xs font-medium text-foreground/60">ISS do Rio fora do DAS (ex.: 1287 retenção como tomadora):</span>
+          <button type="button" className={btn} disabled={pendente || !g.rio.length} onClick={conferirGuiasRio}>
+            Conferir guias na Nota Carioca ({g.rio.length})
+          </button>
+          <button type="button" className={btn} disabled={pendente || !g.guiasPendentes.length} onClick={emitirGuiasRio}>
+            Emitir guias pendentes ({g.guiasPendentes.reduce((t, l) => t + l.guiasIss.pendentes.length, 0)})
+          </button>
+          <span className="text-[11px] text-foreground/50">As guias emitidas entram no ZIP do eContador (passo 7).</span>
+        </div>
         {(progresso || msg) && (
           <div className={cn("text-sm", msg?.erro ? "text-danger" : "text-foreground/70")}>{progresso ?? msg?.erro ?? msg?.ok}</div>
         )}
@@ -458,6 +531,19 @@ export function SerenaPainel({
                 )}
                 {!l.temGrupoDigisac && <span className="text-foreground/50">sem grupo no Digisac</span>}
               </div>
+              {l.guiasIss.pendentes.length > 0 && (
+                <div className="mt-1 rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] text-rose-900">
+                  Guia ISS Rio pendente (fora do DAS): {l.guiasIss.pendentes.length} mês(es) ·{" "}
+                  {brl(l.guiasIss.pendentes.reduce((t, p) => t + (p.valor ?? 0), 0))}
+                  {l.guiasIss.pendentes.some((p) => p.receita === "1287") ? " · 1287 retenção como tomadora" : ""} (
+                  {l.guiasIss.pendentes.map((p) => p.competencia.slice(5) + "/" + p.competencia.slice(2, 4)).join(", ")})
+                </div>
+              )}
+              {l.guiasIss.emitidasAEntregar.length > 0 && (
+                <div className="mt-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-900">
+                  {l.guiasIss.emitidasAEntregar.length} guia(s) ISS Rio emitida(s) — vão no ZIP do eContador.
+                </div>
+              )}
             </div>
           </div>
         ))}

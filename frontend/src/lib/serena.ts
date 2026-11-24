@@ -60,6 +60,13 @@ export type LinhaSerena = {
   pago: boolean | null;
   serena: SerenaFechamento | null;
   temGrupoDigisac: boolean;
+  /** Guias de ISS na Nota Carioca fora do DAS (Rio): pendentes e emitidas a entregar. */
+  guiasIss: {
+    pendentes: { competencia: string; valor: number | null; receita: string | null }[];
+    emitidasAEntregar: string[];
+    consultadoEm: string | null;
+    erro: string | null;
+  };
   etapas: Etapa[];
   /** Onde parou: "acao" = precisa de gente; "serena" = em andamento automático; "concluida". */
   situacao: "acao" | "serena" | "concluida";
@@ -119,6 +126,28 @@ export async function carregarEsteira(db: Db, competencia: string): Promise<Linh
     .select("id, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro")
     .in("id", ids);
   const syncPor = new Map((syncs ?? []).map((s) => [s.id as string, s]));
+  const [{ data: guias }, { data: consultasGuias }] = await Promise.all([
+    db.from("serena_guias_iss").select("company_id, competencia, valor, receitas, status, entregue_em").in("company_id", ids),
+    db.from("serena_guias_iss_consultas").select("company_id, consultado_em, erro").in("company_id", ids),
+  ]);
+  const consultaGuiaPor = new Map((consultasGuias ?? []).map((c) => [c.company_id as string, c]));
+  const guiasPor = (companyId: string) => {
+    const g = (guias ?? []).filter((x) => x.company_id === companyId);
+    const c = consultaGuiaPor.get(companyId);
+    return {
+      pendentes: g
+        .filter((x) => x.status === "PENDENTE")
+        .map((x) => ({
+          competencia: x.competencia as string,
+          valor: x.valor == null ? null : Number(x.valor),
+          receita: Array.isArray(x.receitas) && x.receitas.length ? String((x.receitas as { codigo: string }[])[0].codigo) : null,
+        }))
+        .sort((a, b) => a.competencia.localeCompare(b.competencia)),
+      emitidasAEntregar: g.filter((x) => x.status === "EMITIDA" && !x.entregue_em).map((x) => x.competencia as string),
+      consultadoEm: (c?.consultado_em as string | undefined) ?? null,
+      erro: (c?.erro as string | undefined) ?? null,
+    };
+  };
   const declaradas = new Set((declaracoes ?? []).filter((d) => d.id_declaracao).map((d) => d.company_id as string));
   const serenaPor = new Map((fechamentos ?? []).map((f) => [f.company_id as string, f as unknown as SerenaFechamento]));
   const comGrupo = new Set((vinculos ?? []).map((v) => v.company_id as string));
@@ -142,6 +171,7 @@ export async function carregarEsteira(db: Db, competencia: string): Promise<Linh
         serena: serenaPor.get(e.id) ?? null,
         temGrupo: comGrupo.has(e.id),
         sync: syncPor.get(e.id) ?? null,
+        guiasIss: guiasPor(e.id),
       });
     }),
   );
@@ -158,6 +188,7 @@ function montarLinha(p: {
   serena: SerenaFechamento | null;
   temGrupo: boolean;
   sync: { ultima_sincronizacao_em: string | null; ultima_sincronizacao_status: string | null; ultima_sincronizacao_erro: string | null } | null;
+  guiasIss: LinhaSerena["guiasIss"];
 }): LinhaSerena {
   const { e, calc, serena } = p;
   const municipio = e.municipality_ibge_code === IBGE_PETROPOLIS ? "Petrópolis" : e.municipality_ibge_code === IBGE_RIO ? "Rio de Janeiro" : "Outro";
@@ -309,6 +340,7 @@ function montarLinha(p: {
     pago: p.pago,
     serena,
     temGrupoDigisac: p.temGrupo,
+    guiasIss: p.guiasIss,
     etapas,
     situacao,
     recado,

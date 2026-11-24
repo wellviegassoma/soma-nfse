@@ -165,6 +165,13 @@ export async function marcarEntregueAction(input: { competencia: string; company
     { onConflict: "company_id,competencia" },
   );
   if (error) return { error: error.message };
+  // Guias de ISS do Rio emitidas que foram no mesmo ZIP.
+  await supabase
+    .from("serena_guias_iss")
+    .update({ entregue_em: agora })
+    .in("company_id", input.companyIds)
+    .eq("status", "EMITIDA")
+    .is("entregue_em", null);
   revalidar();
   return { ok: true, mensagem: `${input.companyIds.length} marcada(s) como entregue(s) no eContador.` };
 }
@@ -280,4 +287,91 @@ export async function dasSalvoBase64Action(input: { companyId: string; competenc
   if (!blob || blob.statusCode !== 200) return { error: "Arquivo não encontrado." };
   const buf = Buffer.from(await new Response(blob.stream).arrayBuffer());
   return { base64: buf.toString("base64") };
+}
+
+// ------------------------------------------- guias de ISS no Rio (fora do DAS)
+
+type LinhaGuiaRio = { competencia: string; valor: number | null; origem: string; documento: string; receitas?: { codigo: string; descricao: string; base: number | null; principal: number | null }[] };
+type PendenteAnteriorRio = { competencia: string; valor_texto: string; origem: string };
+
+function valorBr(t: string): number | null {
+  const n = Number(t.replace(/[^\d,]/g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Grava a leitura da grade de guias da Nota Carioca (robô existente, só
+ * leitura): pendentes ("EMITIR GUIA") viram alerta; as que sumiram da lista
+ * de pendentes e não foram emitidas por aqui saem do alerta.
+ */
+export async function salvarLeituraGuiasRioAction(input: {
+  companyId: string;
+  resultado: { linhas: LinhaGuiaRio[]; pendentes_anteriores: PendenteAnteriorRio[] } | { erro: string };
+}): Promise<Resultado> {
+  await requireSomaStaff();
+  const supabase = await createClient();
+  const agora = new Date().toISOString();
+  if ("erro" in input.resultado) {
+    await supabase.from("serena_guias_iss_consultas").upsert({ company_id: input.companyId, consultado_em: agora, pendentes: 0, erro: input.resultado.erro.slice(0, 300) });
+    return { ok: true };
+  }
+  const pend = new Map<string, { valor: number | null; origem: string; receitas: LinhaGuiaRio["receitas"] | null }>();
+  for (const l of input.resultado.linhas) {
+    if (l.documento.toUpperCase() === "EMITIR GUIA") pend.set(l.competencia, { valor: l.valor, origem: l.origem, receitas: l.receitas ?? null });
+  }
+  for (const p of input.resultado.pendentes_anteriores) {
+    if (!pend.has(p.competencia)) pend.set(p.competencia, { valor: valorBr(p.valor_texto), origem: p.origem, receitas: null });
+  }
+  const { data: atuais } = await supabase.from("serena_guias_iss").select("competencia, status").eq("company_id", input.companyId);
+  const sumiram = (atuais ?? []).filter((a) => a.status === "PENDENTE" && !pend.has(a.competencia as string)).map((a) => a.competencia as string);
+  if (sumiram.length) await supabase.from("serena_guias_iss").delete().eq("company_id", input.companyId).eq("status", "PENDENTE").in("competencia", sumiram);
+  const emitidas = new Set((atuais ?? []).filter((a) => a.status !== "PENDENTE").map((a) => a.competencia as string));
+  const linhas = [...pend.entries()]
+    .filter(([c]) => !emitidas.has(c))
+    .map(([competencia, p]) => ({ company_id: input.companyId, competencia, valor: p.valor, origem: p.origem, receitas: p.receitas, status: "PENDENTE", consultado_em: agora }));
+  if (linhas.length) {
+    const { error } = await supabase.from("serena_guias_iss").upsert(linhas, { onConflict: "company_id,competencia" });
+    if (error) return { error: error.message };
+  }
+  await supabase.from("serena_guias_iss_consultas").upsert({ company_id: input.companyId, consultado_em: agora, pendentes: linhas.length, erro: null });
+  revalidatePath("/admin/serena");
+  return { ok: true, mensagem: `${linhas.length} guia(s) pendente(s).` };
+}
+
+/** Depois que a tela emitiu a guia (rota impostos/guia-iss?registrar=0), guarda o PDF. */
+export async function salvarGuiaEmitidaAction(input: { companyId: string; competencia: string; base64: string }): Promise<Resultado> {
+  await requireSomaStaff();
+  const user = await requireUser();
+  if (!COMPETENCIA.test(input.competencia)) return { error: "Competência inválida." };
+  const supabase = await createClient();
+  const pathname = `serena/guias-iss/${input.competencia}/${input.companyId}.pdf`;
+  await put(pathname, Buffer.from(input.base64, "base64"), { access: "private", contentType: "application/pdf", allowOverwrite: true });
+  const { error } = await supabase
+    .from("serena_guias_iss")
+    .update({ status: "EMITIDA", pdf_blob_pathname: pathname, emitida_em: new Date().toISOString(), emitida_por: user.id })
+    .eq("company_id", input.companyId)
+    .eq("competencia", input.competencia);
+  if (error) return { error: error.message };
+  revalidatePath("/admin/serena");
+  return { ok: true };
+}
+
+/** PDFs das guias de ISS emitidas e ainda não entregues (para o ZIP do eContador). */
+export async function guiasEmitidasBase64Action(companyId: string): Promise<{ competencia: string; base64: string }[]> {
+  await requireSomaStaff();
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("serena_guias_iss")
+    .select("competencia, pdf_blob_pathname")
+    .eq("company_id", companyId)
+    .eq("status", "EMITIDA")
+    .is("entregue_em", null);
+  const out: { competencia: string; base64: string }[] = [];
+  for (const g of data ?? []) {
+    if (!g.pdf_blob_pathname) continue;
+    const blob = await get(g.pdf_blob_pathname as string, { access: "private" });
+    if (!blob || blob.statusCode !== 200) continue;
+    out.push({ competencia: g.competencia as string, base64: Buffer.from(await new Response(blob.stream).arrayBuffer()).toString("base64") });
+  }
+  return out;
 }

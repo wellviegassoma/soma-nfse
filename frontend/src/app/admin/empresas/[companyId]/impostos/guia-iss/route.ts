@@ -107,7 +107,9 @@ export async function GET(
   }
 
   const pdfBytes = await response.arrayBuffer();
-  if (searchParams.get("diagnostico") !== "1") {
+  // ?registrar=0: guia avulsa (ex.: 1287 de empresa do Simples, emitida pela
+  // Serena) — não marca o fechamento de ISS da empresa.
+  if (searchParams.get("diagnostico") !== "1" && searchParams.get("registrar") !== "0") {
     const valorGuia = response.headers.get("X-Valor-Total") || response.headers.get("X-Valor-Iss");
     await registrarFechamentoIssSistema(supabase, {
       companyId,

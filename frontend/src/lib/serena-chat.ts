@@ -124,9 +124,9 @@ export function ferramentasSerena(db: Db, userId: string, competenciaPadrao: str
     }),
 
     listarEmpresas: tool({
-      description: "Lista empresas da carteira por situação: bloqueadas, revisar, prontas (para transmitir), escaladas (com a equipe), sem_grupo (sem grupo do WhatsApp), concluidas, ou todas.",
+      description: "Lista empresas da carteira por situação: bloqueadas, revisar, prontas (para transmitir), escaladas (com a equipe), sem_grupo (sem grupo do WhatsApp), guias_iss (Rio: guia de ISS pendente na Nota Carioca, fora do DAS, ex. 1287), concluidas, ou todas.",
       inputSchema: z.object({
-        filtro: z.enum(["bloqueadas", "revisar", "prontas", "escaladas", "sem_grupo", "concluidas", "todas"]),
+        filtro: z.enum(["bloqueadas", "revisar", "prontas", "escaladas", "sem_grupo", "guias_iss", "concluidas", "todas"]),
         competencia: COMP,
       }),
       execute: async ({ filtro, competencia }) => {
@@ -137,10 +137,18 @@ export function ferramentasSerena(db: Db, userId: string, competenciaPadrao: str
           : filtro === "prontas" ? x.aprovada && !x.declarada
           : filtro === "escaladas" ? x.serena?.ia_decisao === "ESCALAR" && !x.aprovada
           : filtro === "sem_grupo" ? !x.temGrupoDigisac
+          : filtro === "guias_iss" ? x.guiasIss.pendentes.length > 0
           : filtro === "concluidas" ? x.situacao === "concluida"
           : true,
         );
-        return { quantidade: sel.length, empresas: sel.slice(0, 60).map((x) => `${x.nome} — ${x.recado.slice(0, 140)}`) };
+        return {
+          quantidade: sel.length,
+          empresas: sel.slice(0, 60).map((x) =>
+            filtro === "guias_iss"
+              ? `${x.nome} — ${x.guiasIss.pendentes.map((p) => `${p.competencia} R$ ${(p.valor ?? 0).toFixed(2)}${p.receita ? ` (${p.receita})` : ""}`).join("; ")}`
+              : `${x.nome} — ${x.recado.slice(0, 140)}`,
+          ),
+        };
       },
     }),
 
