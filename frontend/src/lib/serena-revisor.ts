@@ -1,14 +1,15 @@
 import "server-only";
 
 // Revisor da Serena: para cada empresa com a conferência do Simples em
-// "Revisar", a IA investiga os dados da empresa com ferramentas de CONSULTA
-// (cadastro, notas do mês, folha, declarações, prefeitura), usando as regras
+// "Revisar", o sistema monta um pacote com os dados da empresa (cadastro,
+// notas do mês, folha, declarações, prefeitura — sem IA) e a IA, numa chamada
+// só, AUDITA a apuração do motor, usando as regras
 // do Simples (skill do Wellington) e o manual do SOMA Gestão, e devolve:
 // decisão (APROVAR/ESCALAR), diagnóstico (problema + causa) e ações com a
 // tela onde corrigir. Bloqueio nunca é decidido aqui; códigos de risco
 // sempre escalam (trava no código, não só no prompt).
 
-import { generateText, Output, stepCountIs, tool } from "ai";
+import { generateText, Output } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -21,18 +22,18 @@ type Db = SupabaseClient;
 
 const Resposta = z.object({
   decisao: z.enum(["APROVAR", "ESCALAR"]),
-  justificativa: z.string().describe("Uma ou duas frases: por que cada motivo está (ou não) explicado pelos dados."),
-  diagnostico: z.string().describe("O problema encontrado e a causa provável, com números (ex.: 'Nota 1234 de R$ 5.000 cancelada no ADN mas somada'). Se está tudo certo, diga isso."),
+  justificativa: z.string().describe("Uma ou duas frases curtas: por que cada motivo está (ou não) explicado pelos dados."),
+  diagnostico: z.string().describe("O problema encontrado e a causa provável, com números (ex.: 'Nota 1234 de R$ 5.000 cancelada no ADN mas somada'). No máximo 700 caracteres, só o essencial. Se está tudo certo, diga isso."),
   acoes: z
     .array(z.object({ acao: z.string().describe("O que fazer, no imperativo."), onde: z.string().describe("Caminho da tela no SOMA Gestão (ex.: '/admin/empresas/{id}/fator-r').") }))
     .describe("Correções sugeridas (vazio se APROVAR sem pendência)."),
   pergunta: z.string().nullable().describe("Se ESCALAR: a pergunta exata para a equipe. Se APROVAR: null."),
 });
 
-const INSTRUCOES = `Você é a Serena, analista fiscal da SOMA Contabilidade (Petrópolis), responsável pela apuração mensal do Simples Nacional de empresas prestadoras de serviço (maioria da saúde). O sistema já calculou o Simples; a conferência automática marcou a empresa como "Revisar" pelos MOTIVOS. Investigue com as ferramentas (consulte o que for preciso, sem repetir consultas) e decida.
+const INSTRUCOES = `Você é a Serena, analista fiscal da SOMA Contabilidade (Petrópolis), responsável pela apuração mensal do Simples Nacional de empresas prestadoras de serviço (maioria da saúde). O motor do sistema já calculou o Simples (o cálculo é exato — não refaça a conta de cabeça); a conferência automática marcou a empresa como "Revisar" pelos MOTIVOS. Todos os dados estão no pacote abaixo. Seu trabalho é AUDITAR a apuração pelas regras do Simples: anexo e Fator R (com pró-labore), ISS retido abatido, RBT12/proporcionalização, notas canceladas, faturamento coerente com a prefeitura e o histórico — e decidir.
 
 Regras de decisão:
-- APROVE apenas quando CADA motivo estiver claramente explicado pelos dados consultados.
+- APROVE apenas quando CADA motivo estiver claramente explicado pelos dados do pacote.
 - ESCALE sempre que houver risco de anexo/Fator R errado, folha faltando, diferença com a prefeitura sem explicação, sublimite, retenção zerando o DAS, Anexo V, mudança de anexo, dado faltando ou qualquer dúvida.
 - Sempre preencha o diagnóstico e as ações com a tela exata do manual (troque {id} pelo id da empresa). Seja específica: cite notas, meses e valores.
 - Nunca invente dados; não use conhecimento externo sobre a empresa. Responda em português.
@@ -47,90 +48,57 @@ function brl(v: number) {
 
 const CODIGOS_RISCO = ["FATOR_R_BORDA", "FOLHA_AUSENTE", "FOLHA_INCOMPLETA", "PREFEITURA_DIVERGENTE", "SUBLIMITE", "SUBLIMITE_PERTO", "TETO_SIMPLES", "RETENCAO_ZEROU_DAS", "ANEXO_V"];
 
-/** Ferramentas de consulta, presas à empresa revisada (a IA não escolhe outra empresa). */
-function ferramentas(db: Db, companyId: string) {
-  return {
-    cadastroEmpresa: tool({
-      description: "Cadastro da empresa: regime, sujeita ao Fator R, data de abertura, município, CMC, ISS, certificado digital e grupo do WhatsApp.",
-      inputSchema: z.object({}),
-      execute: async () => {
-        const [{ data: c }, { data: cert }, { data: grupos }] = await Promise.all([
-          db
-            .from("companies")
-            .select("legal_name, trade_name, tax_regime, sujeito_fator_r, data_abertura, municipality_name, petropolis_cmc, iss_tipo, ativa, cnae")
-            .eq("id", companyId)
-            .maybeSingle(),
-          db.from("certificates").select("expires_at").eq("company_id", companyId).maybeSingle(),
-          db.from("pedido_nota_vinculos").select("grupo_nome").eq("company_id", companyId),
-        ]);
-        return {
-          ...c,
-          petropolis_cmc: c?.petropolis_cmc ? "cadastrado" : "não cadastrado",
-          certificado: cert ? (new Date(cert.expires_at as string) > new Date() ? `válido até ${String(cert.expires_at).slice(0, 10)}` : "VENCIDO") : "não cadastrado",
-          grupos_whatsapp: (grupos ?? []).map((g) => g.grupo_nome),
-        };
-      },
-    }),
-    notasDoMes: tool({
-      description: "Notas emitidas pela empresa numa competência (base nacional/ADN), incluindo canceladas, ISS retido e retenções federais.",
-      inputSchema: z.object({ competencia: z.string().regex(/^\d{4}-\d{2}$/) }),
-      execute: async ({ competencia }) => {
-        const inicio = `${competencia}-01`;
-        const fim = `${somarMeses(competencia, 1)}-01`;
-        const { data } = await db
-          .from("notas_distribuidas")
-          .select("numero, data_emissao, competencia, bate_competencia, cancelada, valor_servico, valor_issqn, tipo_retencao_issqn, valor_ret_irrf, valor_pis, valor_cofins, tomador_nome, direcao")
-          .eq("company_id", companyId)
-          .eq("direcao", "saida")
-          .gte("competencia", inicio)
-          .lt("competencia", fim)
-          .order("data_emissao")
-          .limit(80);
-        return {
-          quantidade: data?.length ?? 0,
-          notas: (data ?? []).map((n) => ({
-            ...n,
-            iss_retido: n.tipo_retencao_issqn === 2 || n.tipo_retencao_issqn === 3,
-          })),
-        };
-      },
-    }),
-    folhaDozeMeses: tool({
-      description: "Folha (salários), pró-labore e FGTS informados por mês nos últimos 13 meses — base do Fator R.",
-      inputSchema: z.object({ competencia: z.string().regex(/^\d{4}-\d{2}$/) }),
-      execute: async ({ competencia }) => {
-        const meses = Array.from({ length: 13 }, (_, i) => somarMeses(competencia, -i));
-        const { data } = await db.from("folha_mensal").select("*").eq("company_id", companyId).in("competencia", meses);
-        return { meses_informados: data?.length ?? 0, folha: data ?? [] };
-      },
-    }),
-    declaracoesAnteriores: tool({
-      description: "Últimas declarações do PGDAS-D transmitidas pelo sistema (competência, valor do DAS, data).",
-      inputSchema: z.object({}),
-      execute: async () => {
-        const { data } = await db
-          .from("integra_contador_pgdas_declaracoes")
-          .select("competencia, valor_total, data_hora_transmissao")
-          .eq("company_id", companyId)
-          .order("competencia", { ascending: false })
-          .limit(8);
-        return { declaracoes: data ?? [] };
-      },
-    }),
-    conferenciaPrefeitura: tool({
-      description: "Faturamento informado pela Prefeitura de Petrópolis nas conferências feitas (por competência).",
-      inputSchema: z.object({}),
-      execute: async () => {
-        const { data } = await db
-          .from("conferencia_prefeitura")
-          .select("competencia, valor_prefeitura, erro, consultado_em")
-          .eq("company_id", companyId)
-          .order("competencia", { ascending: false })
-          .limit(6);
-        return { conferencias: data ?? [] };
-      },
-    }),
-  };
+/**
+ * Pacote de dados da empresa, montado pelo SISTEMA (consultas em paralelo,
+ * sem IA): cadastro, notas do mês, folha de 13 meses, declarações e
+ * conferências com a prefeitura. A IA recebe tudo de uma vez e só audita.
+ */
+async function montarPacote(db: Db, companyId: string, competencia: string): Promise<string> {
+  const meses = Array.from({ length: 13 }, (_, i) => somarMeses(competencia, -i));
+  const [{ data: c }, { data: cert }, { data: grupos }, { data: notas }, { data: folha }, { data: decl }, { data: pref }] = await Promise.all([
+    db
+      .from("companies")
+      .select("tax_regime, sujeito_fator_r, data_abertura, municipality_name, petropolis_cmc, iss_tipo, cnae")
+      .eq("id", companyId)
+      .maybeSingle(),
+    db.from("certificates").select("expires_at").eq("company_id", companyId).maybeSingle(),
+    db.from("pedido_nota_vinculos").select("grupo_nome").eq("company_id", companyId),
+    db
+      .from("notas_distribuidas")
+      .select("numero, data_emissao, competencia, cancelada, valor_servico, valor_issqn, tipo_retencao_issqn, valor_ret_irrf, valor_pis, valor_cofins, tomador_nome")
+      .eq("company_id", companyId)
+      .eq("direcao", "saida")
+      .gte("competencia", `${competencia}-01`)
+      .lt("competencia", `${somarMeses(competencia, 1)}-01`)
+      .order("data_emissao")
+      .limit(60),
+    db.from("folha_mensal").select("competencia, valor").eq("company_id", companyId).in("competencia", meses),
+    db
+      .from("integra_contador_pgdas_declaracoes")
+      .select("competencia, valor_total")
+      .eq("company_id", companyId)
+      .order("competencia", { ascending: false })
+      .limit(6),
+    db
+      .from("conferencia_prefeitura")
+      .select("competencia, valor_prefeitura, valor_notas, erro")
+      .eq("company_id", companyId)
+      .order("competencia", { ascending: false })
+      .limit(4),
+  ]);
+  const certTxt = cert ? (new Date(cert.expires_at as string) > new Date() ? `válido até ${String(cert.expires_at).slice(0, 10)}` : "VENCIDO") : "não cadastrado";
+  const linhasNotas = (notas ?? []).map((n) => {
+    const issRetido = n.tipo_retencao_issqn === 2 || n.tipo_retencao_issqn === 3;
+    return `nº ${n.numero ?? "?"} ${String(n.data_emissao ?? "").slice(0, 10)} ${brl(Number(n.valor_servico ?? 0))}${n.cancelada ? " CANCELADA" : ""}${issRetido ? ` ISS RETIDO ${brl(Number(n.valor_issqn ?? 0))}` : ""}${Number(n.valor_ret_irrf ?? 0) ? ` IRRF ${brl(Number(n.valor_ret_irrf))}` : ""}${Number(n.valor_pis ?? 0) + Number(n.valor_cofins ?? 0) ? ` PIS/COFINS ret. ${brl(Number(n.valor_pis ?? 0) + Number(n.valor_cofins ?? 0))}` : ""} · ${(n.tomador_nome ?? "").slice(0, 40)}`;
+  });
+  const folhaPor = new Map((folha ?? []).map((f) => [f.competencia as string, Number(f.valor)]));
+  return [
+    `CADASTRO: regime ${c?.tax_regime ?? "?"} · sujeita ao Fator R: ${c?.sujeito_fator_r ? "sim" : "não"} · abertura ${c?.data_abertura ?? "não informada"} · município ${c?.municipality_name ?? "?"} · CMC Petrópolis ${c?.petropolis_cmc ? "cadastrado" : "não cadastrado"} · ISS ${c?.iss_tipo ?? "?"} · CNAE ${c?.cnae ?? "?"} · certificado ${certTxt} · grupos WhatsApp: ${(grupos ?? []).map((g) => g.grupo_nome).join(", ") || "nenhum"}`,
+    `NOTAS EMITIDAS NA COMPETÊNCIA (base nacional, ${linhasNotas.length}${linhasNotas.length === 60 ? "+, lista cortada" : ""}):\n${linhasNotas.join("\n") || "(nenhuma)"}`,
+    `FOLHA INFORMADA (13 meses): ${meses.map((m) => `${m}: ${folhaPor.has(m) ? brl(folhaPor.get(m)!) : "não informada"}`).join(" | ")}`,
+    `PGDAS-D TRANSMITIDOS PELO SISTEMA: ${(decl ?? []).map((d) => `${d.competencia}: ${brl(Number(d.valor_total ?? 0))}`).join(" | ") || "nenhum"}`,
+    `CONFERÊNCIAS COM A PREFEITURA: ${(pref ?? []).map((p) => `${p.competencia}: ${p.erro ? `erro (${String(p.erro).slice(0, 80)})` : `prefeitura ${brl(Number(p.valor_prefeitura ?? 0))} × notas ${brl(Number(p.valor_notas ?? 0))}`}`).join(" | ") || "nenhuma"}`,
+  ].join("\n\n");
 }
 
 export type ResultadoRevisao = { companyId: string; decisao: "APROVAR" | "ESCALAR"; justificativa: string; pergunta: string | null; custoUsd: number | null };
@@ -168,14 +136,13 @@ export async function revisarComIa(db: Db, competencia: string, companyIds: stri
     ].join("\n\n");
 
     try {
+      const pacote = await montarPacote(db, e.id, competencia);
       const r = await generateText({
         model: anthropic(modelo),
-        tools: ferramentas(db, e.id),
-        stopWhen: stepCountIs(8),
         output: Output.object({ schema: Resposta }),
         instructions: INSTRUCOES,
-        messages: [{ role: "user", content: `<dados>\n${resumo}\n</dados>` }],
-        maxOutputTokens: 2000,
+        messages: [{ role: "user", content: `<dados>\n${resumo}\n\n${pacote}\n</dados>` }],
+        maxOutputTokens: 5000,
       });
       const p = precos[modelo];
       const custo = p ? ((r.totalUsage?.inputTokens ?? r.usage.inputTokens ?? 0) * p[0] + (r.totalUsage?.outputTokens ?? r.usage.outputTokens ?? 0) * p[1]) / 1e6 : null;

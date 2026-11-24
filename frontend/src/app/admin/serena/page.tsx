@@ -4,6 +4,7 @@ import { carregarEsteira } from "@/lib/serena";
 import { listarEquipe } from "@/lib/tarefas";
 import { revisoresSerena } from "@/lib/actions/serena";
 import { SerenaPainel } from "./SerenaPainel";
+import type { ResumoRotina } from "@/lib/serena-rotina";
 
 export const metadata = { title: "Serena — Simples Nacional" };
 export const maxDuration = 300;
@@ -19,6 +20,19 @@ export default async function SerenaPage(props: PageProps<"/admin/serena">) {
   const sp = await props.searchParams;
   const competencia = typeof sp.competencia === "string" && COMPETENCIA.test(sp.competencia) ? sp.competencia : mesAnteriorBrasilia();
   const supabase = await createClient();
-  const [linhas, equipe, revisores] = await Promise.all([carregarEsteira(supabase, competencia), listarEquipe(), revisoresSerena()]);
-  return <SerenaPainel competencia={competencia} linhas={linhas} equipe={equipe} revisores={revisores} />;
+  const [linhas, equipe, revisores, { data: rotina }] = await Promise.all([
+    carregarEsteira(supabase, competencia),
+    listarEquipe(),
+    revisoresSerena(),
+    supabase.from("serena_config").select("valor").eq("chave", "ultima_rotina").maybeSingle(),
+  ]);
+  return (
+    <SerenaPainel
+      competencia={competencia}
+      linhas={linhas}
+      equipe={equipe}
+      revisores={revisores}
+      ultimaRotina={(rotina?.valor as ResumoRotina | undefined) ?? null}
+    />
+  );
 }

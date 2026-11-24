@@ -19,6 +19,7 @@ import {
 } from "@/lib/actions/serena";
 import { rotuloCompetencia, somarMeses } from "@/lib/tarefas-comum";
 import type { EstadoEtapa, LinhaSerena } from "@/lib/serena";
+import type { ResumoRotina } from "@/lib/serena-rotina";
 import { BuscarTodasButton } from "../fechamento/BuscarTodasButton";
 import { ConferirPrefeituraLoteButton } from "../fechamento/simples/ConferirPrefeituraLoteButton";
 import { EnviarSimplesLoteButton } from "../fechamento/simples/EnviarSimplesLoteButton";
@@ -42,11 +43,13 @@ export function SerenaPainel({
   linhas,
   equipe,
   revisores,
+  ultimaRotina,
 }: {
   competencia: string;
   linhas: LinhaSerena[];
   equipe: { id: string; nome: string }[];
   revisores: string[];
+  ultimaRotina: ResumoRotina | null;
 }) {
   const router = useRouter();
   const [filtro, setFiltro] = useState<Filtro>("acao");
@@ -270,7 +273,14 @@ export function SerenaPainel({
 
       {/* Esteira do mês: ações em lote, na ordem */}
       <Card className="flex flex-col gap-3 p-4">
-        <div className="text-sm font-semibold">Fluxo do mês (na ordem)</div>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="text-sm font-semibold">Fluxo do mês (na ordem)</div>
+          <div className="text-xs text-foreground/60">
+            {ultimaRotina
+              ? `Rotina automática (motor 7h30 e 11h30, IA 8h30 e 12h30, dias 1–25): última em ${new Date(ultimaRotina.em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} — ${ultimaRotina.conferidas} conferida(s) na prefeitura, ${ultimaRotina.revisadas} revisada(s) (${ultimaRotina.aprovadas} para aprovar, ${ultimaRotina.escaladas} para a equipe)${ultimaRotina.faltamRevisar ? `, faltam ${ultimaRotina.faltamRevisar}` : ""}${ultimaRotina.erro ? ` · erro: ${ultimaRotina.erro}` : ""}`
+              : "Rotina automática: motor às 7h30 e 11h30, auditoria com IA às 8h30 e 12h30 (dias 1–25) — ainda não rodou."}
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-foreground/50">1.</span>
           <div className="[&_button]:!h-8 [&_button]:!text-xs">

@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSomaStaff, requireUser } from "@/lib/auth";
 import { revisarComIa } from "@/lib/serena-revisor";
 import { aprovarConferenciaSimplesLote } from "@/lib/actions/conferencia-simples";
-import { conferirPrefeituraPetropolis } from "@/lib/actions/conferencia-prefeitura";
+import { conferirPetropolis, escalarParaRevisores } from "@/lib/serena-rotina";
 import { IBGE_PETROPOLIS } from "@/lib/tarefas-comum";
 import { enviarTexto, servicoDoContato } from "@/lib/digisac/client";
 import { listarEquipe } from "@/lib/tarefas";
@@ -58,6 +58,7 @@ export async function revisarSerenaAction(input: { competencia: string; companyI
   { ok: true; aprovadas: number; escaladas: number; custoUsd: number } | { error: string }
 > {
   await requireSomaStaff();
+  const user = await requireUser();
   if (!COMPETENCIA.test(input.competencia)) return { error: "Competência inválida." };
   const supabase = await createClient();
   try {
@@ -71,70 +72,18 @@ export async function revisarSerenaAction(input: { competencia: string; companyI
     const jaConferidas = new Set((conf ?? []).map((c) => c.company_id as string));
     for (const e of emp ?? []) {
       if (e.municipality_ibge_code === IBGE_PETROPOLIS && !jaConferidas.has(e.id as string)) {
-        await conferirPrefeituraPetropolis(e.id as string, input.competencia).catch(() => null);
+        await conferirPetropolis(supabase, e.id as string, input.competencia, user.id).catch(() => null);
       }
     }
     const res = await revisarComIa(supabase, input.competencia, ids);
-    const revisores = await revisoresSerena();
-    let aprovadas = 0;
-    let escaladas = 0;
-    let custo = 0;
-    for (const r of res) {
-      custo += r.custoUsd ?? 0;
-      if (r.decisao === "APROVAR") {
-        aprovadas++;
-        continue;
-      }
-      escaladas++;
-      const { data: f } = await supabase
-        .from("serena_fechamentos")
-        .select("tarefa_id, ia_diagnostico, ia_acoes")
-        .eq("company_id", r.companyId)
-        .eq("competencia", input.competencia)
-        .maybeSingle();
-      if (f?.tarefa_id) {
-        // Já existe tarefa: só registra a nova pergunta nela.
-        await supabase.from("tarefa_eventos").insert({ tarefa_id: f.tarefa_id, tipo: "COMENTARIO", comentario: `Serena: ${r.pergunta ?? r.justificativa}` });
-        continue;
-      }
-      const responsavel = revisores.length ? revisores[(escaladas - 1) % revisores.length] : null;
-      const { data: dep } = await supabase.from("atendimento_departamentos").select("id").eq("nome", "Fiscal").maybeSingle();
-      const prazo = `${somarMeses(input.competencia, 1)}-12`;
-      const { data: t, error } = await supabase
-        .from("tarefas")
-        .insert({
-          modelo_id: null,
-          titulo: `Serena: revisar Simples ${rotuloCompetencia(input.competencia)}`,
-          descricao: [
-            r.pergunta ?? r.justificativa,
-            f?.ia_diagnostico ? `Diagnóstico da Serena: ${f.ia_diagnostico}` : `Análise da Serena: ${r.justificativa}`,
-            Array.isArray(f?.ia_acoes) && f!.ia_acoes.length
-              ? `O que fazer:\n${(f!.ia_acoes as { acao: string; onde: string }[]).map((a) => `- ${a.acao} (${a.onde})`).join("\n")}`
-              : null,
-            'Depois de corrigir, rode "Serena revisar" de novo ou aprove na Central do Simples — a Serena segue sozinha.',
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-          company_id: r.companyId,
-          competencia: input.competencia,
-          departamento_id: dep?.id,
-          responsavel_id: responsavel,
-          prazo_meta: prazo,
-          prazo_legal: `${somarMeses(input.competencia, 1)}-20`,
-        })
-        .select("id")
-        .single();
-      if (!error && t) {
-        await supabase
-          .from("serena_fechamentos")
-          .update({ tarefa_id: t.id, escalado_para: responsavel })
-          .eq("company_id", r.companyId)
-          .eq("competencia", input.competencia);
-        await supabase.from("tarefa_eventos").insert({ tarefa_id: t.id, tipo: "CRIADA", comentario: "Serena" });
-      }
-    }
+    await escalarParaRevisores(supabase, input.competencia, res);
     revalidar();
-    return { ok: true, aprovadas, escaladas, custoUsd: custo };
+    return {
+      ok: true,
+      aprovadas: res.filter((r) => r.decisao === "APROVAR").length,
+      escaladas: res.filter((r) => r.decisao === "ESCALAR").length,
+      custoUsd: res.reduce((t, r) => t + (r.custoUsd ?? 0), 0),
+    };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
