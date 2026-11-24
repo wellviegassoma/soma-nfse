@@ -745,6 +745,15 @@ class ClienteNotaCarioca:
                     self._page.click(seletor_botao, timeout=20_000)
                 except PlaywrightTimeoutError:
                     pass
+                # Espera a NAVEGAÇÃO até guiaprint.aspx, não só o "load": logo
+                # depois do clique a página antiga ainda está carregada, o
+                # wait_for_load_state voltava na hora e o page.content() abaixo
+                # pegava a troca de página no meio ("page is navigating") —
+                # HTTP 500 em produção (Sorriso da Praça, 24/11/2026).
+                try:
+                    self._page.wait_for_url(lambda url: "guiaprint.aspx" in url, timeout=45_000)
+                except PlaywrightTimeoutError:
+                    pass
                 try:
                     self._page.wait_for_load_state("load", timeout=45_000)
                 except PlaywrightTimeoutError:
