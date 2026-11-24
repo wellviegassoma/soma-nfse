@@ -35,7 +35,8 @@ Telas:
 - Empresa: /admin/empresas/{companyId}/dados-fiscais (regime, "sujeita ao Fator R", data de abertura, município, CMC, grupo do WhatsApp), /certificado, /rbt12 (receita manual de meses sem nota no sistema, ex.: empresa vinda de outro escritório), /fator-r (folha por mês), /fechamento, /impostos.
 - Folha em lote: /admin/fechamento/folha (PDF do Resumo Geral do sistema de folha de todas as empresas) — alimenta o Fator R.
 - Notas: a Rotina de Fechamento (Automação › Etapa 1, ou "Buscar notas" na Serena) baixa as notas emitidas/recebidas da base nacional (ADN) pela procuração.
-- Conferência com a Prefeitura de Petrópolis: botão "Conferir prefeitura" (consulta o faturamento declarado na prefeitura). Rio: ainda sem conferência automática no Simples (só base nacional).
+- Conferência com a Prefeitura de Petrópolis: botão "Conferir prefeitura" (consulta o faturamento declarado na prefeitura).
+- Rio de Janeiro: o Simples emite pela NFS-e Nacional (a Nota Carioca mostra as notas como "NFS-e Nacional"), então a base nacional (ADN) é a fonte completa das notas — PREFEITURA_NAO_CONFERIDA de empresa do Rio está explicado se a busca de notas deu certo. Na Nota Carioca podem existir guias de ISS do código 1287 (retenção como TOMADORA de prestadores do Simples): é obrigação à parte do DAS — apontar, não misturar com o faturamento.
 
 Motivos da conferência e o que fazer:
 - SEM_RECEITA: confirmar com o histórico; se a empresa costuma faturar, pode haver nota fora da base nacional → buscar notas de novo / conferir prefeitura.

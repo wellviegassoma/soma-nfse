@@ -114,6 +114,11 @@ export async function carregarEsteira(db: Db, competencia: string): Promise<Linh
     db.from("serena_fechamentos").select("*").eq("competencia", competencia).in("company_id", ids),
     db.from("pedido_nota_vinculos").select("company_id").in("company_id", ids),
   ]);
+  const { data: syncs } = await db
+    .from("companies")
+    .select("id, ultima_sincronizacao_em, ultima_sincronizacao_status, ultima_sincronizacao_erro")
+    .in("id", ids);
+  const syncPor = new Map((syncs ?? []).map((s) => [s.id as string, s]));
   const declaradas = new Set((declaracoes ?? []).filter((d) => d.id_declaracao).map((d) => d.company_id as string));
   const serenaPor = new Map((fechamentos ?? []).map((f) => [f.company_id as string, f as unknown as SerenaFechamento]));
   const comGrupo = new Set((vinculos ?? []).map((v) => v.company_id as string));
@@ -136,6 +141,7 @@ export async function carregarEsteira(db: Db, competencia: string): Promise<Linh
         pago: pag ? pag.status === "pago" : null,
         serena: serenaPor.get(e.id) ?? null,
         temGrupo: comGrupo.has(e.id),
+        sync: syncPor.get(e.id) ?? null,
       });
     }),
   );
@@ -151,6 +157,7 @@ function montarLinha(p: {
   pago: boolean | null;
   serena: SerenaFechamento | null;
   temGrupo: boolean;
+  sync: { ultima_sincronizacao_em: string | null; ultima_sincronizacao_status: string | null; ultima_sincronizacao_erro: string | null } | null;
 }): LinhaSerena {
   const { e, calc, serena } = p;
   const municipio = e.municipality_ibge_code === IBGE_PETROPOLIS ? "Petrópolis" : e.municipality_ibge_code === IBGE_RIO ? "Rio de Janeiro" : "Outro";
@@ -159,12 +166,13 @@ function montarLinha(p: {
   const etapas: Etapa[] = [];
 
   // 1. Notas
+  const erroBusca = p.sync?.ultima_sincronizacao_status === "erro";
   etapas.push({
     chave: "notas",
     nome: "Notas",
-    estado: "ok",
-    titulo: p.qtdNotas ? "Buscadas" : "Sem notas",
-    detalhe: `${p.qtdNotas} nota(s) · ${brl(calc.receitaMes)}`,
+    estado: erroBusca ? "problema" : "ok",
+    titulo: erroBusca ? "Erro na busca" : p.qtdNotas ? "Buscadas" : "Sem notas",
+    detalhe: erroBusca ? (p.sync?.ultima_sincronizacao_erro ?? "").slice(0, 60) : `${p.qtdNotas} nota(s) · ${brl(calc.receitaMes)}`,
   });
 
   // 2. Faturamento na prefeitura
@@ -182,7 +190,14 @@ function montarLinha(p: {
       });
     }
   } else {
-    etapas.push({ chave: "prefeitura", nome: "Prefeitura", estado: "pendente", titulo: "Só base nacional", detalhe: "Nota Carioca ainda não conferida" });
+    // Rio: o Simples emite pela NFS-e Nacional (confirmado na Nota Carioca em
+    // 24/11/2026 — a grade chama as notas de "NFS-e Nacional"), então a base
+    // nacional já é a fonte completa; vale a busca de notas ter dado certo.
+    etapas.push(
+      erroBusca
+        ? { chave: "prefeitura", nome: "Prefeitura", estado: "problema", titulo: "Base nacional com erro", detalhe: "refazer a busca de notas" }
+        : { chave: "prefeitura", nome: "Prefeitura", estado: "ok", titulo: "NFS-e Nacional", detalhe: "Rio emite pela base nacional" },
+    );
   }
 
   // 3. Cálculo
