@@ -12,7 +12,9 @@ export const maxDuration = 300;
 const COMPETENCIA = /^\d{4}-\d{2}$/;
 // O Newton assume a partir de novembro/2026; antes disso a equipe declarou
 // por fora (prova de outubro) — a tela fica só para consulta.
-const INICIO_NEWTON = "2026-11";
+// Liberado a partir de outubro/2026 (pedido do Wellington, 24/11): o que a
+// equipe já transmitiu por fora aparece como "declarada por fora".
+const INICIO_NEWTON = "2026-10";
 
 /**
  * Newton: carteira de IA do Lucro Presumido (Petrópolis + Rio). Mesma lógica

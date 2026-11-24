@@ -102,9 +102,9 @@ export function NewtonPainel({
       petropolis: linhas.filter((l) => l.municipio === "Petrópolis").map((l) => ({ id: l.id, nome: l.nome })),
       revisar: linhas.filter((l) => l.conferencia === "REVISAR" && !l.aprovada && !iaAtual(l)),
       recomendadas: linhas.filter((l) => !l.aprovada && l.conferencia === "REVISAR" && l.newton?.ia_decisao === "APROVAR" && l.newton.ia_assinatura === l.assinatura),
-      encerrarMit: linhas.filter((l) => l.aprovada && !l.mitEncerrado),
+      encerrarMit: linhas.filter((l) => l.aprovada && !l.mitEncerrado && !l.dctfwebFora),
       transmitirDctf: linhas.filter((l) => l.mitEncerrado && !l.newton?.dctfweb_transmitida_em),
-      gerarDarf: linhas.filter((l) => l.newton?.dctfweb_transmitida_em && temDarf(l) && !l.newton.darf_gerado_em),
+      gerarDarf: linhas.filter((l) => (l.newton?.dctfweb_transmitida_em || l.dctfwebFora) && temDarf(l) && !l.newton?.darf_gerado_em),
       zip: linhas.filter((l) => l.newton?.darf_gerado_em && !l.newton.entregue_em),
       guia: linhas.filter((l) => l.newton?.entregue_em && !l.newton.mensagem_guia_em && l.temGrupoDigisac),
       verificar: linhas.filter((l) => l.newton?.entregue_em && temDarf(l) && !l.newton.pago),
@@ -179,7 +179,7 @@ export function NewtonPainel({
   // Encerrar o MIT é transmissão oficial — confirmação, empresa a empresa, rota existente.
   const encerrarMit = () => {
     const total = g.encerrarMit.reduce((t, l) => t + l.calc.total, 0);
-    if (!window.confirm(`Encerrar oficialmente o MIT de ${g.encerrarMit.length} empresa(s) (${brl(total)} em PIS/COFINS/IRPJ/CSLL) na competência ${rotuloCompetencia(competencia)}? É uma transmissão de verdade por empresa.`)) return;
+    if (!window.confirm(`Encerrar oficialmente o MIT de ${g.encerrarMit.length} empresa(s) (${brl(total)} em PIS/COFINS/IRPJ/CSLL) na competência ${rotuloCompetencia(competencia)}? É uma transmissão de verdade por empresa. As que a equipe já declarou por fora (DCTFWeb com recibo na última consulta) ficaram de fora — confirme que ninguém declarou as demais depois disso.`)) return;
     iniciar(async () => {
       const erros = await emLote(g.encerrarMit, "Encerrando MIT", async (l) => {
         try {
@@ -340,6 +340,7 @@ export function NewtonPainel({
     }
     if (chave === "mit") {
       if (l.mitEncerrado) return setMsg({ ok: `${nome}: MIT já encerrado.` });
+      if (l.dctfwebFora) return setMsg({ ok: `${nome}: já declarada pela equipe por fora (DCTFWeb recibo ${l.dctfwebFora.recibo}).` });
       if (!l.aprovada) return setMsg({ erro: `${nome}: aprove o cálculo (ou aceite os motivos) antes do MIT.` });
       if (!window.confirm(`Encerrar oficialmente o MIT de ${nome} (${rotuloCompetencia(competencia)}) — ${brl(l.calc.total)}? É transmissão de verdade.`)) return;
       return rodar(async () => {
@@ -353,7 +354,7 @@ export function NewtonPainel({
       }, "MIT encerrado.");
     }
     if (chave === "dctfweb") {
-      if (l.newton?.dctfweb_transmitida_em) return setMsg({ ok: `${nome}: DCTFWeb já transmitida.` });
+      if (l.newton?.dctfweb_transmitida_em || l.dctfwebFora) return setMsg({ ok: `${nome}: DCTFWeb já transmitida.` });
       if (!l.mitEncerrado) return setMsg({ erro: `${nome}: encerre o MIT antes da DCTFWeb.` });
       if (!window.confirm(`Transmitir a DCTFWeb de ${nome} (${rotuloCompetencia(competencia)})? Junta o MIT e a folha do eSocial — confirme que o DP já fechou a folha.`)) return;
       return rodar(async () => {
@@ -365,8 +366,8 @@ export function NewtonPainel({
     }
     if (chave === "darf") {
       if (l.calc.total <= 0.009) return setMsg({ ok: `${nome}: sem DARF neste mês.` });
-      if (!l.newton?.dctfweb_transmitida_em) return setMsg({ erro: `${nome}: transmita a DCTFWeb antes do DARF.` });
-      if (l.newton.darf_gerado_em) return setMsg({ ok: `${nome}: DARF já salvo.` });
+      if (!l.newton?.dctfweb_transmitida_em && !l.dctfwebFora) return setMsg({ erro: `${nome}: transmita a DCTFWeb antes do DARF.` });
+      if (l.newton?.darf_gerado_em) return setMsg({ ok: `${nome}: DARF já salvo.` });
       if (!window.confirm(`Gerar e salvar o DARF de ${nome}? (consulta cobrada do Integra Contador, uma vez)`)) return;
       return rodar(() => gerarDarfNewtonAction({ companyId: l.id, competencia }), "DARF salvo.");
     }

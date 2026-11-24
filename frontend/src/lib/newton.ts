@@ -155,6 +155,8 @@ export type LinhaNewton = {
   assinatura: string;
   aprovada: boolean;
   mitEncerrado: boolean;
+  /** DCTFWeb do mês já transmitida fora do Newton (consulta guardada do Integra Contador). */
+  dctfwebFora: { recibo: string; consultadoEm: string } | null;
   newton: NewtonFechamento | null;
   temGrupoDigisac: boolean;
   etapas: Etapa[];
@@ -406,6 +408,38 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
     db.from("newton_fechamentos").select("*").eq("competencia", competencia).in("company_id", ids),
     db.from("pedido_nota_vinculos").select("company_id").in("company_id", ids),
   ]);
+  // DCTFWeb já transmitida por fora: última consulta guardada (CONSXMLDECLARACAO38)
+  // da competência com recibo e débito de PIS/COFINS.
+  const [ano, mes] = competencia.split("-");
+  const { data: dctfCache } = await db
+    .from("integra_contador_cache")
+    .select("contribuinte_cnpj, resposta, fetched_at")
+    .eq("id_servico", "CONSXMLDECLARACAO38")
+    .in("contribuinte_cnpj", empresas.map((e) => (e.cnpj ?? "").replace(/\D/g, "")).filter(Boolean))
+    .order("fetched_at", { ascending: false });
+  const foraPorCnpj = new Map<string, { recibo: string; consultadoEm: string }>();
+  for (const r of dctfCache ?? []) {
+    const cnpj = r.contribuinte_cnpj as string;
+    if (foraPorCnpj.has(cnpj)) continue;
+    const resp = r.resposta as { pedidoDados?: { dados?: string }; dados?: string } | null;
+    const pedido = (() => {
+      try {
+        return JSON.parse(resp?.pedidoDados?.dados ?? "{}") as { anoPA?: string; mesPA?: string };
+      } catch {
+        return {};
+      }
+    })();
+    if (pedido.anoPA !== ano || pedido.mesPA !== mes) continue;
+    let xml = "";
+    try {
+      xml = Buffer.from((JSON.parse(resp?.dados ?? "{}") as { XMLStringBase64?: string }).XMLStringBase64 ?? "", "base64").toString("utf8");
+    } catch {
+      continue;
+    }
+    const recibo = xml.match(/<numRecibo>(\d+)<\/numRecibo>/)?.[1];
+    if (recibo && /<ctCodGrupo>(20|18)<\/ctCodGrupo>/.test(xml)) foraPorCnpj.set(cnpj, { recibo, consultadoEm: r.fetched_at as string });
+  }
+
   const [{ data: centrais }, { data: pagamentosIss }] = await Promise.all([
     db.from("iss_conferencias").select("company_id, municipio, status, mensagem, conferido_em").eq("competencia", competencia).in("company_id", ids),
     db.from("iss_pagamentos").select("company_id, status, dados, verificado_em").eq("competencia", competencia).in("company_id", ids),
@@ -477,6 +511,7 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
       assinatura,
       aprovada,
       mitEncerrado: mitPor.has(e.id),
+      dctfwebFora: mitPor.has(e.id) ? null : (foraPorCnpj.get((e.cnpj ?? "").replace(/\D/g, "")) ?? null),
       newton,
       temGrupo: comGrupo.has(e.id),
     });
@@ -508,6 +543,7 @@ function montarLinha(p: {
   assinatura: string;
   aprovada: boolean;
   mitEncerrado: boolean;
+  dctfwebFora: LinhaNewton["dctfwebFora"];
   newton: NewtonFechamento | null;
   temGrupo: boolean;
 }): LinhaNewton {
@@ -556,8 +592,15 @@ function montarLinha(p: {
     p.aprovada ? (p.conferencia === "OK" ? "OK" : "Aprovada") : p.conferencia === "REVISAR" ? "Revisar" : "Bloqueada",
     p.motivos.length ? `${p.motivos.length} motivo(s)` : undefined,
   );
-  add("mit", "MIT", p.mitEncerrado ? "ok" : "pendente", p.mitEncerrado ? "Encerrado" : "Não encerrado");
-  add("dctfweb", "DCTFWeb", newton?.dctfweb_transmitida_em ? "ok" : "pendente", newton?.dctfweb_transmitida_em ? "Transmitida" : "Não transmitida");
+  const fora = p.dctfwebFora;
+  add("mit", "MIT", p.mitEncerrado || fora ? "ok" : "pendente", p.mitEncerrado ? "Encerrado" : fora ? "Declarado por fora" : "Não encerrado");
+  add(
+    "dctfweb",
+    "DCTFWeb",
+    newton?.dctfweb_transmitida_em || fora ? "ok" : "pendente",
+    newton?.dctfweb_transmitida_em ? "Transmitida" : fora ? "Transmitida por fora" : "Não transmitida",
+    fora ? `recibo ${fora.recibo.slice(-6)}` : undefined,
+  );
   const semDarf = calc.total <= 0.009;
   add("darf", "DARF", semDarf ? "na" : newton?.darf_gerado_em ? "ok" : "pendente", semDarf ? "Sem DARF" : newton?.darf_gerado_em ? "Gerado" : "Não gerado", newton?.darf_valor != null ? brl(Number(newton.darf_valor)) : undefined);
   add("entrega", "Entrega", newton?.entregue_em ? "ok" : semDarf ? "na" : "pendente", newton?.entregue_em ? "eContador" : "Não entregue");
@@ -577,10 +620,12 @@ function montarLinha(p: {
       situacao = "acao";
       recado = `Revisei e recomendo aprovar: ${newton!.ia_justificativa ?? ""}`;
     } else recado = `Aguardando minha revisão: ${p.motivos.map((m) => m.texto).join(" ")}`;
-  } else if (!p.mitEncerrado) {
+  } else if (fora && !newton?.darf_gerado_em) {
+    recado = `Declarada pela equipe por fora (DCTFWeb recibo ${fora.recibo}). Se precisar, gere o DARF e entregue pelos botões.`;
+  } else if (!p.mitEncerrado && !fora) {
     situacao = "acao";
     recado = calc.total > 0 ? `Pronta para encerrar o MIT (${brl(calc.total)}).` : "Pronta para encerrar o MIT (sem débito no mês).";
-  } else if (!newton?.dctfweb_transmitida_em) {
+  } else if (!newton?.dctfweb_transmitida_em && !fora) {
     situacao = "acao";
     recado = "MIT encerrado — falta transmitir a DCTFWeb.";
   } else if (semDarf) {
@@ -614,6 +659,7 @@ function montarLinha(p: {
     assinatura: p.assinatura,
     aprovada: p.aprovada,
     mitEncerrado: p.mitEncerrado,
+    dctfwebFora: p.dctfwebFora,
     newton,
     temGrupoDigisac: p.temGrupo,
     etapas,
