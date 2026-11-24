@@ -1,185 +1,155 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { cn } from "@/lib/cn";
-import { STATUS_PILL_CLASSES, formatarEndereco, formatarDocumentoEmpresa } from "@/lib/formatters";
-import { TAX_REGIME_LABELS, type Company } from "@/lib/types";
-import { mesCorrenteBrasilia, ultimasCompetencias, competenciasNoIntervalo } from "@/lib/competencia";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { temPermissao } from "@/lib/auth";
+import { formatarCnpj } from "@/lib/formatters";
+import { mesAnteriorBrasilia, ultimasCompetencias } from "@/lib/competencia";
+import type { StatusMes } from "@/lib/extratos-status";
+import type { Aviso, Leitura } from "@/lib/extratos-leitura-core";
+import { DropExtratos } from "../../DropExtratos";
+import { GradeExtratos, type ArquivoGrade, type ContaGrade } from "./GradeExtratos";
 
 export const metadata = { title: "Extratos — Empresa" };
+export const maxDuration = 120; // leitura dos extratos pela IA no upload
 
-const MESES_PADRAO = 6;
+const MESES = 6;
 
-function formatCompetencia(competencia: string) {
-  const [ano, mes] = competencia.split("-");
-  return `${mes}/${ano}`;
-}
-
-export default async function ExtratosEmpresaPage(
-  props: PageProps<"/extratos/empresas/[companyId]">,
-) {
+export default async function ExtratosEmpresaPage(props: PageProps<"/extratos/empresas/[companyId]">) {
   const { companyId } = await props.params;
-  const supabase = await createClient();
-  const mesAtual = mesCorrenteBrasilia();
+  const sp = await props.searchParams;
+  const competencia =
+    typeof sp.competencia === "string" && /^\d{4}-\d{2}$/.test(sp.competencia) ? sp.competencia : mesAnteriorBrasilia();
+  const meses = ultimasCompetencias(competencia, MESES).reverse();
 
-  const [{ data: company }, { data: contas }] = await Promise.all([
-    supabase
+  const db = await createClient();
+  const [{ data: company }, { data: contas }, podeEditar] = await Promise.all([
+    db
       .from("companies")
-      .select(
-        "id, legal_name, trade_name, codigo_cliente, person_type, cnpj, cpf, tax_regime, address_street, address_number, address_complement, address_neighborhood, address_zip, municipality_name, state",
-      )
+      .select("id, legal_name, trade_name, codigo_cliente, cnpj, cpf, person_type, responsavel_contabil_id")
       .eq("id", companyId)
       .single(),
-    supabase
+    db
       .from("extrato_contas_bancarias")
       .select("id, banco, codigo_banco, agencia, conta, data_inicio_controle, data_fim_controle")
       .eq("company_id", companyId)
       .eq("ativo", true)
-      .order("created_at", { ascending: true }),
+      .order("created_at"),
+    temPermissao("extratos.editar"),
+  ]);
+  if (!company) notFound();
+
+  const contaIds = (contas ?? []).map((c) => c.id as string);
+  const [{ data: mensais }, { data: arquivos }, cobrancas, responsavel] = await Promise.all([
+    contaIds.length
+      ? db.from("extratos_mensais").select("id, conta_id, competencia, status, nome_arquivo, blob_pathname").in("conta_id", contaIds).in("competencia", meses)
+      : Promise.resolve({ data: [] as never[] }),
+    db
+      .from("extrato_arquivos")
+      .select("id, conta_id, competencia, nome_arquivo, situacao, origem, leitura, avisos, created_at, enviado_por")
+      .eq("company_id", companyId)
+      .neq("situacao", "DESCARTADO")
+      .order("created_at", { ascending: false })
+      .limit(60),
+    db
+      .from("extrato_cobrancas")
+      .select("id, created_at, grupo_nome, competencia")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false })
+      .limit(8)
+      .then((r) => r.data ?? []),
+    company.responsavel_contabil_id
+      ? createAdminClient().from("profiles").select("full_name, email").eq("id", company.responsavel_contabil_id).single().then((r) => r.data)
+      : Promise.resolve(null),
   ]);
 
-  if (!company) notFound();
-  const empresa = company as Pick<
-    Company,
-    | "person_type"
-    | "cnpj"
-    | "cpf"
-    | "tax_regime"
-    | "address_street"
-    | "address_number"
-    | "address_complement"
-    | "address_neighborhood"
-    | "address_zip"
-    | "municipality_name"
-    | "state"
-  >;
+  const contasGrade: ContaGrade[] = (contas ?? []).map((c) => ({
+    id: c.id as string,
+    banco: c.banco as string,
+    codigoBanco: (c.codigo_banco as string | null) ?? null,
+    agencia: c.agencia as string,
+    conta: c.conta as string,
+    inicio: (c.data_inicio_controle as string | null)?.slice(0, 7) ?? null,
+    fim: (c.data_fim_controle as string | null)?.slice(0, 7) ?? null,
+  }));
+  const status: Record<string, { status: StatusMes; legadoId: string | null; legadoNome: string | null }> = {};
+  for (const m of mensais ?? []) {
+    status[`${m.conta_id}|${m.competencia}`] = {
+      status: m.status as StatusMes,
+      legadoId: m.blob_pathname ? (m.id as string) : null,
+      legadoNome: (m.nome_arquivo as string | null) ?? null,
+    };
+  }
+  const listaArquivos: ArquivoGrade[] = (arquivos ?? []).map((a) => ({
+    id: a.id as string,
+    contaId: (a.conta_id as string | null) ?? null,
+    competencia: (a.competencia as string | null) ?? null,
+    nome: a.nome_arquivo as string,
+    situacao: a.situacao as string,
+    origem: a.origem as string,
+    leitura: (a.leitura as Leitura | null) ?? null,
+    avisos: (a.avisos as Aviso[] | null) ?? [],
+    criadoEm: a.created_at as string,
+  }));
 
-  // Sem data de início/fim configurada, cai no padrão de sempre (últimos N
-  // meses até hoje) — cada conta pode ter sua própria janela de controle.
-  const padrao = ultimasCompetencias(mesAtual, MESES_PADRAO);
-  const mesesPorConta = new Map(
-    (contas ?? []).map((c) => {
-      const inicio = c.data_inicio_controle?.slice(0, 7) ?? padrao[padrao.length - 1];
-      const fim = c.data_fim_controle?.slice(0, 7) ?? mesAtual;
-      return [c.id, competenciasNoIntervalo(inicio, fim)];
-    }),
-  );
-
-  const contaIds = (contas ?? []).map((c) => c.id);
-  const { data: extratos } = contaIds.length
-    ? await supabase
-        .from("extratos_mensais")
-        .select("id, conta_id, competencia, entregue, conciliado, nome_arquivo")
-        .in("conta_id", contaIds)
-    : { data: [] };
-
-  const extratoPorContaCompetencia = new Map(
-    (extratos ?? []).map((e) => [`${e.conta_id}-${e.competencia}`, e]),
-  );
-
+  const nome = (company.trade_name || company.legal_name) as string;
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link href="/extratos" className="text-xs text-brand underline">
-            ← Voltar
+          <Link href={`/extratos?competencia=${competencia}`} className="text-xs text-brand underline">
+            ← Painel
           </Link>
           <h1 className="mt-1 text-xl font-semibold text-foreground">
-            {company.codigo_cliente && (
-              <span className="mr-1.5 text-foreground/40">#{company.codigo_cliente}</span>
-            )}
-            {company.trade_name || company.legal_name}
+            {company.codigo_cliente && <span className="mr-1.5 text-foreground/40">#{company.codigo_cliente}</span>}
+            {nome}
           </h1>
           <p className="text-sm text-foreground/60">
-            Consulta de contas bancárias e entrega de extrato.
+            {company.person_type === "PF" ? company.cpf : formatarCnpj(company.cnpj as string | null)}
+            {" · "}Contabilidade: {responsavel ? (responsavel.full_name || responsavel.email) : "sem responsável"}
           </p>
         </div>
-        <Link href={`/extratos/empresas/${companyId}/gerenciar`}>
-          <Button variant="primary">Gerenciar contas e extratos</Button>
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/extratos/empresas/${companyId}/gerenciar`} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-muted">
+            Contas bancárias
+          </Link>
+          <Link href={`/extratos/cobranca?competencia=${competencia}&responsavel=todos`} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-muted">
+            Cobrar pelo WhatsApp
+          </Link>
+        </div>
       </div>
 
-      <Card className="flex flex-wrap gap-x-8 gap-y-3 p-5">
-        <div>
-          <div className="text-xs text-foreground/50">
-            {empresa.person_type === "PF" ? "CPF" : "CNPJ"}
-          </div>
-          <div className="text-sm font-medium text-foreground">
-            {formatarDocumentoEmpresa(empresa)?.valor ?? "Não cadastrado"}
-          </div>
-        </div>
-        {empresa.person_type !== "PF" && (
-          <div>
-            <div className="text-xs text-foreground/50">Regime tributário</div>
-            <div className="text-sm font-medium text-foreground">
-              {empresa.tax_regime ? TAX_REGIME_LABELS[empresa.tax_regime] : "Não cadastrado"}
-            </div>
-          </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="text-xs text-foreground/50">Endereço</div>
-          <div className="text-sm font-medium text-foreground">
-            {formatarEndereco(empresa) ?? "Não cadastrado"}
-          </div>
-        </div>
-      </Card>
+      {podeEditar && (
+        <DropExtratos
+          companyId={companyId}
+          titulo="Solte aqui os extratos desta empresa"
+          subtitulo="Vários de uma vez — a IA descobre de qual conta e mês é cada um, confere o período e os saldos"
+        />
+      )}
 
-      {(!contas || contas.length === 0) ? (
-        <Card className="p-6 text-center text-sm text-foreground/50">
-          Nenhuma conta bancária cadastrada ainda.
-        </Card>
-      ) : (
-        contas.map((conta) => {
-          const meses = mesesPorConta.get(conta.id) ?? [];
-          return (
-            <Card key={conta.id} className="overflow-hidden">
-              <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">
-                {conta.codigo_banco ? `${conta.codigo_banco} — ` : ""}
-                {conta.banco} — Ag. {conta.agencia} / Conta {conta.conta}
-              </div>
-              <div className="grid grid-cols-3 gap-px bg-border sm:grid-cols-4 md:grid-cols-6">
-                {meses.map((mes) => {
-                  const extrato = extratoPorContaCompetencia.get(`${conta.id}-${mes}`);
-                  const entregue = extrato?.entregue ?? false;
-                  const conciliado = extrato?.conciliado ?? false;
-                  return (
-                    <div key={mes} className="flex flex-col items-center gap-1.5 bg-surface px-3 py-4">
-                      <span className="text-sm font-medium text-foreground">
-                        {formatCompetencia(mes)}
-                      </span>
-                      <span
-                        className={cn(
-                          "rounded-full px-2.5 py-1 text-xs font-medium",
-                          STATUS_PILL_CLASSES[entregue ? "success" : "warning"],
-                        )}
-                      >
-                        {entregue ? "Entregue" : "Pendente"}
-                      </span>
-                      <span
-                        className={cn(
-                          "rounded-full px-2.5 py-1 text-xs font-medium",
-                          STATUS_PILL_CLASSES[conciliado ? "success" : "neutral"],
-                        )}
-                      >
-                        {conciliado ? "Conciliado" : "Não conciliado"}
-                      </span>
-                      {extrato?.nome_arquivo && (
-                        <a
-                          href={`/api/extratos/mensais/${extrato.id}`}
-                          className="text-xs text-brand underline"
-                        >
-                          ↓ Baixar
-                        </a>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          );
-        })
+      <GradeExtratos
+        companyId={companyId}
+        contas={contasGrade}
+        meses={meses}
+        status={status}
+        arquivos={listaArquivos}
+        podeEditar={podeEditar}
+      />
+
+      {cobrancas.length > 0 && (
+        <div className="rounded-xl border border-border bg-surface">
+          <div className="border-b border-border px-5 py-3 text-sm font-semibold text-foreground/70">Cobranças enviadas</div>
+          <ul className="divide-y divide-border text-sm">
+            {cobrancas.map((c) => (
+              <li key={c.id as string} className="flex justify-between gap-3 px-5 py-2">
+                <span className="text-foreground/80">{(c.grupo_nome as string | null) ?? "WhatsApp"}</span>
+                <span className="text-foreground/50">
+                  {new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }).format(new Date(c.created_at as string))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

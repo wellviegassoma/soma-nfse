@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       body,
       request,
       onBeforeGenerateToken: async () => ({
-        allowedContentTypes: ["application/pdf", "image/jpeg", "image/png"],
+        allowedContentTypes: ["application/pdf", "image/jpeg", "image/png", "image/webp", "application/x-ofx"],
         addRandomSuffix: true,
         maximumSizeInBytes: 20 * 1024 * 1024,
       }),
