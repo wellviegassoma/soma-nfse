@@ -25,8 +25,15 @@ function semAcento(s: string) {
 
 function resumoLinha(l: LinhaSerena) {
   return {
+    id: l.id,
     empresa: l.nome,
     municipio: l.municipio,
+    telas: {
+      dadosFiscais: `/admin/empresas/${l.id}/dados-fiscais`,
+      fatorR: `/admin/empresas/${l.id}/fator-r`,
+      impostos: `/admin/empresas/${l.id}/impostos`,
+      servicos: `/admin/empresas/${l.id}/servicos`,
+    },
     situacao: l.situacao === "acao" ? "precisa de ação" : l.situacao === "concluida" ? "concluída" : "com a Serena",
     etapas: l.etapas.map((e) => `${e.nome}: ${e.titulo}${e.detalhe ? ` (${e.detalhe})` : ""}`).join(" → "),
     recado: l.recado,

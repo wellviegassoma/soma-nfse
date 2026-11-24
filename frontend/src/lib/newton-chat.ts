@@ -22,8 +22,15 @@ function semAcento(s: string) {
 function resumoLinha(l: LinhaNewton) {
   const d = l.calc.devido;
   return {
+    id: l.id,
     empresa: l.nome,
     municipio: l.municipio,
+    cadastro: [l.issFixo ? "ISS fixo" : "ISS percentual", l.equiparacaoCadastro ? "equiparação hospitalar" : null].filter(Boolean).join(" · "),
+    telas: {
+      impostos: `/admin/empresas/${l.id}/impostos`,
+      notasDoMesParaEquiparacao: `/admin/empresas/${l.id}/fechamento`,
+      dadosFiscais: `/admin/empresas/${l.id}/dados-fiscais`,
+    },
     filiais: l.filiais.map((f) => f.nome),
     situacao: l.situacao === "acao" ? "precisa de ação" : l.situacao === "concluida" ? "concluída" : "com o Newton",
     calculo: `receita do mês R$ ${l.calc.receitaMes.toFixed(2)} (hospitalar marcada R$ ${l.calc.receitaHospitalarMes.toFixed(2)}) · trimestre R$ ${l.calc.receitaTrimestre.toFixed(2)} · devido: PIS ${d.pis.toFixed(2)} COFINS ${d.cofins.toFixed(2)} IRPJ ${d.irpj.toFixed(2)} CSLL ${d.csll.toFixed(2)} (${l.calc.fechaTrimestre ? "mês de IRPJ/CSLL" : "só PIS/COFINS"})`,

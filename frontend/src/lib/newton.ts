@@ -32,11 +32,12 @@ export type EmpresaNewton = {
   municipality_ibge_code: string | null;
   irpj_csll_apuracao_mensal: boolean;
   equiparacao_hospitalar: boolean;
+  iss_tipo: string | null;
   ultima_sincronizacao_status: string | null;
   ultima_sincronizacao_erro: string | null;
 };
 const COLUNAS =
-  "id, legal_name, trade_name, codigo_cliente, cnpj, municipality_ibge_code, irpj_csll_apuracao_mensal, equiparacao_hospitalar, ultima_sincronizacao_status, ultima_sincronizacao_erro";
+  "id, legal_name, trade_name, codigo_cliente, cnpj, municipality_ibge_code, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_tipo, ultima_sincronizacao_status, ultima_sincronizacao_erro";
 
 export type NewtonFechamento = {
   ia_decisao: "APROVAR" | "ESCALAR" | null;
@@ -103,6 +104,8 @@ export type LinhaNewton = {
   id: string;
   nome: string;
   municipio: "Petrópolis" | "Rio de Janeiro" | "Outro";
+  issFixo: boolean; // sociedade uniprofissional (ISS por profissional)
+  equiparacaoCadastro: boolean;
   calc: CalculoNewton;
   filiais: FilialSimples[];
   equiparacao: EquiparacaoNewton | null;
@@ -355,7 +358,7 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
   const newtonPor = new Map((fechamentos ?? []).map((f) => [f.company_id as string, f as unknown as NewtonFechamento]));
   const comGrupo = new Set((vinculos ?? []).map((v) => v.company_id as string));
 
-  return empresas.map((e) => {
+  const linhas = empresas.map((e) => {
     const minhas = filiais.get(e.id) ?? [];
     const dados = somarFiliais(fat.get(e.id), minhas.map((f) => fat.get(f.id)));
     const calc = calcularNewton(e, competencia, dados);
@@ -381,7 +384,19 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
       temGrupo: comGrupo.has(e.id),
     });
   });
+  return linhas.sort(porCodigo);
 }
+
+/** Ordem da tela: pelo código do cliente (número da pasta). */
+function porCodigo(a: { nome: string }, b: { nome: string }) {
+  const na = Number.parseInt(a.nome, 10);
+  const nb = Number.parseInt(b.nome, 10);
+  if (Number.isNaN(na) && Number.isNaN(nb)) return a.nome.localeCompare(b.nome);
+  if (Number.isNaN(na)) return 1;
+  if (Number.isNaN(nb)) return -1;
+  return na - nb;
+}
+
 
 function montarLinha(p: {
   e: EmpresaNewton;
@@ -476,6 +491,8 @@ function montarLinha(p: {
     id: e.id,
     nome: nomeEmpresaNewton(e),
     municipio,
+    issFixo: e.iss_tipo === "FIXO",
+    equiparacaoCadastro: e.equiparacao_hospitalar,
     calc,
     filiais: p.filiais,
     equiparacao: p.equiparacao,

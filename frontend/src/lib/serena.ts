@@ -229,7 +229,7 @@ export async function carregarEsteira(db: Db, competencia: string): Promise<Linh
   const serenaPor = new Map((fechamentos ?? []).map((f) => [f.company_id as string, f as unknown as SerenaFechamento]));
   const comGrupo = new Set((vinculos ?? []).map((v) => v.company_id as string));
 
-  return Promise.all(
+  const linhas = await Promise.all(
     empresas.map(async (e) => {
       const prefeitura = extras.prefeitura.get(e.id) ?? null;
       const aprovacao = extras.aprovacoes.get(e.id) ?? null;
@@ -254,7 +254,18 @@ export async function carregarEsteira(db: Db, competencia: string): Promise<Linh
       });
     }),
   );
+  return linhas.sort(porCodigo);
 }
+/** Ordem da tela: pelo código do cliente (número da pasta). */
+function porCodigo(a: { nome: string }, b: { nome: string }) {
+  const na = Number.parseInt(a.nome, 10);
+  const nb = Number.parseInt(b.nome, 10);
+  if (Number.isNaN(na) && Number.isNaN(nb)) return a.nome.localeCompare(b.nome);
+  if (Number.isNaN(na)) return 1;
+  if (Number.isNaN(nb)) return -1;
+  return na - nb;
+}
+
 
 // A transmissão do sistema (declarar/route) ainda manda só o estabelecimento
 // da matriz. Se a filial faturou no mês, o PGDAS precisa dos dois — bloqueia

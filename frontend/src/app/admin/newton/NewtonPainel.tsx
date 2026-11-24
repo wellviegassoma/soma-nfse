@@ -505,6 +505,12 @@ export function NewtonPainel({
                 <div className="truncate text-sm font-medium" title={l.nome}>
                   {l.nome}
                 </div>
+                {(l.issFixo || l.equiparacaoCadastro) && (
+                  <div className="mt-0.5 flex flex-wrap gap-1">
+                    {l.issFixo && <span className="rounded bg-indigo-50 px-1.5 py-px text-[10px] font-medium text-indigo-800">ISS fixo</span>}
+                    {l.equiparacaoCadastro && <span className="rounded bg-emerald-50 px-1.5 py-px text-[10px] font-medium text-emerald-800">Equiparação hospitalar</span>}
+                  </div>
+                )}
                 <div className="text-[11px] text-foreground/50">
                   {l.municipio}
                   {l.filiais.length ? ` · + ${l.filiais.length} filial` : ""} · PIS {brl(d.pis)} · COFINS {brl(d.cofins)}
