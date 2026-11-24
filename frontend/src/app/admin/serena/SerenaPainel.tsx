@@ -247,10 +247,14 @@ export function SerenaPainel({
   };
 
   // Emitir na Nota Carioca cria documento oficial — sempre com confirmação.
-  const emitirGuiasRio = () => {
-    const itens = g.guiasPendentes.flatMap((l) => l.guiasIss.pendentes.map((p) => ({ l, p })));
+  const emitirGuiasRio = () => emitirGuias(g.guiasPendentes.flatMap((l) => l.guiasIss.pendentes.map((p) => ({ l, p }))));
+
+  // Uma guia só (botão no aviso da empresa) ou o lote inteiro.
+  const emitirGuias = (itens: { l: LinhaSerena; p: LinhaSerena["guiasIss"]["pendentes"][number] }[]) => {
     const total = itens.reduce((t, i) => t + (i.p.valor ?? 0), 0);
-    if (!window.confirm(`Emitir ${itens.length} guia(s) de ISS na Nota Carioca (${brl(total)}) de ${g.guiasPendentes.length} empresa(s)? A emissão cria o documento oficial na prefeitura.`)) return;
+    const empresas = new Set(itens.map((i) => i.l.id)).size;
+    const quais = itens.length === 1 ? `de ${itens[0].p.competencia.slice(5)}/${itens[0].p.competencia.slice(0, 4)} da ${itens[0].l.nome}` : `de ${empresas} empresa(s)`;
+    if (!window.confirm(`Emitir ${itens.length} guia(s) de ISS na Nota Carioca (${brl(total)}) ${quais}? A emissão cria o documento oficial na prefeitura.`)) return;
     iniciar(async () => {
       const erros = await emLote(itens, "Emitindo guia", async ({ l, p }) => {
         try {
@@ -547,6 +551,20 @@ export function SerenaPainel({
                   {brl(l.guiasIss.pendentes.reduce((t, p) => t + (p.valor ?? 0), 0))}
                   {l.guiasIss.pendentes.some((p) => p.receita === "1287") ? " · 1287 retenção como tomadora" : ""} (
                   {l.guiasIss.pendentes.map((p) => p.competencia.slice(5) + "/" + p.competencia.slice(2, 4)).join(", ")})
+                  <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
+                    {l.guiasIss.pendentes.map((p) => (
+                      <button
+                        key={p.competencia}
+                        type="button"
+                        disabled={pendente}
+                        onClick={() => emitirGuias([{ l, p }])}
+                        className="rounded border border-rose-300 bg-white px-1.5 py-px text-[10px] font-medium text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+                        title={`Emitir a guia de ${p.competencia.slice(5)}/${p.competencia.slice(0, 4)} na Nota Carioca`}
+                      >
+                        emitir {p.competencia.slice(5)}/{p.competencia.slice(2, 4)}
+                      </button>
+                    ))}
+                  </span>
                 </div>
               )}
               {l.guiasIss.emitidasAEntregar.length > 0 && (

@@ -208,7 +208,8 @@ export async function carregarEsteira(db: Db, competencia: string): Promise<Linh
     const c = consultaGuiaPor.get(companyId);
     return {
       pendentes: g
-        .filter((x) => x.status === "PENDENTE")
+        // Guia zerada na grade (ex.: mês sem ISS a pagar) não é pendência.
+        .filter((x) => x.status === "PENDENTE" && (x.valor == null || Number(x.valor) > 0))
         .map((x) => ({
           competencia: x.competencia as string,
           valor: x.valor == null ? null : Number(x.valor),
