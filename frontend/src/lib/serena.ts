@@ -15,6 +15,7 @@ import {
   calcularSimplesEmpresa,
   carregarDadosSimplesLote,
   type CalculoSimples,
+  type DadosSimplesEmpresa,
   type EmpresaSimples,
 } from "@/lib/simples-linha";
 import { IBGE_PETROPOLIS, IBGE_RIO } from "@/lib/tarefas-comum";
@@ -100,7 +101,76 @@ export async function carteiraSerena(db: Db): Promise<EmpresaSimples[]> {
     const { data: extras } = await db.from("companies").select(COLUNAS_EMPRESA_SIMPLES).in("id", faltam);
     lista.push(...((extras ?? []) as EmpresaSimples[]));
   }
-  return lista;
+  // Filial (CNPJ de mesma raiz, ordem ≠ 0001) não declara à parte no Simples:
+  // entra na declaração da matriz. Sai da esteira; os dados somam na matriz.
+  const raizesComMatriz = new Set(lista.filter((e) => ordemCnpj(e) === "0001").map((e) => raizCnpj(e)));
+  return lista.filter((e) => ordemCnpj(e) === "0001" || !raizesComMatriz.has(raizCnpj(e)));
+}
+
+const raizCnpj = (e: { cnpj: string | null }) => (e.cnpj ?? "").replace(/\D/g, "").slice(0, 8);
+const ordemCnpj = (e: { cnpj: string | null }) => (e.cnpj ?? "").replace(/\D/g, "").slice(8, 12);
+
+export type FilialSimples = { id: string; cnpj: string; nome: string };
+
+/** Filiais ativas do Simples de cada matriz da lista (mesma raiz de CNPJ). */
+export async function filiaisPorMatriz(db: Db, matrizes: EmpresaSimples[]): Promise<Map<string, FilialSimples[]>> {
+  const mapa = new Map<string, FilialSimples[]>();
+  const porRaiz = new Map(matrizes.filter((e) => ordemCnpj(e) === "0001").map((e) => [raizCnpj(e), e.id]));
+  if (!porRaiz.size) return mapa;
+  const { data } = await db
+    .from("companies")
+    .select("id, cnpj, legal_name, trade_name, codigo_cliente")
+    .eq("tax_regime", "SIMPLES_NACIONAL")
+    .eq("ativa", true)
+    .not("cnpj", "is", null);
+  for (const f of data ?? []) {
+    const cnpj = String(f.cnpj);
+    const matrizId = porRaiz.get(raizCnpj({ cnpj }));
+    if (!matrizId || ordemCnpj({ cnpj }) === "0001" || f.id === matrizId) continue;
+    const lista = mapa.get(matrizId) ?? [];
+    lista.push({ id: f.id as string, cnpj, nome: `${f.codigo_cliente ?? ""} · ${f.trade_name || f.legal_name}` });
+    mapa.set(matrizId, lista);
+  }
+  return mapa;
+}
+
+/** Junta os dados das filiais nos da matriz (receita, folha e retenções da empresa toda). */
+export function somarDadosFiliais(matriz: DadosSimplesEmpresa | undefined, filiais: (DadosSimplesEmpresa | undefined)[]): DadosSimplesEmpresa | undefined {
+  if (!matriz) return matriz;
+  const todas = [matriz, ...filiais.filter((d): d is DadosSimplesEmpresa => d != null)];
+  if (todas.length <= 1) return matriz;
+  // Receita manual é o total da empresa (vem do PGDAS-D, que é por raiz de
+  // CNPJ) — a filial costuma ter a mesma cópia (FVS 185/216). Vale só a da
+  // matriz; a filial entra só em mês que a matriz não tem.
+  const manual = new Map(todas[0].receitaManualPorMes);
+  for (const d of todas.slice(1)) for (const [m, v] of d.receitaManualPorMes) if (!manual.has(m)) manual.set(m, v);
+  // Folha: a do Resumo é por CNPJ (soma); a do PGDAS-D é da empresa toda e
+  // aparece repetida na filial — mês com o mesmo total da matriz conta uma vez.
+  const total = (f: DadosSimplesEmpresa["folhaMensal"][number]) => f.valor + (f.proLabore ?? 0) + (f.fgts ?? 0);
+  const folha = new Map<string, DadosSimplesEmpresa["folhaMensal"][number]>();
+  for (const d of todas)
+    for (const f of d.folhaMensal) {
+      const a = folha.get(f.competencia);
+      if (a && Math.abs(total(a) - total(f)) < 0.01) continue;
+      folha.set(
+        f.competencia,
+        a
+          ? {
+              competencia: f.competencia,
+              valor: a.valor + f.valor,
+              proLabore: a.proLabore == null && f.proLabore == null ? null : (a.proLabore ?? 0) + (f.proLabore ?? 0),
+              fgts: a.fgts == null && f.fgts == null ? null : (a.fgts ?? 0) + (f.fgts ?? 0),
+            }
+          : { ...f },
+      );
+    }
+  return {
+    notasMensais: todas.flatMap((d) => d.notasMensais),
+    notasPorAtividade: todas.flatMap((d) => d.notasPorAtividade),
+    receitaManualPorMes: manual,
+    folhaMensal: [...folha.values()],
+    retencoes: todas.flatMap((d) => d.retencoes),
+  };
 }
 
 export function nomeEmpresaSimples(e: EmpresaSimples) {
@@ -113,11 +183,13 @@ export async function carregarEsteira(db: Db, competencia: string): Promise<Linh
   const empresas = await carteiraSerena(db);
   const ids = empresas.map((e) => e.id);
   if (!ids.length) return [];
+  const filiais = await filiaisPorMatriz(db, empresas);
+  const idsFiliais = [...filiais.values()].flat().map((f) => f.id);
   const [extras, dasPagamentos, { data: declaracoes }, dados, { data: fechamentos }, { data: vinculos }] = await Promise.all([
     buscarExtrasConferencia(db, competencia, ids),
     buscarDasPagamentos(db, competencia),
     db.from("integra_contador_pgdas_declaracoes").select("company_id, id_declaracao").eq("competencia", competencia).in("company_id", ids),
-    carregarDadosSimplesLote(db, ids),
+    carregarDadosSimplesLote(db, [...ids, ...idsFiliais]),
     db.from("serena_fechamentos").select("*").eq("competencia", competencia).in("company_id", ids),
     db.from("pedido_nota_vinculos").select("company_id").in("company_id", ids),
   ]);
@@ -156,8 +228,10 @@ export async function carregarEsteira(db: Db, competencia: string): Promise<Linh
     empresas.map(async (e) => {
       const prefeitura = extras.prefeitura.get(e.id) ?? null;
       const aprovacao = extras.aprovacoes.get(e.id) ?? null;
-      const d = dados.get(e.id);
+      const minhas = filiais.get(e.id) ?? [];
+      const d = somarDadosFiliais(dados.get(e.id), minhas.map((f) => dados.get(f.id)));
       const calc = await calcularSimplesEmpresa(db, e, competencia, { prefeitura, aprovacao }, d);
+      bloquearSeFilialFaturou(calc, minhas, dados, competencia);
       const notasMes = (d?.notasMensais ?? []).filter((n) => n.competencia === competencia && !n.cancelada);
       const pag = dasPagamentos.get(e.id);
       return montarLinha({
@@ -175,6 +249,26 @@ export async function carregarEsteira(db: Db, competencia: string): Promise<Linh
       });
     }),
   );
+}
+
+// A transmissão do sistema (declarar/route) ainda manda só o estabelecimento
+// da matriz. Se a filial faturou no mês, o PGDAS precisa dos dois — bloqueia
+// para a equipe declarar à mão, em vez de declarar a receita toda na matriz.
+export function bloquearSeFilialFaturou(
+  calc: CalculoSimples,
+  filiais: FilialSimples[],
+  dados: Map<string, DadosSimplesEmpresa>,
+  competencia: string,
+) {
+  for (const f of filiais) {
+    const v = (dados.get(f.id)?.notasMensais ?? []).filter((n) => n.competencia === competencia && !n.cancelada).reduce((t, n) => t + n.valor, 0);
+    if (v > 0) {
+      const texto = `A filial ${f.nome} faturou ${brl(v)} no mês: o PGDAS-D vai com os dois estabelecimentos (matriz e filial) — declarar pelo portal; o envio automático só manda a matriz.`;
+      calc.bloqueios.push(texto);
+      calc.conferencia = { ...calc.conferencia, status: "BLOQUEADO", motivos: [...calc.conferencia.motivos, { nivel: "BLOQUEADO", codigo: "FILIAL_FATUROU", texto }] };
+      calc.liberado = false;
+    }
+  }
 }
 
 function montarLinha(p: {

@@ -16,6 +16,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { MODELO_PADRAO } from "@/lib/pedido-nota/extrair-core";
 import { buscarExtrasConferencia, calcularSimplesEmpresa, carregarDadosSimplesLote, COLUNAS_EMPRESA_SIMPLES, type EmpresaSimples } from "@/lib/simples-linha";
 import { somarMeses } from "@/lib/tarefas-comum";
+import { bloquearSeFilialFaturou, filiaisPorMatriz, somarDadosFiliais } from "@/lib/serena";
 import { CONHECIMENTO_SIMPLES, MANUAL_SOMA } from "@/lib/serena-conhecimento";
 
 type Db = SupabaseClient;
@@ -110,14 +111,19 @@ export async function revisarComIa(db: Db, competencia: string, companyIds: stri
     buscarExtrasConferencia(db, competencia, companyIds),
     carregarDadosSimplesLote(db, companyIds),
   ]);
+  // Matriz com filial: a apuração é da empresa toda (ver serena.ts).
+  const filiais = await filiaisPorMatriz(db, (empresas ?? []) as unknown as EmpresaSimples[]);
+  const dadosFiliais = filiais.size ? await carregarDadosSimplesLote(db, [...filiais.values()].flat().map((f) => f.id)) : new Map();
   const modelo = process.env.SERENA_MODELO || MODELO_PADRAO;
   const precos: Record<string, [number, number]> = { "claude-opus-5-5": [4, 20], "claude-sonnet-5-5": [2, 10], "claude-haiku-5-5": [0.1, 0.5] };
   const anterior = somarMeses(competencia, -1);
   const resultados: ResultadoRevisao[] = [];
 
   for (const e of (empresas ?? []) as unknown as (EmpresaSimples & { municipality_name: string | null })[]) {
-    const d = dados.get(e.id);
+    const minhas = filiais.get(e.id) ?? [];
+    const d = somarDadosFiliais(dados.get(e.id), minhas.map((f) => dadosFiliais.get(f.id)));
     const calc = await calcularSimplesEmpresa(db, e, competencia, { prefeitura: extras.prefeitura.get(e.id) ?? null, aprovacao: extras.aprovacoes.get(e.id) ?? null }, d);
+    bloquearSeFilialFaturou(calc, minhas, dadosFiliais, competencia);
     if (calc.conferencia.status !== "REVISAR" || calc.liberado) continue;
     const calcAnt = await calcularSimplesEmpresa(db, e, anterior, { prefeitura: null, aprovacao: null }, d).catch(() => null);
 
