@@ -9,11 +9,12 @@
 export type SugestaoEquiparacao = "SIM" | "NAO" | "DUVIDA";
 
 const NAO: [RegExp, string][] = [
-  [/\bconsulta|01[- ]?consulta|\bretorno\b/i, "consulta (STJ: consulta simples não entra)"],
-  [/curso|aula|treinamento|palestra|coordena[cç]/i, "ensino/coordenação, não é serviço hospitalar"],
-  [/nutri[cç]|psicolog|prepara[cç][aã]o f[ií]sica|personal|avalia[cç][aã]o biomec|dinamometr/i, "atividade sem caráter hospitalar"],
-  [/parceria comercial|aluguel|loca[cç][aã]o|subloca/i, "receita comercial/locação"],
-  [/restaura[cç]|profilax|limpeza|clareamento/i, "odontologia clínica, não hospitalar"],
+  // Palavras inteiras (\b): "aula" não pode casar dentro de "Paula" (nota 273 da RRAD, 10/2026).
+  [/\bconsultas?\b|01[- ]?consulta|\bretorno\b/i, "consulta (STJ: consulta simples não entra)"],
+  [/\bcursos?\b|\baulas?\b|\btreinamentos?\b|\bpalestras?\b|\bcoordena[cç]/i, "ensino/coordenação, não é serviço hospitalar"],
+  [/\bnutri[cç]|\bpsicolog|prepara[cç][aã]o f[ií]sica|\bpersonal\b|avalia[cç][aã]o biomec|\bdinamometr/i, "atividade sem caráter hospitalar"],
+  [/parceria comercial|\balugu[eé]is?\b|\baluguel\b|\bloca[cç][aã]o\b|\bsubloca/i, "receita comercial/locação"],
+  [/\brestaura[cç]|\bprofilax|\blimpeza\b|\bclareamento\b/i, "odontologia clínica, não hospitalar"],
 ];
 
 const SIM: [RegExp, string][] = [
@@ -21,15 +22,21 @@ const SIM: [RegExp, string][] = [
   [/procedimento|pun[cç][aã]o|infiltra|bloqueio|bi[oó]psia|\bdiu\b|inser[cç][aã]o|aplica[cç]|\bprp\b|plasma rico|viscossuplement|[aá]cido hialur/i, "procedimento (auxílio diagnóstico e terapia)"],
   [/ultrass|\busg\b|ecocardio|doppler|raio[- ]?x|radiogra|tomogra|resson|mamogra|densitom|eletrocardio|holter|exame|endoscop|colonoscop|laudo/i, "exame de imagem/diagnóstico"],
   [/fisioterap|sess[aãõo]es? de|imunoestim|infus|quimio|terapia/i, "terapia"],
-  [/\bsadt\b|bucomaxil|buco-maxilo/i, "SADT/cirurgia buco-maxilo-facial"],
+  // Buco-maxilo sozinho não entra: a cirurgia já casa em "cirurg"; consulta buco-maxilo é consulta.
+  [/\bsadt\b/i, "SADT (serviço de apoio diagnóstico e terapêutico)"],
 ];
 
 /** Classificação só pela descrição da nota (sem histórico). */
 export function regraEquiparacao(descricao: string | null | undefined): { sugestao: SugestaoEquiparacao; motivo: string } {
   const d = descricao ?? "";
   const cirurgia = /cirurg|procedimento cir/i.test(d);
-  for (const [re, motivo] of NAO) if (re.test(d) && !cirurgia) return { sugestao: "NAO", motivo };
-  for (const [re, motivo] of SIM) if (re.test(d)) return { sugestao: "SIM", motivo };
+  const nao = cirurgia ? undefined : NAO.find(([re]) => re.test(d));
+  const sim = SIM.find(([re]) => re.test(d));
+  // Nota que mistura consulta e procedimento/exame (ex.: "consulta... inserção
+  // de DIU, USG pélvica") — a pessoa decide.
+  if (nao && sim) return { sugestao: "DUVIDA", motivo: `mistura ${nao[1].split(" ")[0]} e ${sim[1].split(" ")[0]} — decidir` };
+  if (nao) return { sugestao: "NAO", motivo: nao[1] };
+  if (sim) return { sugestao: "SIM", motivo: sim[1] };
   return { sugestao: "DUVIDA", motivo: "descrição genérica — decidir" };
 }
 
