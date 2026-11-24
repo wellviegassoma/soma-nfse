@@ -125,6 +125,56 @@ export async function reextrairPedido(_prev: AcaoState, formData: FormData): Pro
   }
 }
 
+/**
+ * O #nota não achou a mensagem (fora da janela de 72h, chamado errado...):
+ * o atendente copia o texto do Digisac e cola aqui. Entra como mais uma
+ * mensagem do cliente e a IA lê o pedido de novo.
+ */
+export async function colarMensagemPedido(_prev: AcaoState, formData: FormData): Promise<AcaoState> {
+  const parsed = z
+    .object({ pedidoId: uuidLike, texto: z.string().trim().min(3, "Cole a mensagem do cliente.").max(20_000) })
+    .safeParse({ pedidoId: formData.get("pedidoId"), texto: formData.get("texto") });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Mensagem inválida." };
+  const { pedidoId, texto } = parsed.data;
+
+  const supabase = await createClient();
+  const { data: pedido } = await supabase
+    .from("pedidos_nota")
+    .select("company_id, status, mensagens")
+    .eq("id", pedidoId)
+    .maybeSingle();
+  if (!pedido) return { error: "Pedido não encontrado." };
+  const negado = await exigirEmissor(pedido.company_id);
+  if (negado) return { error: negado };
+  if (!["RECEBIDO", "ERRO", "AGUARDANDO_APROVACAO"].includes(pedido.status)) {
+    return { error: "Esse pedido já está em emissão ou concluído." };
+  }
+
+  const agora = new Date().toISOString();
+  const mensagens = [
+    ...((pedido.mensagens ?? []) as unknown[]),
+    { id: `colada-${agora}`, timestamp: agora, tipo: "chat", texto, anexo_index: null, colada: true },
+  ];
+  const { error } = await supabase
+    .from("pedidos_nota")
+    .update({ mensagens, status: pedido.status === "ERRO" ? "RECEBIDO" : pedido.status, erro: null })
+    .eq("id", pedidoId);
+  if (error) return { error: `Não foi possível gravar a mensagem: ${error.message}` };
+
+  if (!pedido.company_id) {
+    revalidatePath(caminho(pedidoId));
+    return { ok: "Mensagem incluída. Escolha a empresa para a IA ler o pedido." };
+  }
+  try {
+    const r = await extrairPedido(pedidoId);
+    revalidatePath(caminho(pedidoId));
+    return r.motivo === "ok" ? { ok: `Mensagem incluída. ${r.itens} rascunho(s) gerado(s).` } : { error: r.motivo };
+  } catch (e) {
+    revalidatePath(caminho(pedidoId));
+    return { error: `Mensagem incluída, mas a IA falhou: ${e instanceof Error ? e.message : "erro"}. Tente "Ler de novo".` };
+  }
+}
+
 export async function descartarPedido(_prev: AcaoState, formData: FormData): Promise<AcaoState> {
   const pedidoId = String(formData.get("pedidoId") ?? "");
   const motivo = String(formData.get("motivo") ?? "").trim() || null;

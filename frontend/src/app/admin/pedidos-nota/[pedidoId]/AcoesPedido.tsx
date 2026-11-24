@@ -4,7 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
-import { definirEmpresaPedido, descartarPedido, reextrairPedido } from "@/lib/actions/pedidos-nota";
+import { colarMensagemPedido, definirEmpresaPedido, descartarPedido, reextrairPedido } from "@/lib/actions/pedidos-nota";
 
 function Resultado({ s }: { s: { error?: string; ok?: string } | undefined }) {
   if (s?.error) return <Alert>{s.error}</Alert>;
@@ -99,5 +99,34 @@ export function AcoesPedido({ pedidoId, podeReler }: { pedidoId: string; podeRel
       </div>
       <Resultado s={sReler ?? sDesc} />
     </div>
+  );
+}
+
+export function ColarMensagem({ pedidoId, aberta }: { pedidoId: string; aberta: boolean }) {
+  const [state, action, pending] = useActionState(colarMensagemPedido, undefined);
+  return (
+    <details className="rounded-lg border border-dashed border-border p-3" open={aberta}>
+      <summary className="cursor-pointer text-sm font-medium text-brand">Colar mensagem do Digisac</summary>
+      <form action={action} className="mt-3 flex flex-col gap-2">
+        <input type="hidden" name="pedidoId" value={pedidoId} />
+        <p className="text-xs text-foreground/60">
+          Quando o #nota não achar a mensagem (mais de 72h, outro chamado), copie o pedido do cliente no Digisac e
+          cole aqui. A IA lê de novo com ela.
+        </p>
+        <textarea
+          name="texto"
+          rows={5}
+          required
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+          placeholder="Ex.: Preciso de uma nota de R$ 5.000 para o Hospital X, consultas de outubro"
+        />
+        <div>
+          <Button type="submit" loading={pending}>
+            Incluir e ler o pedido
+          </Button>
+        </div>
+        <Resultado s={state} />
+      </form>
+    </details>
   );
 }

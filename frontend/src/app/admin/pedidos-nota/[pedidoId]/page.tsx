@@ -7,7 +7,7 @@ import { listarTomadoresEmpresa } from "@/lib/tomadores-lista";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { Selo, STATUS_PEDIDO, FONTE_EMPRESA } from "../status";
-import { EscolherEmpresa, AcoesPedido } from "./AcoesPedido";
+import { EscolherEmpresa, AcoesPedido, ColarMensagem } from "./AcoesPedido";
 import { ItemRascunho, type ItemView } from "./ItemRascunho";
 
 export const metadata = { title: "Pedido de nota — Painel SOMA" };
@@ -161,6 +161,7 @@ export default async function PedidoNotaPage(props: { params: Promise<{ pedidoId
           ) : (
             <p className="text-sm text-foreground/60">Nenhuma mensagem capturada.</p>
           )}
+          {aberto ? <ColarMensagem pedidoId={pedidoId} aberta={!mensagens.length} /> : null}
           {pedido.dica_atendente ? (
             <p className="text-xs text-foreground/60">
               Dica do atendente: <span className="font-medium text-foreground">{pedido.dica_atendente}</span>

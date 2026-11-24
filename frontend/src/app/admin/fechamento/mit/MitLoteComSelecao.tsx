@@ -82,11 +82,16 @@ export function MitLoteComSelecao({ linhas, competencia }: { linhas: LinhaMit[];
       {linhas.length === 0 ? (
         <Alert tone="warning">Nenhuma empresa Lucro Presumido com CNPJ cadastrada.</Alert>
       ) : (
-        <Card className="overflow-x-auto">
+        // Altura limitada à tela: a barra de rolagem lateral fica sempre
+        // visível e o cabeçalho + o nome da empresa ficam travados.
+        <Card className="max-h-[calc(100vh-13rem)] overflow-auto">
           <table className="w-full min-w-[1250px] text-sm">
-            <thead>
+            <thead className="sticky top-0 z-20 bg-surface">
               <tr className="text-xs text-foreground/50">
-                <th rowSpan={2} className="border-b border-border px-3 py-2 text-center align-bottom">
+                <th
+                  rowSpan={2}
+                  className="sticky left-0 z-10 w-11 min-w-11 border-b border-border bg-surface px-3 py-2 text-center align-bottom"
+                >
                   <input
                     type="checkbox"
                     checked={todosMarcados}
@@ -94,7 +99,10 @@ export function MitLoteComSelecao({ linhas, competencia }: { linhas: LinhaMit[];
                     aria-label="Selecionar todas"
                   />
                 </th>
-                <th rowSpan={2} className="border-b border-border px-3 py-2 text-left align-bottom">
+                <th
+                  rowSpan={2}
+                  className="sticky left-11 z-10 w-72 min-w-72 max-w-72 border-b border-border bg-surface px-3 py-2 text-left align-bottom shadow-[1px_0_0_var(--border)]"
+                >
                   Nome
                 </th>
                 <th rowSpan={2} className="border-b border-border px-3 py-2 text-right align-bottom">
@@ -129,7 +137,7 @@ export function MitLoteComSelecao({ linhas, competencia }: { linhas: LinhaMit[];
             <tbody className="divide-y divide-border">
               {linhas.map((linha) => (
                 <tr key={linha.id}>
-                  <td className="px-3 py-2 text-center">
+                  <td className="sticky left-0 z-10 w-11 min-w-11 bg-surface px-3 py-2 text-center">
                     <input
                       type="checkbox"
                       checked={selecionados.has(linha.id)}
@@ -137,10 +145,12 @@ export function MitLoteComSelecao({ linhas, competencia }: { linhas: LinhaMit[];
                       aria-label={`Selecionar ${linha.nome}`}
                     />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2">
-                    {linha.nome}
+                  <td className="sticky left-11 z-10 w-72 min-w-72 max-w-72 bg-surface px-3 py-2 shadow-[1px_0_0_var(--border)]">
+                    <div className="truncate" title={linha.nome}>
+                      {linha.nome}
+                    </div>
                     {linha.jaEnviado && (
-                      <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">
+                      <span className="rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success">
                         enviado
                       </span>
                     )}
