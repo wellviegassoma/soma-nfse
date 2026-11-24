@@ -424,6 +424,13 @@ export async function importarEmpresasPlanilha(
 const percentualParaFracao = (v: string | undefined) =>
   v ? Number(v.replace(",", ".")) / 100 : undefined;
 
+// Responsável por área (fase CM): vazio = sem responsável.
+const responsavelOpcional = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => (v && /^[0-9a-f-]{36}$/i.test(v) ? v : null));
+
 const updateFiscalSchema = z.object({
   companyId: uuidLike,
   municipalRegistration: z.string().trim().optional(),
@@ -456,6 +463,10 @@ const updateFiscalSchema = z.object({
   issAliquotaPadrao: z.string().optional().transform(percentualParaFracao),
   issValorFixoProfissional: z.string().optional().transform((v) => (v ? Number(v.replace(",", ".")) : undefined)),
   issQuantidadeProfissionais: z.string().optional().transform((v) => (v ? Number(v) : undefined)),
+  responsavelContabilId: responsavelOpcional,
+  responsavelFiscalId: responsavelOpcional,
+  responsavelDpId: responsavelOpcional,
+  responsavelLegalizacaoId: responsavelOpcional,
 });
 
 export async function updateCompanyFiscal(
@@ -492,6 +503,10 @@ export async function updateCompanyFiscal(
     issAliquotaPadrao: formData.get("issAliquotaPadrao") || undefined,
     issValorFixoProfissional: formData.get("issValorFixoProfissional") || undefined,
     issQuantidadeProfissionais: formData.get("issQuantidadeProfissionais") || undefined,
+    responsavelContabilId: formData.get("responsavelContabilId") || undefined,
+    responsavelFiscalId: formData.get("responsavelFiscalId") || undefined,
+    responsavelDpId: formData.get("responsavelDpId") || undefined,
+    responsavelLegalizacaoId: formData.get("responsavelLegalizacaoId") || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -503,7 +518,7 @@ export async function updateCompanyFiscal(
   const { data: before } = await supabase
     .from("companies")
     .select(
-      "municipal_registration, inscricao_estadual, data_abertura, tax_regime, cnae, municipality_ibge_code, municipality_name, state, address_street, address_number, address_complement, address_neighborhood, address_zip, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais",
+      "municipal_registration, inscricao_estadual, data_abertura, tax_regime, cnae, municipality_ibge_code, municipality_name, state, address_street, address_number, address_complement, address_neighborhood, address_zip, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais, responsavel_contabil_id, responsavel_fiscal_id, responsavel_dp_id, responsavel_legalizacao_id",
     )
     .eq("id", companyId)
     .single();
@@ -552,6 +567,10 @@ export async function updateCompanyFiscal(
     iss_aliquota_padrao: rest.issAliquotaPadrao ?? null,
     iss_valor_fixo_profissional: rest.issValorFixoProfissional ?? null,
     iss_quantidade_profissionais: rest.issQuantidadeProfissionais ?? null,
+    responsavel_contabil_id: rest.responsavelContabilId,
+    responsavel_fiscal_id: rest.responsavelFiscalId,
+    responsavel_dp_id: rest.responsavelDpId,
+    responsavel_legalizacao_id: rest.responsavelLegalizacaoId,
   };
 
   const { error } = await supabase.from("companies").update(newValue).eq("id", companyId);

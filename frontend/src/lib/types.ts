@@ -87,6 +87,10 @@ export type Company = {
   sujeito_fator_r: boolean;
   irpj_csll_apuracao_mensal: boolean;
   equiparacao_hospitalar: boolean;
+  responsavel_contabil_id?: string | null;
+  responsavel_fiscal_id?: string | null;
+  responsavel_dp_id?: string | null;
+  responsavel_legalizacao_id?: string | null;
   iss_aliquota_padrao: number | null;
   iss_tipo: IssTipo;
   iss_valor_fixo_profissional: number | null;

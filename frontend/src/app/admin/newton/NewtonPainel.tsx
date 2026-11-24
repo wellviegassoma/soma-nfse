@@ -568,6 +568,21 @@ export function NewtonPainel({
           <option value="Rio de Janeiro">Rio de Janeiro</option>
         </select>
         <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar empresa" className="h-9 w-56 rounded-lg border border-border bg-surface px-3 text-sm" />
+        <div className="ml-auto flex items-center gap-2">
+          {(["xlsx", "pdf"] as const).map((formato) => (
+            <a
+              key={formato}
+              href={`/admin/newton/exportar?${new URLSearchParams({ formato, competencia, situacao: filtro === "newton" ? "ia" : filtro, cidade }).toString()}`}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm text-foreground/75 hover:bg-surface-muted"
+              title={`Baixar ${filtro === "todas" ? "todas as empresas" : "as empresas do filtro"} em ${formato === "pdf" ? "PDF" : "Excel"}`}
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+              </svg>
+              {formato === "pdf" ? "PDF" : "Excel"}
+            </a>
+          ))}
+        </div>
       </div>
 
       <Card className="divide-y divide-border">

@@ -7,6 +7,8 @@ import { FiscalForm } from "./FiscalForm";
 import { CompanyNameForm } from "./CompanyNameForm";
 import { StatusSomaForm } from "./StatusSomaForm";
 import { GruposWhatsappForm, type GrupoVinculado } from "./GruposWhatsappForm";
+import { listarEquipe } from "@/lib/tarefas";
+import { analistaDaEmpresa } from "@/lib/analista-ia";
 
 export const metadata = { title: "Dados fiscais — Painel SOMA" };
 
@@ -19,7 +21,7 @@ export default async function AdminCompanyFiscalPage(
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, organization_id, person_type, cnpj, cpf, legal_name, trade_name, codigo_cliente, created_at, municipal_registration, inscricao_estadual, data_abertura, tax_regime, cnae, municipality_ibge_code, municipality_name, state, address_street, address_number, address_complement, address_neighborhood, address_zip, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais, ativa, data_encerramento_soma",
+      "id, organization_id, person_type, cnpj, cpf, legal_name, trade_name, codigo_cliente, created_at, municipal_registration, inscricao_estadual, data_abertura, tax_regime, cnae, municipality_ibge_code, municipality_name, state, address_street, address_number, address_complement, address_neighborhood, address_zip, petropolis_cmc, nfse_ambiente, dps_series, dps_next_number, regime_especial_tributacao, allow_retroactive_emission, sujeito_fator_r, irpj_csll_apuracao_mensal, equiparacao_hospitalar, iss_aliquota_padrao, iss_tipo, iss_valor_fixo_profissional, iss_quantidade_profissionais, ativa, data_encerramento_soma, responsavel_contabil_id, responsavel_fiscal_id, responsavel_dp_id, responsavel_legalizacao_id",
     )
     .eq("id", companyId)
     .single();
@@ -53,36 +55,46 @@ export default async function AdminCompanyFiscalPage(
       }),
   }));
 
+  const [equipe, analistaIa] = await Promise.all([
+    listarEquipe(),
+    analistaDaEmpresa(supabase, company.id).catch(() => null),
+  ]);
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="max-w-2xl">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-foreground/55">
+          Cadastro, responsáveis e regras fiscais da empresa. Os cartões fiscais são salvos juntos pelo botão do rodapé.
+        </p>
         <a href={`/admin/empresas/${company.id}/planilha`}>
           <Button type="button" variant="secondary">
             Baixar dados da empresa (planilha)
           </Button>
         </a>
       </div>
-      <Card className="max-w-2xl p-6 sm:p-8">
-        <CompanyNameForm
-          companyId={company.id}
-          legalName={company.legal_name}
-          tradeName={company.trade_name}
-          codigoCliente={company.codigo_cliente}
-        />
-      </Card>
-      <Card className="max-w-2xl p-6 sm:p-8">
-        <FiscalForm company={company as Company} />
-      </Card>
-      <Card className="max-w-2xl p-6 sm:p-8">
-        <GruposWhatsappForm companyId={company.id} vinculados={gruposVinculados} />
-      </Card>
-      <Card className="max-w-2xl p-6 sm:p-8">
-        <StatusSomaForm
-          companyId={company.id}
-          ativa={company.ativa}
-          dataEncerramentoSoma={company.data_encerramento_soma}
-        />
-      </Card>
+
+      <FiscalForm company={company as Company} equipe={equipe} analistaIa={analistaIa} />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="p-5 sm:p-6">
+          <CompanyNameForm
+            companyId={company.id}
+            legalName={company.legal_name}
+            tradeName={company.trade_name}
+            codigoCliente={company.codigo_cliente}
+          />
+        </Card>
+        <Card className="p-5 sm:p-6">
+          <GruposWhatsappForm companyId={company.id} vinculados={gruposVinculados} />
+        </Card>
+        <Card className="p-5 sm:p-6">
+          <StatusSomaForm
+            companyId={company.id}
+            ativa={company.ativa}
+            dataEncerramentoSoma={company.data_encerramento_soma}
+          />
+        </Card>
+      </div>
     </div>
   );
 }

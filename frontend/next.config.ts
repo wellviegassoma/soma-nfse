@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   // disponível no chunk final e a leitura de PDF falha com "Setting up
   // fake worker failed". Marcando como externo, roda via require normal
   // do Node direto de node_modules, onde o worker está do lado do módulo.
-  serverExternalPackages: ["pdf-parse"],
+  serverExternalPackages: ["pdf-parse", "@react-pdf/renderer"],
   // O "Resumo da folha" com todas as empresas (importação em lote do
   // Fator R) já tem ~1MB num mês — o limite padrão de Server Action é
   // 1MB. 4mb fica abaixo do teto de corpo de requisição da Vercel (4,5MB).
