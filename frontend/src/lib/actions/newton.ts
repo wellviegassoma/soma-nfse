@@ -8,6 +8,8 @@
 import { revalidatePath } from "next/cache";
 import { get, put } from "@vercel/blob";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { chaveDescricao } from "@/lib/equiparacao";
 import { requireSomaStaff, requireUser } from "@/lib/auth";
 import { carregarEsteiraNewton } from "@/lib/newton";
 import { revisarComIaNewton } from "@/lib/newton-revisor";
@@ -261,4 +263,53 @@ export async function salvarExcecaoNewtonAction(input: { companyId: string; tipo
   if (error) return { error: error.message };
   revalidatePath("/admin/newton");
   return { ok: true };
+}
+
+// ------------------------------------------- equiparação hospitalar
+
+/**
+ * Aplica as marcações de equiparação das notas (a pessoa confirmou a proposta
+ * do Newton) e guarda cada decisão para a descrição daquela empresa — nas
+ * próximas notas iguais o Newton já sugere igual.
+ */
+export async function aplicarEquiparacaoAction(input: {
+  companyId: string;
+  itens: { notaId: string; hospitalar: boolean }[];
+  duvidaPadrao?: boolean | null;
+}): Promise<Resultado> {
+  await requireSomaStaff();
+  const user = await requireUser();
+  if (!input.itens.length) return { error: "Nenhuma nota." };
+  const admin = createAdminClient();
+  const supabase = await createClient();
+  // Só notas da empresa (ou das filiais dela) — confere no banco.
+  const { data: notas } = await admin.from("notas_distribuidas").select("id, company_id, descricao_servico").in("id", input.itens.map((i) => i.notaId));
+  const { data: empresa } = await supabase.from("companies").select("cnpj").eq("id", input.companyId).single();
+  const raiz = (empresa?.cnpj ?? "").replace(/\D/g, "").slice(0, 8);
+  const { data: daRaiz } = await supabase.from("companies").select("id, cnpj").like("cnpj", `${raiz}%`);
+  const permitidas = new Set([input.companyId, ...(daRaiz ?? []).map((c) => c.id as string)]);
+  const porId = new Map((notas ?? []).filter((n) => permitidas.has(n.company_id as string)).map((n) => [n.id as string, n]));
+  let ok = 0;
+  const decisoes = new Map<string, { hospitalar: boolean; exemplo: string }>();
+  for (const sim of [true, false]) {
+    const ids = input.itens.filter((i) => i.hospitalar === sim && porId.has(i.notaId)).map((i) => i.notaId);
+    if (!ids.length) continue;
+    const { error } = await admin.from("notas_distribuidas").update({ equiparacao_hospitalar: sim }).in("id", ids);
+    if (error) return { error: error.message };
+    ok += ids.length;
+    for (const id of ids) {
+      const d = (porId.get(id)!.descricao_servico as string | null) ?? "";
+      decisoes.set(chaveDescricao(d), { hospitalar: sim, exemplo: d.slice(0, 200) });
+    }
+  }
+  const agora = new Date().toISOString();
+  const linhas = [...decisoes.entries()].filter(([k]) => k).map(([chave, d]) => ({ company_id: input.companyId, chave, hospitalar: d.hospitalar, exemplo: d.exemplo, decidido_por: user.id, decidido_em: agora }));
+  if (linhas.length) await supabase.from("newton_equiparacao_decisoes").upsert(linhas, { onConflict: "company_id,chave" });
+  if (input.duvidaPadrao !== undefined) {
+    await supabase.from("newton_equiparacao_empresa").upsert({ company_id: input.companyId, duvida_padrao: input.duvidaPadrao, atualizado_em: agora });
+  }
+  revalidar();
+  revalidatePath(`/admin/empresas/${input.companyId}/fechamento`);
+  revalidatePath(`/admin/empresas/${input.companyId}/impostos`);
+  return { ok: true, mensagem: `${ok} nota(s) atualizada(s); ${linhas.length} decisão(ões) guardada(s) para os próximos meses.` };
 }

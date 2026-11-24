@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
 import {
+  aplicarEquiparacaoAction,
   aprovarNewtonAction,
   darfSalvoBase64Action,
   enviarMensagensNewtonAction,
@@ -69,6 +70,23 @@ export function NewtonPainel({
   const [zipBaixado, setZipBaixado] = useState<string[] | null>(null);
   const [rev, setRev] = useState<string[]>(revisores);
   const [limiteRevisao, setLimiteRevisao] = useState("");
+  const [equip, setEquip] = useState<{ l: LinhaNewton; escolha: Record<string, boolean>; duvida: "" | "SIM" | "NAO" } | null>(null);
+  const abrirEquiparacao = (l: LinhaNewton) => {
+    if (!l.equiparacao) return;
+    const escolha: Record<string, boolean> = {};
+    for (const n of l.equiparacao.notas) escolha[n.id] = n.sugestao === "DUVIDA" ? n.marcada : n.sugestao === "SIM";
+    setEquip({ l, escolha, duvida: l.equiparacao.duvidaPadrao == null ? "" : l.equiparacao.duvidaPadrao ? "SIM" : "NAO" });
+  };
+  const salvarEquiparacao = () => {
+    if (!equip?.l.equiparacao) return;
+    const itens = equip.l.equiparacao.notas.map((n) => ({ notaId: n.id, hospitalar: !!equip.escolha[n.id] }));
+    iniciar(async () => {
+      const r = await aplicarEquiparacaoAction({ companyId: equip.l.id, itens, duvidaPadrao: equip.duvida === "" ? null : equip.duvida === "SIM" });
+      setMsg("error" in r ? { erro: r.error } : { ok: r.mensagem });
+      setEquip(null);
+      router.refresh();
+    });
+  };
   const [ano, mes] = competencia.split("-");
 
   const conta = (f: Filtro) => (f === "todas" ? linhas.length : linhas.filter((l) => l.situacao === f).length);
@@ -534,6 +552,18 @@ export function NewtonPainel({
                     </ul>
                   )}
                 </div>
+                {l.equiparacao && (
+                  <div className={cn("mt-1 rounded-lg px-2.5 py-1 text-[11px]", l.equiparacao.naturezaImpede ? "bg-rose-50 text-rose-900" : l.equiparacao.pendentes ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-900")}>
+                    Equiparação no trimestre:{" "}
+                    {brl(l.equiparacao.notas.filter((n) => n.marcada).reduce((t, n) => t + n.valor, 0))} marcado ·{" "}
+                    {brl(l.equiparacao.notas.filter((n) => n.sugestao === "SIM").reduce((t, n) => t + n.valor, 0))} sugerido
+                    {l.equiparacao.pendentes ? ` · ${l.equiparacao.pendentes} nota(s) para confirmar` : " · em dia"}
+                    {l.equiparacao.naturezaImpede ? ` · ⚠ ${l.equiparacao.naturezaImpede}` : ""}{" "}
+                    <button type="button" className="ml-1 rounded border border-current px-1.5 py-px font-medium" disabled={emAndamento} onClick={() => abrirEquiparacao(l)}>
+                      revisar equiparação
+                    </button>
+                  </div>
+                )}
                 <div className="mt-1 flex flex-wrap gap-3 text-[11px]">
                   <Link href={`/admin/empresas/${l.id}/impostos?competencia=${competencia}`} className="text-brand underline">
                     Impostos
@@ -558,6 +588,79 @@ export function NewtonPainel({
           );
         })}
       </Card>
+
+      {equip?.l.equiparacao && (
+        <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4" onClick={() => setEquip(null)}>
+          <div className="mt-8 w-full max-w-4xl rounded-xl bg-background p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="mb-1 text-base font-semibold">Equiparação hospitalar — {equip.l.nome}</h2>
+            <p className="mb-2 text-xs text-foreground/60">
+              Notas do trimestre com a sugestão do Newton (regra + o que a equipe já decidiu). Marcado = 8% IRPJ / 12% CSLL. Ao salvar, cada decisão vale para as próximas notas com a mesma descrição.
+            </p>
+            {equip.l.equiparacao.naturezaImpede && (
+              <div className="mb-2 rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-900">
+                ⚠ A empresa é {equip.l.equiparacao.naturezaImpede}: a lei exige sociedade empresária para a equiparação. Confirme com o contador antes de marcar.
+              </div>
+            )}
+            <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">
+              <span>
+                Marcado: <strong>{brl(equip.l.equiparacao.notas.filter((n) => equip.escolha[n.id]).reduce((t, n) => t + n.valor, 0))}</strong> de{" "}
+                {brl(equip.l.equiparacao.notas.reduce((t, n) => t + n.valor, 0))}
+              </span>
+              <label className="flex items-center gap-1">
+                Descrição genérica (dúvida) nesta empresa:
+                <select value={equip.duvida} onChange={(e) => setEquip({ ...equip, duvida: e.target.value as "" | "SIM" | "NAO" })} className="h-7 rounded border border-border bg-surface px-1">
+                  <option value="">perguntar</option>
+                  <option value="SIM">entra</option>
+                  <option value="NAO">não entra</option>
+                </select>
+              </label>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-border">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-surface-muted text-left text-foreground/60">
+                  <tr>
+                    <th className="px-2 py-1">Hosp.</th>
+                    <th className="px-2 py-1">Mês</th>
+                    <th className="px-2 py-1">Nota</th>
+                    <th className="px-2 py-1">Descrição</th>
+                    <th className="px-2 py-1 text-right">Valor</th>
+                    <th className="px-2 py-1">Sugestão</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {equip.l.equiparacao.notas.map((n) => (
+                    <tr key={n.id} className={cn("border-t border-border", n.sugestao === "DUVIDA" && "bg-amber-50/60")}>
+                      <td className="px-2 py-1">
+                        <input type="checkbox" checked={!!equip.escolha[n.id]} onChange={(e) => setEquip({ ...equip, escolha: { ...equip.escolha, [n.id]: e.target.checked } })} />
+                      </td>
+                      <td className="px-2 py-1 whitespace-nowrap">{n.competencia.slice(5)}/{n.competencia.slice(2, 4)}</td>
+                      <td className="px-2 py-1">{n.numero ?? "—"}</td>
+                      <td className="px-2 py-1" title={n.tomador ?? ""}>
+                        {n.descricao.slice(0, 110)}
+                      </td>
+                      <td className="px-2 py-1 text-right whitespace-nowrap">{brl(n.valor)}</td>
+                      <td className="px-2 py-1 whitespace-nowrap" title={n.motivo}>
+                        <span className={cn("rounded px-1", n.sugestao === "SIM" ? "bg-emerald-100 text-emerald-900" : n.sugestao === "NAO" ? "bg-slate-100 text-slate-700" : "bg-amber-100 text-amber-900")}>
+                          {n.sugestao === "SIM" ? "entra" : n.sugestao === "NAO" ? "não entra" : "dúvida"}
+                        </span>{" "}
+                        <span className="text-foreground/50">{n.origem === "APRENDIDA" ? "já decidido" : n.origem === "PADRAO_EMPRESA" ? "padrão" : n.motivo.slice(0, 28)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" className={btn} onClick={() => setEquip(null)}>
+                Cancelar
+              </button>
+              <button type="button" className={btnP} disabled={emAndamento} onClick={salvarEquiparacao}>
+                Confirmar e marcar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {previa && (
         <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4" onClick={() => setPrevia(null)}>

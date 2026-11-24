@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireSomaStaff } from "@/lib/auth";
+import { requireSomaStaff, requireUser } from "@/lib/auth";
+import { chaveDescricao } from "@/lib/equiparacao";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   syncOneCompany,
@@ -486,6 +487,17 @@ export async function marcarEquiparacaoHospitalar(
     .eq("company_id", companyId);
 
   if (error) return { error: "Não foi possível salvar a classificação." };
+
+  // O Newton aprende: essa descrição, nessa empresa, passa a ter essa decisão.
+  const { data: nota } = await admin.from("notas_distribuidas").select("descricao_servico").eq("id", notaId).maybeSingle();
+  const chave = chaveDescricao((nota?.descricao_servico as string | null) ?? "");
+  if (chave) {
+    const user = await requireUser().catch(() => null);
+    await admin.from("newton_equiparacao_decisoes").upsert(
+      { company_id: companyId, chave, hospitalar: valor, exemplo: ((nota?.descricao_servico as string | null) ?? "").slice(0, 200), decidido_por: user?.id ?? null, decidido_em: new Date().toISOString() },
+      { onConflict: "company_id,chave" },
+    );
+  }
 
   revalidatePath(`/admin/empresas/${companyId}/fechamento`);
   revalidatePath(`/admin/empresas/${companyId}/impostos`);

@@ -80,7 +80,7 @@ export function ferramentasNewton(db: Db, competenciaPadrao: string) {
         const sel = l.filter((x) =>
           filtro === "bloqueadas" ? x.conferencia === "BLOQUEADO"
           : filtro === "revisar" ? x.conferencia === "REVISAR" && !x.aprovada
-          : filtro === "equiparacao" ? x.motivos.some((m) => m.codigo === "EQUIPARACAO_SEM_MARCACAO")
+          : filtro === "equiparacao" ? x.motivos.some((m) => m.codigo.startsWith("EQUIPARACAO"))
           : filtro === "prontas" ? x.aprovada && !x.mitEncerrado
           : filtro === "escaladas" ? x.newton?.ia_decisao === "ESCALAR" && !x.aprovada
           : filtro === "sem_grupo" ? !x.temGrupoDigisac

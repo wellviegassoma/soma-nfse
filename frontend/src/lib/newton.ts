@@ -17,6 +17,7 @@ import {
 import { calcularLucroPresumido, valoresDevidosNoPeriodoMit } from "@/lib/calculo-impostos";
 import { IBGE_PETROPOLIS, IBGE_RIO, somarMeses } from "@/lib/tarefas-comum";
 import { filiaisPorMatriz, ordemCnpj, raizCnpj, type EstadoEtapa, type Etapa, type FilialSimples } from "@/lib/serena";
+import { chaveDescricao, NATUREZAS_SEM_EQUIPARACAO, regraEquiparacao, type SugestaoEquiparacao } from "@/lib/equiparacao";
 
 type Db = SupabaseClient;
 
@@ -76,12 +77,35 @@ export type CalculoNewton = {
   mediaReceita3m: number | null;
 };
 
+export type NotaEquiparacao = {
+  id: string;
+  numero: string | null;
+  competencia: string; // AAAA-MM
+  descricao: string;
+  tomador: string | null;
+  valor: number;
+  marcada: boolean;
+  sugestao: SugestaoEquiparacao;
+  origem: "APRENDIDA" | "REGRA" | "PADRAO_EMPRESA";
+  motivo: string;
+};
+
+/** Equiparação hospitalar da empresa no trimestre da competência. */
+export type EquiparacaoNewton = {
+  natureza: string | null;
+  naturezaImpede: string | null; // ex.: "Sociedade Simples Limitada"
+  duvidaPadrao: boolean | null;
+  notas: NotaEquiparacao[];
+  pendentes: number; // marcada ≠ sugestão, ou dúvida sem decisão
+};
+
 export type LinhaNewton = {
   id: string;
   nome: string;
   municipio: "Petrópolis" | "Rio de Janeiro" | "Outro";
   calc: CalculoNewton;
   filiais: FilialSimples[];
+  equiparacao: EquiparacaoNewton | null;
   conferencia: "OK" | "REVISAR" | "BLOQUEADO";
   motivos: Motivo[];
   assinatura: string;
@@ -190,6 +214,7 @@ export function conferirNewton(p: {
   competencia: string;
   prefeitura: { valor: number | null; erro: string | null } | null;
   filiais: FilialSimples[];
+  equiparacao: EquiparacaoNewton | null;
 }): Motivo[] {
   const { e, calc } = p;
   const motivos: Motivo[] = [];
@@ -199,14 +224,21 @@ export function conferirNewton(p: {
   if (p.e.ultima_sincronizacao_status === "erro") revisar("NOTAS_ERRO", "A última busca de notas deu erro — refazer antes de fechar.");
   if (calc.receitaMes <= 0) revisar("SEM_RECEITA", "Nenhuma receita na competência — confirmar se é sem movimento ou se faltou buscar notas.");
 
-  // Equiparação hospitalar: a empresa está marcada, mas nenhuma nota do
-  // trimestre está — o motor calcularia tudo a 32% (prova de out/2026:
-  // equipe declarava 8%/12% de cabeça). Bloqueia no mês do IRPJ/CSLL.
-  if (e.equiparacao_hospitalar && calc.receitaTrimestre > 0 && calc.receitaHospitalarTrimestre <= 0) {
-    const texto =
-      "Empresa marcada para equiparação hospitalar, mas nenhuma nota do trimestre está marcada — marque nota a nota (8%/12%) antes do IRPJ/CSLL, senão o cálculo vai a 32%.";
-    if (calc.fechaTrimestre) bloquear("EQUIPARACAO_SEM_MARCACAO", texto);
-    else revisar("EQUIPARACAO_SEM_MARCACAO", texto);
+  // Equiparação hospitalar nota a nota (lib/equiparacao.ts + decisões
+  // aprendidas). Sociedade simples não pode usar; nota com marcação diferente
+  // da sugestão, ou dúvida sem decisão, fica pendente — bloqueia no mês do
+  // IRPJ/CSLL (prova de out/2026: a equipe declarava 8%/12% de cabeça).
+  const eq = p.equiparacao;
+  if (e.equiparacao_hospitalar && eq) {
+    if (eq.naturezaImpede) {
+      revisar("EQUIPARACAO_NATUREZA", `Empresa marcada para equiparação hospitalar, mas é ${eq.naturezaImpede} — a lei exige sociedade empresária. Confirmar com o contador antes de usar 8%/12%.`);
+    } else if (eq.pendentes > 0) {
+      const texto = `Equiparação hospitalar: ${eq.pendentes} nota(s) do trimestre para confirmar (sugestão do Newton pronta em "Equiparação").`;
+      if (calc.fechaTrimestre) bloquear("EQUIPARACAO_PENDENTE", texto);
+      else revisar("EQUIPARACAO_PENDENTE", texto);
+    }
+  } else if (!e.equiparacao_hospitalar && calc.receitaHospitalarTrimestre > 0) {
+    revisar("EQUIPARACAO_SEM_CADASTRO", "Há nota marcada como hospitalar, mas a empresa não está cadastrada para equiparação.");
   }
 
   if (calc.mediaReceita3m && calc.receitaMes > 0) {
@@ -255,6 +287,62 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
   if (!ids.length) return [];
   const filiais = await filiaisPorMatriz(db, empresas, "LUCRO_PRESUMIDO");
   const idsFiliais = [...filiais.values()].flat().map((f) => f.id);
+  const comEquiparacao = empresas.filter((e) => e.equiparacao_hospitalar);
+  const idsEquip = [...comEquiparacao.map((e) => e.id), ...comEquiparacao.flatMap((e) => (filiais.get(e.id) ?? []).map((f) => f.id))];
+  const mesesTri = competenciasTrimestre(competencia);
+  const [{ data: notasEq }, { data: decisoes }, { data: configEq }] = idsEquip.length
+    ? await Promise.all([
+        db
+          .from("notas_distribuidas")
+          .select("id, company_id, numero, competencia, descricao_servico, tomador_nome, valor_servico, equiparacao_hospitalar")
+          .in("company_id", idsEquip)
+          .eq("direcao", "saida")
+          .eq("cancelada", false)
+          .gte("competencia", `${mesesTri[0]}-01`)
+          .lt("competencia", `${somarMeses(mesesTri[2], 1)}-01`)
+          .order("competencia"),
+        db.from("newton_equiparacao_decisoes").select("company_id, chave, hospitalar").in("company_id", comEquiparacao.map((e) => e.id)),
+        db.from("newton_equiparacao_empresa").select("company_id, duvida_padrao, natureza_juridica").in("company_id", comEquiparacao.map((e) => e.id)),
+      ])
+    : [{ data: [] }, { data: [] }, { data: [] }];
+  const equiparacaoDe = (e: EmpresaNewton): EquiparacaoNewton | null => {
+    if (!e.equiparacao_hospitalar) return null;
+    const ids = new Set([e.id, ...(filiais.get(e.id) ?? []).map((f) => f.id)]);
+    const cfg = (configEq ?? []).find((c) => c.company_id === e.id);
+    const aprendidas = new Map((decisoes ?? []).filter((d) => d.company_id === e.id).map((d) => [d.chave as string, d.hospitalar as boolean]));
+    const duvidaPadrao = (cfg?.duvida_padrao as boolean | null | undefined) ?? null;
+    const notas: NotaEquiparacao[] = (notasEq ?? [])
+      .filter((n) => ids.has(n.company_id as string))
+      .map((n) => {
+        const descricao = (n.descricao_servico as string | null) ?? "";
+        const aprendida = aprendidas.get(chaveDescricao(descricao));
+        const regra = regraEquiparacao(descricao);
+        const [sugestao, origem, motivo]: [SugestaoEquiparacao, NotaEquiparacao["origem"], string] =
+          aprendida != null
+            ? [aprendida ? "SIM" : "NAO", "APRENDIDA", "decisão anterior da equipe para essa descrição"]
+            : regra.sugestao !== "DUVIDA"
+              ? [regra.sugestao, "REGRA", regra.motivo]
+              : duvidaPadrao != null
+                ? [duvidaPadrao ? "SIM" : "NAO", "PADRAO_EMPRESA", "padrão da empresa para descrição genérica"]
+                : ["DUVIDA", "REGRA", regra.motivo];
+        return {
+          id: n.id as string,
+          numero: (n.numero as string | null) ?? null,
+          competencia: String(n.competencia).slice(0, 7),
+          descricao: descricao.replace(/\s+/g, " ").slice(0, 200),
+          tomador: (n.tomador_nome as string | null) ?? null,
+          valor: Number(n.valor_servico ?? 0),
+          marcada: n.equiparacao_hospitalar === true,
+          sugestao,
+          origem,
+          motivo,
+        };
+      });
+    const pendentes = notas.filter((n) => n.sugestao === "DUVIDA" || (n.sugestao === "SIM") !== n.marcada).length;
+    const natureza = (cfg?.natureza_juridica as string | null | undefined) ?? null;
+    return { natureza, naturezaImpede: natureza ? (NATUREZAS_SEM_EQUIPARACAO[natureza] ?? null) : null, duvidaPadrao, notas, pendentes };
+  };
+
   const [fat, { data: pref }, { data: mits }, { data: fechamentos }, { data: vinculos }] = await Promise.all([
     buscarFaturamentoMensalLote(db, [...ids, ...idsFiliais]),
     db.from("conferencia_prefeitura").select("company_id, valor_prefeitura, erro").eq("competencia", competencia).in("company_id", ids),
@@ -272,7 +360,8 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
     const dados = somarFiliais(fat.get(e.id), minhas.map((f) => fat.get(f.id)));
     const calc = calcularNewton(e, competencia, dados);
     const prefeitura = prefPor.get(e.id) ?? null;
-    const motivos = conferirNewton({ e, calc, competencia, prefeitura, filiais: minhas });
+    const equiparacao = equiparacaoDe(e);
+    const motivos = conferirNewton({ e, calc, competencia, prefeitura, filiais: minhas, equiparacao });
     const conferencia = motivos.some((m) => m.nivel === "BLOQUEADO") ? "BLOQUEADO" : motivos.length ? "REVISAR" : "OK";
     const assinatura = assinaturaNewton(calc, motivos);
     const newton = newtonPor.get(e.id) ?? null;
@@ -281,6 +370,7 @@ export async function carregarEsteiraNewton(db: Db, competencia: string): Promis
       e,
       calc,
       filiais: minhas,
+      equiparacao,
       prefeitura,
       conferencia,
       motivos,
@@ -297,6 +387,7 @@ function montarLinha(p: {
   e: EmpresaNewton;
   calc: CalculoNewton;
   filiais: FilialSimples[];
+  equiparacao: EquiparacaoNewton | null;
   prefeitura: { valor: number | null; erro: string | null } | null;
   conferencia: LinhaNewton["conferencia"];
   motivos: Motivo[];
@@ -387,6 +478,7 @@ function montarLinha(p: {
     municipio,
     calc,
     filiais: p.filiais,
+    equiparacao: p.equiparacao,
     conferencia: p.conferencia,
     motivos: p.motivos,
     assinatura: p.assinatura,
