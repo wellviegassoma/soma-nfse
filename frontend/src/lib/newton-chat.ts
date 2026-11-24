@@ -10,7 +10,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { carregarEsteiraNewton, type LinhaNewton } from "@/lib/newton";
 import { rodarRotinaNewton } from "@/lib/newton-rotina";
-import { notasParaAnalise } from "@/lib/analista-notas";
+import { faturamentoCarteira, notasParaAnalise } from "@/lib/analista-notas";
 
 type Db = SupabaseClient;
 
@@ -95,7 +95,7 @@ export function ferramentasNewton(db: Db, competenciaPadrao: string) {
           : filtro === "concluidas" ? x.situacao === "concluida"
           : true,
         );
-        return { quantidade: sel.length, empresas: sel.slice(0, 60).map((x) => `${x.nome} — ${x.recado.slice(0, 140)}`) };
+        return { quantidade: sel.length, empresas: sel.map((x) => `${x.nome} — ${x.recado.slice(0, 140)}`) };
       },
     }),
 
@@ -108,6 +108,16 @@ export function ferramentasNewton(db: Db, competenciaPadrao: string) {
         const achadas = l.filter((x) => semAcento(x.nome).includes(q));
         if (!achadas.length) return { erro: "Nenhuma empresa da carteira do Newton com esse nome." };
         return { empresas: achadas.slice(0, 3).map(resumoLinha) };
+      },
+    }),
+
+    faturamentoPorMes: tool({
+      description: "Faturamento (notas emitidas, sem canceladas) de TODAS as empresas da carteira, mês a mês: uma linha por empresa (código · nome | valor de cada mês), mais o total e quantas ficaram sem faturamento em cada mês. Use para comparar meses, achar quem não faturou ou quem caiu/subiu. 'ate' = último mês (padrão: competência atual); 'meses' = quantos meses para trás (1 a 12).",
+      inputSchema: z.object({ ate: COMP, meses: z.number().int().min(1).max(12).default(3) }),
+      execute: async ({ ate, meses }) => {
+        const comp = ate ?? competenciaPadrao;
+        const l = await esteira(comp);
+        return faturamentoCarteira(db, l.map((x) => ({ id: x.id, nome: x.nome, idsNotas: [x.id, ...x.filiais.map((f) => f.id)] })), comp, meses);
       },
     }),
 

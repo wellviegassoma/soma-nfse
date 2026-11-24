@@ -7,6 +7,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { somarMeses } from "@/lib/tarefas-comum";
+import { buscarFaturamentoMensalLote, somarFaturamento } from "@/lib/faturamento";
 
 type Db = SupabaseClient;
 
@@ -83,4 +84,32 @@ export async function notasParaAnalise(
     total: filtradas.length,
     porCodigo: [...grupos.values()].map((g) => ({ ...g, valor: Math.round(g.valor * 100) / 100 })).sort((a, b) => b.valor - a.valor),
   };
+}
+
+/**
+ * Faturamento (notas, sem canceladas) de cada empresa da carteira mês a mês —
+ * para o chat comparar meses sem limite de empresas. Filial soma na matriz.
+ */
+export async function faturamentoCarteira(
+  db: Db,
+  empresas: { id: string; nome: string; idsNotas: string[] }[],
+  ate: string,
+  meses: number,
+): Promise<{ meses: string[]; linhas: string[]; totais: Record<string, number>; semFaturamento: Record<string, number> }> {
+  const lista = Array.from({ length: meses }, (_, i) => somarMeses(ate, -(meses - 1 - i)));
+  const fat = await buscarFaturamentoMensalLote(db, empresas.flatMap((e) => e.idsNotas));
+  const totais: Record<string, number> = Object.fromEntries(lista.map((m) => [m, 0]));
+  const semFaturamento: Record<string, number> = Object.fromEntries(lista.map((m) => [m, 0]));
+  const linhas = empresas.map((e) => {
+    const notas = e.idsNotas.flatMap((id) => fat.get(id)?.notas ?? []);
+    const valores = lista.map((m) => {
+      const v = Math.round(somarFaturamento(notas, [m]) * 100) / 100;
+      totais[m] += v;
+      if (v <= 0) semFaturamento[m]++;
+      return v;
+    });
+    return `${e.nome} | ${valores.map((v) => (v ? v.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "0")).join(" | ")}`;
+  });
+  for (const m of lista) totais[m] = Math.round(totais[m] * 100) / 100;
+  return { meses: lista, linhas, totais, semFaturamento };
 }

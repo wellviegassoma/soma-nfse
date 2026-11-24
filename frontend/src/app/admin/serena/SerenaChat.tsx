@@ -22,6 +22,7 @@ const ROTULO_FERRAMENTA: Record<string, string> = {
   listarEmpresas: "listando empresas",
   detalheEmpresa: "abrindo a empresa",
   notasDaEmpresa: "lendo as notas",
+  faturamentoPorMes: "somando o faturamento da carteira",
   conferirPrefeitura: "conferindo a prefeitura",
   auditarComIa: "auditando a apuração",
   servicosSemAtividade: "procurando serviços sem atividade",

@@ -12,7 +12,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { carregarEsteira, carteiraSerena, type LinhaSerena } from "@/lib/serena";
 import { rodarRotinaSerena } from "@/lib/serena-rotina";
-import { notasParaAnalise } from "@/lib/analista-notas";
+import { faturamentoCarteira, notasParaAnalise } from "@/lib/analista-notas";
 import { carregarDadosSimplesLote } from "@/lib/simples-linha";
 import { ATIVIDADES_SIMPLES_NACIONAL, buscarAtividade } from "@/lib/simples-nacional-atividades";
 import { sugerirAtividade } from "@/lib/lc116-sugestao-atividade";
@@ -151,7 +151,7 @@ export function ferramentasSerena(db: Db, userId: string, competenciaPadrao: str
         );
         return {
           quantidade: sel.length,
-          empresas: sel.slice(0, 60).map((x) =>
+          empresas: sel.map((x) =>
             filtro === "guias_iss"
               ? `${x.nome} — ${x.guiasIss.pendentes.map((p) => `${p.competencia} R$ ${(p.valor ?? 0).toFixed(2)}${p.receita ? ` (${p.receita})` : ""}`).join("; ")}`
               : `${x.nome} — ${x.recado.slice(0, 140)}`,
@@ -169,6 +169,16 @@ export function ferramentasSerena(db: Db, userId: string, competenciaPadrao: str
         const achadas = l.filter((x) => semAcento(x.nome).includes(q));
         if (!achadas.length) return { erro: "Nenhuma empresa da carteira da Serena com esse nome." };
         return { empresas: achadas.slice(0, 3).map(resumoLinha) };
+      },
+    }),
+
+    faturamentoPorMes: tool({
+      description: "Faturamento (notas emitidas, sem canceladas) de TODAS as empresas da carteira, mês a mês: uma linha por empresa (código · nome | valor de cada mês), mais o total e quantas ficaram sem faturamento em cada mês. Use para comparar meses, achar quem não faturou ou quem caiu/subiu. 'ate' = último mês (padrão: competência atual); 'meses' = quantos meses para trás (1 a 12).",
+      inputSchema: z.object({ ate: COMP, meses: z.number().int().min(1).max(12).default(3) }),
+      execute: async ({ ate, meses }) => {
+        const comp = ate ?? competenciaPadrao;
+        const l = await esteira(comp);
+        return faturamentoCarteira(db, l.map((x) => ({ id: x.id, nome: x.nome, idsNotas: [x.id] })), comp, meses);
       },
     }),
 
