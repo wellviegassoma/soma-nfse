@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse, after } from "next/server";
 import { lerComando, receberComandoNota } from "@/lib/pedido-nota/receber";
+import { TIPOS_ARQUIVO_WHATSAPP, receberExtratoWhatsapp } from "@/lib/extratos-whatsapp";
 
 // Webhook do Digisac (evento message.created). Chega para TODA mensagem da
 // conta — milhares por dia —, então o filtro precisa ser barato e não tocar
@@ -26,7 +27,7 @@ function segredoValido(request: Request): boolean {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-type MensagemPayload = { id?: unknown; isComment?: unknown; text?: unknown };
+type MensagemPayload = { id?: unknown; isComment?: unknown; isFromMe?: unknown; type?: unknown; text?: unknown };
 // O formato exato do corpo não está na documentação (só os nomes dos
 // eventos). Aceita { event, data: {...mensagem} } e também a mensagem solta
 // no corpo — confirmar com o primeiro webhook real e registrar em
@@ -51,6 +52,30 @@ export async function POST(request: Request) {
 
   const msg = payload.data ?? payload;
   const evento = payload.event ?? "";
+  // Extratos (docs/extratos): documento/imagem mandado pelo cliente. Mesmo
+  // filtro barato — a decisão de verdade é em receberExtratoWhatsapp, que
+  // rebusca a mensagem na API.
+  if (
+    (!evento || evento === "message.created") &&
+    msg &&
+    typeof msg.id === "string" &&
+    msg.isComment !== true &&
+    msg.isFromMe !== true &&
+    typeof msg.type === "string" &&
+    TIPOS_ARQUIVO_WHATSAPP.has(msg.type)
+  ) {
+    const messageId = msg.id;
+    after(async () => {
+      try {
+        const r = await receberExtratoWhatsapp(messageId);
+        if (r.arquivoId) console.log("[extratos-whatsapp]", r.motivo, r.arquivoId);
+      } catch (e) {
+        console.error("[extratos-whatsapp] falha:", e instanceof Error ? e.message : e);
+      }
+    });
+    return NextResponse.json({ ok: true, recebido: "arquivo" });
+  }
+
   if (
     (evento && evento !== "message.created") ||
     !msg ||

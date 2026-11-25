@@ -45,7 +45,21 @@ export function mensagemCobrancaExtratos(p: {
   empresa: string;
   itens: ItemCobranca[];
   competencia: string;
+  lembrete?: boolean;
 }): string {
+  if (p.lembrete && p.itens.length > 0) {
+    return [
+      "Olá! Tudo bem?",
+      "",
+      `Passando para lembrar: para fecharmos a contabilidade da *${p.empresa}*, ainda faltam estes extratos:`,
+      "",
+      ...p.itens.map((i) => `• ${descreverConta(i)}: ${listaMeses(i.meses)}`),
+      "",
+      "Pode nos enviar por aqui quando puder? Em PDF ou OFX, de preferência.",
+      "",
+      "Obrigado!",
+    ].join("\n");
+  }
   if (p.itens.length === 0) {
     return [
       "Olá! Tudo bem?",

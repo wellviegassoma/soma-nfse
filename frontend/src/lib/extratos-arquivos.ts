@@ -67,6 +67,23 @@ export async function marcarRecebido(db: SupabaseClient, contaId: string, compet
   else await db.from("extratos_mensais").insert({ conta_id: contaId, competencia, ...campos });
 }
 
+export type LeituraFeita = { leitura: Leitura; modelo: string | null; custoUsd: number | null };
+
+/** Lê um arquivo em memória: OFX pelo parser, PDF/imagem pela IA. */
+export async function lerBuffer(
+  buf: Buffer,
+  nome: string,
+  mime: string,
+  contexto: { empresa: string | null; contas: { banco: string; agencia: string; conta: string }[] },
+): Promise<LeituraFeita> {
+  if (pareceOfx(nome, buf)) return { leitura: lerOfx(buf), modelo: null, custoUsd: null };
+  const ehPdf = mime === "application/pdf" || /\.pdf$/i.test(nome);
+  const ehImagem = /^image\/(jpeg|png|webp|gif)$/.test(mime);
+  if (!ehPdf && !ehImagem) throw new Error("Formato não suportado (use PDF, imagem ou OFX).");
+  const r = await lerComIA(ehPdf ? { tipo: "pdf", dados: buf, nome } : { tipo: "imagem", dados: buf, mediaType: mime, nome }, contexto);
+  return { leitura: r.leitura, modelo: r.modelo, custoUsd: r.custoUsd };
+}
+
 async function saldoFinalAnterior(db: SupabaseClient, contaId: string, competencia: string) {
   const anterior = prev(competencia);
   const { data } = await db
@@ -87,7 +104,14 @@ async function saldoFinalAnterior(db: SupabaseClient, contaId: string, competenc
 export async function processarArquivo(
   db: SupabaseClient,
   arquivoId: string,
-  dica: { companyId?: string | null; contaId?: string | null; competencia?: string | null } = {},
+  dica: {
+    companyId?: string | null;
+    contaId?: string | null;
+    competencia?: string | null;
+    leituraPronta?: LeituraFeita;
+    /** Só marca sozinho se a empresa identificada estiver aqui (grupo do WhatsApp). */
+    empresasPermitidas?: string[];
+  } = {},
 ): Promise<ResultadoProcessamento> {
   const { data: arq } = await db.from("extrato_arquivos").select("*").eq("id", arquivoId).single();
   if (!arq) throw new Error("Arquivo não encontrado.");
@@ -114,27 +138,20 @@ export async function processarArquivo(
   };
   let contas = await contasDaEmpresa(companyId);
 
-  // 1) Leitura
+  // 1) Leitura (ou a que já veio pronta — WhatsApp lê antes de gravar)
   let leitura: Leitura;
   let modelo: string | null = null;
   let custo: number | null = null;
   try {
-    const buf = await baixar(arq.blob_pathname as string);
-    const nome = arq.nome_arquivo as string;
-    const mime = (arq.mime as string | null) ?? "";
-    if (pareceOfx(nome, buf)) leitura = lerOfx(buf);
-    else {
-      const ehPdf = mime === "application/pdf" || /\.pdf$/i.test(nome);
-      const ehImagem = /^image\/(jpeg|png|webp|gif)$/.test(mime);
-      if (!ehPdf && !ehImagem) throw new Error("Formato não suportado (use PDF, imagem ou OFX).");
-      const r = await lerComIA(
-        ehPdf ? { tipo: "pdf", dados: buf, nome } : { tipo: "imagem", dados: buf, mediaType: mime, nome },
-        { empresa: empresa ? empresa.trade_name || empresa.legal_name : null, contas },
-      );
-      leitura = r.leitura;
-      modelo = r.modelo;
-      custo = r.custoUsd;
-    }
+    const r =
+      dica.leituraPronta ??
+      (await lerBuffer(await baixar(arq.blob_pathname as string), arq.nome_arquivo as string, (arq.mime as string | null) ?? "", {
+        empresa: empresa ? empresa.trade_name || empresa.legal_name : null,
+        contas,
+      }));
+    leitura = r.leitura;
+    modelo = r.modelo;
+    custo = r.custoUsd;
   } catch (e) {
     const erro = e instanceof Error ? e.message : "Falha ao ler o arquivo.";
     await db.from("extrato_arquivos").update({ situacao: "ERRO", avisos: [{ codigo: "ERRO", mensagem: erro }] }).eq("id", arquivoId);
@@ -199,7 +216,11 @@ export async function processarArquivo(
     });
   }
 
-  const identificado = !!conta && !!competencia && leitura.ehExtrato && !avisos.some((a) => a.codigo === "CONTA_DIFERENTE" || a.codigo === "OUTRO_MES");
+  if (dica.empresasPermitidas && companyId && !dica.empresasPermitidas.includes(companyId)) {
+    avisos.push({ codigo: "OUTRO_GRUPO", mensagem: "Chegou no grupo de outra empresa — confirme." });
+  }
+  const identificado =
+    !!conta && !!competencia && leitura.ehExtrato && !avisos.some((a) => ["CONTA_DIFERENTE", "OUTRO_MES", "OUTRO_GRUPO"].includes(a.codigo));
   await db
     .from("extrato_arquivos")
     .update({

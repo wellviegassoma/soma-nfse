@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requirePermissao, requireUser } from "@/lib/auth";
 import { uuidLike } from "@/lib/zod-helpers";
+import { logAudit } from "@/lib/audit";
 import { carregarCobranca, gruposPorEmpresa } from "@/lib/extratos-cobranca";
 import { enviarTexto, servicoDoContato } from "@/lib/digisac/client";
 
@@ -92,4 +93,34 @@ export async function enviarCobrancasExtratos(
 
 function diaSP(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(iso));
+}
+
+const reguaSchema = z.object({
+  ativa: z.boolean(),
+  diaCobranca: z.number().int().min(1).max(28),
+  diaLembrete: z.number().int().min(1).max(28),
+});
+
+/** Liga/desliga a régua automática e ajusta os dias. */
+export async function salvarReguaExtratos(input: z.input<typeof reguaSchema>): Promise<{ error?: string }> {
+  await requirePermissao("extratos.editar");
+  const user = await requireUser();
+  const p = reguaSchema.safeParse(input);
+  if (!p.success) return { error: "Dados inválidos." };
+  if (p.data.diaLembrete <= p.data.diaCobranca) return { error: "O lembrete precisa ser depois do dia da cobrança." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("extrato_regua_config")
+    .update({
+      ativa: p.data.ativa,
+      dia_cobranca: p.data.diaCobranca,
+      dia_lembrete: p.data.diaLembrete,
+      alterado_por: user.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", true);
+  if (error) return { error: "Não foi possível salvar." };
+  await logAudit({ action: "UPDATE", entity: "extrato_regua_config", newValue: p.data });
+  revalidatePath("/extratos/cobranca");
+  return {};
 }

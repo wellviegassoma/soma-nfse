@@ -124,7 +124,7 @@ export async function confirmarArquivoExtrato(input: { arquivoId: string; contaI
   if (!arq || !conta) return { error: "Arquivo ou conta não encontrados." };
   // Confirmação humana: tira os avisos que eram só "não sei onde encaixar".
   const avisos = ((arq.avisos as { codigo: string }[] | null) ?? []).filter(
-    (a) => !["CONTA_NAO_CADASTRADA", "CONTA_DIFERENTE", "OUTRO_MES", "SEM_PERIODO", "NAO_EXTRATO", "ERRO"].includes(a.codigo),
+    (a) => !["CONTA_NAO_CADASTRADA", "CONTA_DIFERENTE", "OUTRO_MES", "OUTRO_GRUPO", "SEM_PERIODO", "NAO_EXTRATO", "ERRO"].includes(a.codigo),
   );
   await db
     .from("extrato_arquivos")

@@ -8,6 +8,10 @@ import { mesAnteriorBrasilia } from "@/lib/competencia";
 import { carregarCobranca, responsaveisContabeis } from "@/lib/extratos-cobranca";
 import { nomeCompetencia } from "@/lib/extratos-cobranca-mensagem";
 import { CobrancaLista } from "./CobrancaLista";
+import { ReguaCard } from "./ReguaCard";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { executarRegua } from "@/lib/extratos-regua";
 
 export const metadata = { title: "Extratos — Cobrança" };
 
@@ -30,10 +34,17 @@ export default async function CobrancaExtratosPage(props: PageProps<"/extratos/c
           ? user.id
           : null;
 
-  const [empresas, podeEnviar] = await Promise.all([
+  const [empresas, podeEnviar, cfg, previaRegua] = await Promise.all([
     carregarCobranca({ responsavelId, competencia, incluirAnteriores }),
     temPermissao("extratos.editar"),
+    createClient().then((db) =>
+      db.from("extrato_regua_config").select("ativa, dia_cobranca, dia_lembrete, alterado_por, updated_at").eq("id", true).maybeSingle().then((r) => r.data),
+    ),
+    executarRegua({ previa: true }).catch(() => null),
   ]);
+  const alteradoPor = cfg?.alterado_por
+    ? await createAdminClient().from("profiles").select("full_name, email").eq("id", cfg.alterado_por).single().then((r) => (r.data ? ((r.data.full_name || r.data.email) as string) : null))
+    : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -47,6 +58,22 @@ export default async function CobrancaExtratosPage(props: PageProps<"/extratos/c
           WhatsApp da empresa pelo Digisac.
         </p>
       </div>
+
+      <ReguaCard
+        inicial={{
+          ativa: cfg?.ativa ?? false,
+          diaCobranca: cfg?.dia_cobranca ?? 3,
+          diaLembrete: cfg?.dia_lembrete ?? 8,
+          alteradoPor,
+          alteradoEm: cfg?.updated_at ?? null,
+        }}
+        podeEditar={podeEnviar}
+        previa={{
+          tipo: previaRegua && "tipo" in previaRegua ? (previaRegua.tipo ?? null) : null,
+          quantidade: previaRegua?.itens.length ?? 0,
+          motivo: previaRegua?.motivo ?? null,
+        }}
+      />
 
       <Card className="p-4">
         <form className="flex flex-wrap items-end gap-3">

@@ -88,6 +88,10 @@
     {
       "path": "/api/cron/newton?etapa=ia&rodada=2",
       "schedule": "45 15 * * *"
+    },
+    {
+      "path": "/api/cron/extratos-regua",
+      "schedule": "0 12 * * 1-5"
     }
   ]
 }

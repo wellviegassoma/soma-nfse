@@ -1,4 +1,5 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { competenciasNoIntervalo } from "@/lib/competencia";
@@ -84,8 +85,10 @@ export async function carregarCobranca(p: {
   competencia: string;
   incluirAnteriores: boolean;
   companyIds?: string[];
+  db?: SupabaseClient; // régua automática (cron) usa o client admin
+  lembrete?: boolean;
 }): Promise<EmpresaCobranca[]> {
-  const supabase = await createClient();
+  const supabase = p.db ?? (await createClient());
   let q = supabase
     .from("companies")
     .select("id, codigo_cliente, legal_name, trade_name, responsavel_contabil_id")
@@ -156,7 +159,7 @@ export async function carregarCobranca(p: {
       itens,
       grupos: grupos.get(e.id as string) ?? [],
       ultimaCobranca: u ? { em: u.em, por: u.por ? (nomes.get(u.por) ?? null) : null } : null,
-      texto: mensagemCobrancaExtratos({ empresa: nome, itens, competencia: p.competencia }),
+      texto: mensagemCobrancaExtratos({ empresa: nome, itens, competencia: p.competencia, lembrete: p.lembrete }),
     });
   }
   return out.sort((a, b) => (a.codigo ?? "").localeCompare(b.codigo ?? "", "pt-BR", { numeric: true }));
